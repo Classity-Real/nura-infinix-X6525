@@ -472,3 +472,18 @@ first original as `<img>.orig`. Run it on every freshly downloaded `pmos-boot-fs
     sh tools/patch-cmdline.sh pmos-boot-fs.img "maxcpus=6"     # or any other option
 
 A reflash of `cache` from an unpatched image removes the option again, so the script is the check.
+
+## What the current debug build contains (and what each part fixed)
+
+Reached the `x6525 login:` prompt on 2026-10-18 with these, all in `main`:
+
+| Piece | Where | Fixes |
+|---|---|---|
+| `pmicwdt stop` in the U-Boot bootcmd | u-boot fork 434a9c96, `u-boot-infinix-x6525` pkgrel 3 | the fixed ~5-minute reset (PMIC watchdog nothing fed) |
+| `cpuidle.off=1 cpufreq.off=1` | `kernel-cmdline.conf` | RCU stalls (a CPU stopped taking timer interrupts); which of the two is the cause is not known yet |
+| `console=tty0` last, `pmos.debug-shell` | `kernel-cmdline.conf` | init output on the screen; debug shell on USB (telnet 23, serial `ttyACM0`) |
+| `regulator_ignore_unused` + `&vddldo0` always-on | cmdline + DT | touch controller rail cut after 30 s |
+| touch firmware in initramfs/rootfs, `ovt-tcm-spi` in initramfs, SPI full-duplex fix | pmaports (b0e8b31) | touch bring-up (untested on hardware) |
+
+When the boot is stable, remove the debug options one at a time and re-test (cpuidle and cpufreq first,
+to find which one stalls), and re-enable the display driver (`initcall_blacklist=sprd_drm_init`).

@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=11
+pkgrel=12
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -51,6 +51,11 @@ makedepends="devicepkg-dev"
 # screen so a hang shows where it stopped. pmos.debug-shell starts the initramfs's telnet
 # shell on the USB network (172.16.42.1) and console=tty0 is listed LAST so that /dev/console,
 # where init prints, is the screen and not the UART. Remove all of these once the boot works.
+# cpuidle.off=1 cpufreq.off=1: with them on, a CPU (it varied) stopped taking timer interrupts
+# and RCU stalled forever (rcu_preempt kthread starved); with them off the boot is stable. Which
+# of the two is the cause is not known yet. regulator_ignore_unused keeps the touch controller's
+# 2.8 V rail (vddldo0) on past the 30 s regulator cleanup; the DT also marks it always-on.
+# The 5-minute reset was the PMIC watchdog, which U-Boot's `pmicwdt stop` disarms (u-boot package).
 source="
 	deviceinfo
 	kernel-cmdline.conf
@@ -77,6 +82,6 @@ package() {
 
 sha512sums="
 0a3b1f1d6fa3fa04b92d52dec7d622a9b8a3dd0c4b6608f7f6f30edbbe47d33f8f3f1abdd97bbf26d0625d9aae46e67eb1ea39672169d8192ec37e5f733134fc  deviceinfo
-6b58ea2683c8acde70c7810ef58a092ad1c6f568939776bf92610a792fbb567bfdd0e9a065e52ff03f70872a424423b2ea12a9f74f66c9f5a90550b18131851d  kernel-cmdline.conf
+0c276180146bd5f54e919c76f7f36ea0d35afc1ee21582f46f8d13b6762dfeeb1e854b2769edb51374600c59543e6f33dd1a2b6d2c4196015142c9d5a2097568  kernel-cmdline.conf
 c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
 "
