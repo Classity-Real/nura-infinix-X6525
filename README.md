@@ -54,6 +54,24 @@ and Spreadtrum download-mode ids). The debug shell additionally exposes a CDC-AC
 interface takes its address from the phone's DHCP server (`sudo dhcpcd usb0`, or NetworkManager), and
 the same `telnet`/`ssh` follow.
 
+Two traps when doing it by hand. The interface **name changes between enumerations** - every re-plug
+or gadget rebind takes the next free name (`usb0`, then `usb1`, ...), so find it with
+`ip -br link` (or `dmesg`'s "cdc_ncm ... -> usbN" line) instead of assuming `usb0`. And the two
+`ip rule` entries are global, so `RTNETLINK answers: File exists` from them is harmless. A loop that
+configures whichever interface appears is more reliable than doing it once:
+
+```sh
+while :; do
+  for d in usb0 usb1 usb2 usb3 usb4 usb5; do
+    if [ -e /sys/class/net/$d ] && ! ip -br addr show $d 2>/dev/null | grep -q 172.16.42.2; then
+      ip link set $d up; ip addr add 172.16.42.2/24 dev $d
+      echo "$(date +%T) configured $d"
+    fi
+  done
+  sleep 1
+done
+```
+
 Two things about the transition out of the debug shell are easy to trip over. The debug shell's
 console is a **root shell, not a login**; and `pmos_continue_boot` stops telnetd and removes the
 ACM/storage functions, which rebinds the gadget - **after it, telnet is gone by design and SSH is the

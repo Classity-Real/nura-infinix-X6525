@@ -303,6 +303,10 @@ link is NCM, which it can. Use `rndis.usb0` only for a Windows 10 host.
     telnet 172.16.42.1        # in the initramfs debug shell (telnetd stops when it ends)
     ssh user@172.16.42.1       # once booted into the rootfs (password: x6525pmos)
     ```
+    The name is **not stable**: each re-enumeration (a re-plug, or the gadget rebind when the
+    initramfs hands over) takes the next free name - `usb0`, then `usb1`, and so on. Find it with
+    `ip -br link` or `dmesg`'s `cdc_ncm ... -> usbN` line, and treat `RTNETLINK answers: File exists`
+    from the two `ip rule` lines as success: those rules are global and only need adding once.
 - **Watch instead of guessing:** `tools/host-watch.sh` (run as root on the host phone, in the chroot with
   `/sys` bind-mounted) logs every USB device that appears or disappears with a timestamp, relays the host
   kernel's USB lines, adds the Android routing rules, and when the pmOS gadget (`18d1:d001`) appears it finds the interface, sets
