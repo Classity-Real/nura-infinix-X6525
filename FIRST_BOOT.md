@@ -262,7 +262,9 @@ function enabled.
 
 ### Using a second Android phone as the host (Galaxy A01 Core, Ubuntu chroot)
 
-This works for flashing and for SSH, with some checks. The A01 Core's kernel
+**This is the host this port is being brought up from**: a Samsung Galaxy A01 Core running Android
+with an armhf Ubuntu chroot, OTG-wired to the X6525 - so the steps below are the working procedure,
+not an alternative. It works for flashing and for SSH, with some checks. The A01 Core's kernel
 (`github.com/Takumi123w/kernel-a01c`, 4.14.141, MT6739, `a01core_defconfig`) has `cdc_ncm`, `cdc_ether`,
 `cdc_eem`, `usbnet`, `USB_ACM`, FTDI and PL2303 serial built in and `USB_NET_RNDIS_HOST` **off**. That suits this
 image: its USB network function is NCM (`deviceinfo_usb_network_function="ncm.usb0"`, also what the initramfs

@@ -30,23 +30,35 @@ the image - only its hash is in `/etc/shadow` - so change it in the workflow and
 **USB network: the normal way, and the one that gives you SSH.** Plug the cable in *before* powering
 on - the initramfs creates the USB gadget once, about two seconds in, and never retries. The phone is
 `172.16.42.1` and serves DHCP to the host (`172.16.42.2`); the gadget function is NCM
-(`deviceinfo_usb_network_function`). On a Linux host:
+(`deviceinfo_usb_network_function`).
+
+The host used for this bring-up is a **Samsung Galaxy A01 Core** running Android with an armhf Ubuntu
+chroot. [FIRST_BOOT.md](FIRST_BOOT.md) section *"Using a second Android phone as the host"* has the
+details: the micro-USB OTG adapter to USB-C, the armhf chroot, and why NCM matters (that kernel has
+`cdc_ncm` but not `USB_NET_RNDIS_HOST`, so it cannot host Android's stock RNDIS tethering). On that
+host, in the chroot as root:
 
 ```sh
-ip link                   # usb0, or an enx... name, appears
-sudo dhcpcd usb0          # or let NetworkManager/your desktop claim it
-ssh user@172.16.42.1      # after the rootfs has booted: sshd is enabled
+ip link                          # the NCM interface appears as usb1 or enx...
+ip addr add 172.16.42.2/24 dev <if>
+ip rule add from all to 172.16.42.0/24 lookup main pref 100   # bypass Android netd routing
+ip rule add from 172.16.42.0/24 lookup main pref 100
+telnet 172.16.42.1               # initramfs debug shell, while pmos.debug-shell holds the boot
+ssh user@172.16.42.1             # after pmos_continue_boot, once the rootfs has booted
 ```
 
-While the debug cmdline carries `pmos.debug-shell`, the boot first stops in the initramfs debug shell,
-where **SSH is not running yet** - only telnet: `telnet 172.16.42.1`. Run `pmos_continue_boot` there
-to hand over to the rootfs. `tools/host-watch.sh` does the host side as the device appears, and
-`DEBUG_SHELL_GUIDE.md` covers an Android phone used as the host (netd policy routing, `/dev/ttyACM0`).
+`tools/host-watch.sh` runs that sequence as the device appears (it also recognises the stock-fastboot
+and Spreadtrum download-mode ids). The debug shell additionally exposes a CDC-ACM serial console,
+`/dev/ttyACM0` on the A01 Core: `minicom -D /dev/ttyACM0`. On a normal Linux host instead, the
+interface takes its address from the phone's DHCP server (`sudo dhcpcd usb0`, or NetworkManager), and
+the same `telnet`/`ssh` follow.
 
 **Serial UART.** `serial1` (ttyS1), 115200 8N1, on the pads. The kernel console is named on the
 command line (`console=ttyS1` in `kernel-cmdline.conf`), and systemd's getty generator starts a serial
 getty for consoles named there, so a UART adapter gives a login prompt without the USB network or the
-screen. It is also where kernel messages go before the display is up.
+screen. It is also where kernel messages go before the display is up. On the A01 Core host an FTDI or
+PL2303 adapter appears as `/dev/ttyUSB0` (CH341 and CP210x are not built into that kernel); wire it to
+`serial1` and `screen /dev/ttyUSB0 115200`.
 
 **The screen.** `getty@tty1.service` is enabled, which is the `x6525 login:` prompt on the display -
 but touch cannot type, and `buffyboard`/`unl0kr` are installed without being wired to a getty, so the
