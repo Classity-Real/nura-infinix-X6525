@@ -62,14 +62,18 @@ ssh user@172.16.42.1        # password: x6525pmos
 **5. Give the phone internet.** It has no WiFi driver, so it uses the host's connection.
 
 ```sh
-# A01 Core, as root. usb0 = the name from step 3; wlan0 = the host's internet interface.
-# First check the host is online itself:  ping -c2 1.1.1.1
+# A01 Core, as root. usb0 = the name from step 3. First check the host is online
+# itself (ping 1.1.1.1 / 8.8.8.8) and which interface carries its default route:
+#   DEF=$(ip route | awk '/^default/{print $5; exit}'); echo "$DEF"
+# It is wlan0 on WiFi, but Android may prefer rmnet* (cellular) - NAT the one the
+# default route actually uses, or the phone's packets leave un-NATed.
+DEF=wlan0
 echo 1 > /proc/sys/net/ipv4/ip_forward
 # Insert at the top (-I), do not append (-A): Android's FORWARD chain contains
 # netd's DROP rules, and an appended ACCEPT would sit behind them.
-iptables -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE
-iptables -I FORWARD 1 -i usb0 -o wlan0 -j ACCEPT
-iptables -I FORWARD 2 -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -t nat -I POSTROUTING 1 -o "$DEF" -j MASQUERADE
+iptables -I FORWARD 1 -i usb0 -o "$DEF" -j ACCEPT
+iptables -I FORWARD 2 -i "$DEF" -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 ```
 
 ```sh
