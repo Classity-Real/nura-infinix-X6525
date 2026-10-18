@@ -71,9 +71,10 @@ iptables -A FORWARD -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j ACC
 
 ```sh
 # X6525, in the SSH session.
-sudo ip route add default via 172.16.42.2 dev usb0
-echo 'nameserver 1.1.1.1' | sudo tee /etc/resolv.conf
-ping -c2 1.1.1.1
+sudo ip route replace default via 172.16.42.2 dev usb0   # replace: a default route may already exist
+sudo sh -c "echo nameserver 1.1.1.1 > /etc/resolv.conf"  # a plain file here; resolved is not enabled
+ping -c2 1.1.1.1          # by IP, so this tests routing/NAT
+ping -c2 google.com       # and this adds DNS
 ```
 
 That is the whole path: flash, power on, address the link, SSH, internet. The rest of this file is
@@ -87,8 +88,8 @@ reference.
 | `RTNETLINK answers: File exists` from `ip rule` | harmless - those rules are global and already added | ignore |
 | no USB interface at all | the cable went in after boot, or the phone did not come up | power-cycle with it connected; `lsusb` should show `18d1:d001 Infinix X6525` |
 | SSH refused, but you have a console | you are still in the initramfs debug shell | run `pmos_continue_boot` there; telnet works in that shell, SSH only after it |
-| `ping 1.1.1.1` fails | the host is not forwarding | re-run the step-5 host lines; `iptables -t nat -L -n -v` shows the counters |
-| names fail but IPs work | the resolver line did not take | redo the `nameserver 1.1.1.1` line |
+| `ping 1.1.1.1` fails | the host is not forwarding, or the default route is wrong | `sudo ip route replace default via 172.16.42.2 dev usb0`; re-run the step-5 host lines; `iptables -t nat -L POSTROUTING -n -v` must count up |
+| names fail but IPs work | the resolver line did not take | redo the `nameserver 1.1.1.1` line; `/etc/resolv.conf` is a plain file in this image (systemd-resolved is not enabled), and NetworkManager can rewrite it - the `nmcli` profile in *Details* carries `ipv4.dns` and survives that |
 
 ## Details
 
