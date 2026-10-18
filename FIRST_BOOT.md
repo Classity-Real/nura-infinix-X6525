@@ -1,9 +1,12 @@
 # First boot of the mainline port
 
 This is the checklist for the **mainline route** (U-Boot chainloaded from `boot_a`, then the
-`linux-postmarketos-unisoc-ums9230` kernel with `dts/ums9230-infinix-x6525.dts`, root filesystem on a
-microSD card). The 5.4 route has its own steps at the end of `NOTES.md`. Nothing below has been run on the phone: every "expect" is what the
-sources say should happen, so a deviation is information, not necessarily a bug in this list.
+`linux-postmarketos-unisoc-ums9230` kernel with `dts/ums9230-infinix-x6525.dts`; the boot filesystem
+goes in the eMMC's `cache` partition and the root filesystem in `userdata`, or both on a microSD card
+instead). The 5.4 route has its own steps at the end of `NOTES.md`. **Where the bring-up is:** the
+boot chain, the rootfs and SSH over the USB link work; the touchscreen is still being brought up.
+Stages below that have not been exercised describe what the sources say should happen, so a deviation
+there is information, not necessarily a bug in this list.
 
 The order matters. Each stage is only worth looking at once the one before it passes, and every stage
 ends with where to look if it fails.

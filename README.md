@@ -1,16 +1,19 @@
 # pmos-infinix-x6525
 
 Draft postmarketOS port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
-(`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`. **Untested** - nothing in this
-repository has run on the hardware yet.
+(`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
+
+**Status: it boots.** U-Boot loads the kernel from the eMMC, the root filesystem comes up, and SSH
+over the USB link works (Quick start below). The touchscreen is the next thing being brought up.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
-how to build the image either here or on GitHub. The rootfs boots from a microSD card, not from an
-eMMC partition: `pmbootstrap install` builds a whole disk image and the flash procedure writes it to
-a card, so the only write into the phone is U-Boot, into `boot_a` (`pmbootstrap flasher flash_rootfs`
-must not be run - it would put that disk image into `super`, where U-Boot cannot see it). `NOTES.md`
-is the record behind it: every value taken from the stock system or from the running device's own
-device tree, with its source.
+how to build the image either here or on GitHub. `pmbootstrap install` builds a whole MBR+GPT disk
+image; U-Boot cannot read a partition table nested inside a partition, so the flash procedure writes
+the image's two filesystems into real eMMC partitions (`cache` and `userdata` - the route in
+FIRST_BOOT.md) or the whole image onto a microSD card. `pmbootstrap flasher flash_rootfs` must not be
+run: it would put that disk image into `super`, where U-Boot cannot see it. `NOTES.md` is the record
+behind it: every value taken from the stock system or from the running device's own device tree, with
+its source.
 
 An earlier attempt used the stock 5.4 "Helix" kernel instead. Its files (`linux-infinix-x6525/`,
 `device-infinix-x6525/`, `build-kernel.sh`, `repack.sh`) are kept for reference; nothing in the
@@ -20,119 +23,112 @@ mainline port uses them, and the workflow that built that kernel has been remove
 design; with `--image <artifact>` it also checks a downloaded image (packaging, the built config, the
 modules in the initramfs, and the documented login).
 
-## Logging in
+## Quick start
 
-The image has one account: `user`, with the password `rom.yml` passes to `pmbootstrap install`
-(`x6525pmos` today). `root` is locked and there is no SSH key. The password cannot be recovered from
-the image - only its hash is in `/etc/shadow` - so change it in the workflow and rebuild;
-`tools/audit-features.sh --image <artifact>` checks that a built image really carries it.
+You need: the X6525, the Galaxy A01 Core host with its OTG adapter, and the `x6525-rom` artifact from
+the latest green **rom** run (Actions → rom → Run workflow).
 
-**USB network: the normal way, and the one that gives you SSH.** Plug the cable in *before* powering
-on - the initramfs creates the USB gadget once, about two seconds in, and never retries. The phone is
-`172.16.42.1` and serves DHCP to the host (`172.16.42.2`); the gadget function is NCM
-(`deviceinfo_usb_network_function`).
-
-The host used for this bring-up is a **Samsung Galaxy A01 Core** running Android with an armhf Ubuntu
-chroot. [FIRST_BOOT.md](FIRST_BOOT.md) section *"Using a second Android phone as the host"* has the
-details: the micro-USB OTG adapter to USB-C, the armhf chroot, and why NCM matters (that kernel has
-`cdc_ncm` but not `USB_NET_RNDIS_HOST`, so it cannot host Android's stock RNDIS tethering). On that
-host, in the chroot as root:
+**1. Flash.** Three writes: U-Boot into `boot_a`, the boot filesystem (kernel, initramfs, DTB,
+extlinux) into `cache`, the root filesystem into `userdata`. This overwrites Android's data; `super`
+and `boot_b` are left alone. The other route (a microSD card) is in [FIRST_BOOT.md](FIRST_BOOT.md)'s
+*Flashing* section.
 
 ```sh
-ip link                          # the NCM interface: usb0 on this NetHunter kernel (usbN/enx* elsewhere)
-ip link set usb0 up              # Android leaves it DOWN when it enumerates
+# in the extracted x6525-rom directory, with the phone in fastboot mode
+fastboot flash boot_a   boot.img
+fastboot flash cache    pmos-boot-fs.img
+fastboot flash userdata pmos-root-fs.img
+```
+
+**2. Power on with the USB cable connected.** The phone sets up the USB connection once, about two
+seconds into boot; if the cable goes in later, power-cycle.
+
+**3. On the A01 Core, configure the USB link.** Run as root. `ip link` shows the interface name -
+`usb0` here; after a re-plug it becomes `usb1`, and so on, so use the name it printed.
+
+```sh
+ip link set usb0 up
 ip addr add 172.16.42.2/24 dev usb0
-ip rule add from all to 172.16.42.0/24 lookup main pref 100   # bypass Android netd routing
+ip rule add from all to 172.16.42.0/24 lookup main pref 100   # Android netd bypass
 ip rule add from 172.16.42.0/24 lookup main pref 100
-telnet 172.16.42.1               # initramfs debug shell, while pmos.debug-shell holds the boot
-ssh user@172.16.42.1             # after pmos_continue_boot, once the rootfs has booted
 ```
 
-`tools/host-watch.sh` runs that sequence as the device appears (it also recognises the stock-fastboot
-and Spreadtrum download-mode ids). The debug shell additionally exposes a CDC-ACM serial console,
-`/dev/ttyACM0` on the A01 Core: `minicom -D /dev/ttyACM0`. On a normal Linux host instead, the
-interface takes its address from the phone's DHCP server (`sudo dhcpcd usb0`, or NetworkManager), and
-the same `telnet`/`ssh` follow.
-
-Two traps when doing it by hand. The interface **name changes between enumerations** - every re-plug
-or gadget rebind takes the next free name (`usb0`, then `usb1`, ...), so find it with
-`ip -br link` (or `dmesg`'s "cdc_ncm ... -> usbN" line) instead of assuming `usb0`. And the two
-`ip rule` entries are global, so `RTNETLINK answers: File exists` from them is harmless. A loop that
-configures whichever interface appears is more reliable than doing it once:
+**4. SSH into the phone.**
 
 ```sh
-while :; do
-  for d in usb0 usb1 usb2 usb3 usb4 usb5; do
-    if [ -e /sys/class/net/$d ] && ! ip -br addr show $d 2>/dev/null | grep -q 172.16.42.2; then
-      ip link set $d up; ip addr add 172.16.42.2/24 dev $d
-      echo "$(date +%T) configured $d"
-    fi
-  done
-  sleep 1
-done
+ssh user@172.16.42.1        # password: x6525pmos
 ```
 
-Two things about the transition out of the debug shell are easy to trip over. The debug shell's
-console is a **root shell, not a login**; and `pmos_continue_boot` stops telnetd and removes the
-ACM/storage functions, which rebinds the gadget - **after it, telnet is gone by design and SSH is the
-only IP way in**, and the host sees the interface disappear and return. Re-check `ip link`/`ip addr`
-on the host at that moment, or let `tools/host-watch.sh` do it: it waits for the gadget, sets
-`172.16.42.2/24`, and tests ports 23 and 22 as each stage appears.
-
-**Serial UART.** `serial1` (ttyS1), 115200 8N1, on the pads. The kernel console is named on the
-command line (`console=ttyS1` in `kernel-cmdline.conf`), and systemd's getty generator starts a serial
-getty for consoles named there, so a UART adapter gives a login prompt without the USB network or the
-screen. It is also where kernel messages go before the display is up. On the A01 Core host an FTDI or
-PL2303 adapter appears as `/dev/ttyUSB0` (CH341 and CP210x are not built into that kernel); wire it to
-`serial1` and `screen /dev/ttyUSB0 115200`.
-
-**The screen.** `getty@tty1.service` is enabled, which is the `x6525 login:` prompt on the display -
-but touch cannot type, and `buffyboard`/`unl0kr` are installed without being wired to a getty, so the
-screen is read-only for login today.
-
-If USB networking does not come up - no interface, or no DHCP address - the usual cause is the cable
-going in after the gadget was created; power-cycle with it connected. Otherwise the SC27xx role switch
-did not report "device": `dmesg | grep -i -E 'musb|gadget'` on the phone (over the UART) and the
-host's `dmesg` say which. `FIRST_BOOT.md` section 4 has the rest.
-
-## Internet on the phone
-
-The X6525 has no WiFi or Bluetooth driver in this kernel - the wcn block is powered, but there is no
-mainline stack (`tools/audit-features.sh` lists it as known-missing) - so its uplink is the USB link to
-the host, NATed out through the host's own connection. It runs over the same link SSH does.
-
-On the host, as root (`<if>` is the current `usbN`; on the A01 Core's Android userland these are
-iptables rules, and netd may flush them when WiFi reconnects - re-add them if the counters stop
-moving):
+**5. Give the phone internet.** It has no WiFi driver, so it uses the host's connection.
 
 ```sh
+# A01 Core, as root. usb0 = the name from step 3; wlan0 = the host's internet interface.
 echo 1 > /proc/sys/net/ipv4/ip_forward
 iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-iptables -A FORWARD -i <if> -o wlan0 -j ACCEPT
-iptables -A FORWARD -i wlan0 -o <if> -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i usb0 -o wlan0 -j ACCEPT
+iptables -A FORWARD -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 ```
 
-On the phone, over SSH:
-
 ```sh
+# X6525, in the SSH session.
 sudo ip route add default via 172.16.42.2 dev usb0
 echo 'nameserver 1.1.1.1' | sudo tee /etc/resolv.conf
 ping -c2 1.1.1.1
-sudo apk update
 ```
 
-Neither the route nor the resolver survives a reboot; the image ships `nmcli`, so the durable form is
-a profile on the interface the initramfs already addresses (`172.16.42.1/24`):
+That is the whole path: flash, power on, address the link, SSH, internet. The rest of this file is
+reference.
+
+### If a step fails
+
+| What you see | What it means | Fix |
+|---|---|---|
+| `Cannot find device usb0` | the name moved (every re-plug takes the next free name) | `ip -br link`, use the name it shows |
+| `RTNETLINK answers: File exists` from `ip rule` | harmless - those rules are global and already added | ignore |
+| no USB interface at all | the cable went in after boot, or the phone did not come up | power-cycle with it connected; `lsusb` should show `18d1:d001 Infinix X6525` |
+| SSH refused, but you have a console | you are still in the initramfs debug shell | run `pmos_continue_boot` there; telnet works in that shell, SSH only after it |
+| `ping 1.1.1.1` fails | the host is not forwarding | re-run the step-5 host lines; `iptables -t nat -L -n -v` shows the counters |
+| names fail but IPs work | the resolver line did not take | redo the `nameserver 1.1.1.1` line |
+
+## Details
+
+### Logging in
+
+The image has one account: `user`, password `x6525pmos` (set by `rom.yml`'s `--password`). `root` is
+locked and there is no SSH key. The password cannot be recovered from the image - only its hash is in
+`/etc/shadow` - so change it in the workflow and rebuild.
+
+Three ways in:
+
+- **USB network** (steps 3-4) - the normal one, and the only IP path once booted.
+- **Serial UART** - `serial1` (ttyS1), 115200 8N1, on the pads. `console=ttyS1` is on the kernel
+  command line, so kernel logs and a login getty both appear there. On the A01 Core an FTDI or PL2303
+  adapter is `/dev/ttyUSB0` (CH341/CP210x are not in that kernel): `screen /dev/ttyUSB0 115200`.
+- **The screen** - the `x6525 login:` prompt is real (`getty@tty1`), but touch cannot type and no
+  on-screen keyboard is wired to a getty, so it is read-only for login today.
+
+The debug cmdline carries `pmos.debug-shell`, so every boot stops in the initramfs first: a root shell
+on the USB serial port (`/dev/ttyACM0` on the host, `minicom -D /dev/ttyACM0`) and `telnet
+172.16.42.1:23`. `pmos_continue_boot` enters the rootfs; that also stops telnet (SSH only from then
+on) and rebinds the gadget, so the host has to re-check the interface name and address.
+
+Host-side details - the OTG cable, the armhf chroot, Android's routing: [FIRST_BOOT.md](FIRST_BOOT.md),
+*Using a second Android phone as the host*, and [DEBUG_SHELL_GUIDE.md](DEBUG_SHELL_GUIDE.md).
+`tools/host-watch.sh` performs the step-3 host part by itself as the device appears.
+
+### Internet, permanently
+
+The route and resolver from step 5 do not survive a reboot. The image ships NetworkManager, so turn
+them into a profile:
 
 ```sh
 sudo nmcli con add type ethernet ifname usb0 ipv4.method manual \
     ipv4.addresses 172.16.42.1/24 ipv4.gateway 172.16.42.2 ipv4.dns 1.1.1.1
 ```
 
-`unudhcpd@usb0` is the DHCP *server* for the host, not a client on the phone, which is why the phone's
-side has to be set by hand (or by that profile). If names do not resolve from the phone but `ping
-172.16.42.2` works, watch the host's counters with `iptables -t nat -L -n -v`: a MASQUERADE rule that
-never counts means Android dropped the forwarded traffic.
+`unudhcpd@usb0` is the DHCP server for the *host*, so the phone's own address, route and resolver are
+set by hand (or by that profile). Android's netd can flush the host's iptables rules when WiFi
+reconnects - if the internet stops working, re-run the step-5 host lines.
 
 ## What runs by itself
 
