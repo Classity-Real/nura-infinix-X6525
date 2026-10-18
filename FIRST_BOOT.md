@@ -430,3 +430,18 @@ If U-Boot stops at the `=>` prompt with `(0 bootflows, 0 valid)`, it found no ex
 The debug U-Boot then prints which partition `cache` is and lists its `/` and `/extlinux`: an error there means
 the boot filesystem was not written to `cache` (flash it again and watch for a fastboot or `spd_dump` error), an
 empty listing means the wrong image went there.
+
+## Debug build: PMIC watchdog (U-Boot `pmicwdt`)
+
+The reset at a fixed ~5 minutes with a live kernel looks like a watchdog nothing feeds. The AP watchdog
+(12 s) does not fit; the PMIC one has no mainline driver. U-Boot now runs `pmicwdt stop` first thing: it prints
+the last reset status, the PMIC watchdog registers at 0x40 and 0x80 (before/after) and disarms a block that is
+running. **Photograph that screen** (the boot waits 5 s on it).
+
+No rebuild needed, only `boot_a`:
+
+    python3 -I tools/swap-uboot.py <your boot.img> u-boot.bin boot-new.img
+    python3 -I tools/check-boot-img.py boot-new.img 64
+    fastboot flash boot_a boot-new.img      # cache and userdata stay as they are
+
+Recovery is unchanged (stock boot.img to `boot_a`; `fastboot -w` also wipes `cache`).

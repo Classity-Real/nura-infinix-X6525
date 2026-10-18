@@ -11,7 +11,7 @@ pkgname=u-boot-infinix-x6525
 # x6525 tip. GitHub's commit archives are regenerated on demand, so the hash
 # below is for that tarball as fetched today - check it if it ever fails.
 pkgver=2025.07_git20261017
-pkgrel=2
+pkgrel=3
 pkgdesc="U-Boot bootloader for the Infinix X6525"
 url="https://github.com/Seuj09/ums9230-mainline-u-boot"
 arch="aarch64"
@@ -24,7 +24,7 @@ makedepends="
 	flex
 	openssl-dev
 "
-_commit="2b896c1f89f0e389c3abf8ab8410e9b14349abf9"
+_commit="434a9c96ba4b3d42d9e95ee5eb2fd9fc956c0ac2"
 source="$pkgname-$pkgver.tar.gz::$url/archive/$_commit.tar.gz"
 options="!check !tracedeps pmb:cross-native"
 # GitHub names the extracted directory <repo>-<commit>
@@ -41,5 +41,5 @@ package() {
 }
 
 sha512sums="
-d7b3756a299df760ae164eab9dde83f844ee80b07630d42bc3191e50ea73c4c47bba9b08311d59644283ef6b2057e91a052c769d3f79c10df5c05319c5414acc  $pkgname-$pkgver.tar.gz
+7aefacc983b9cb41c17e961278a911fd4604b4b5483ef85f09ebff3bce44b1411298d1464c3ad0abbb513514f49213c0a20a9906cb749ff47371d28a7b28b051  $pkgname-$pkgver.tar.gz
 "
