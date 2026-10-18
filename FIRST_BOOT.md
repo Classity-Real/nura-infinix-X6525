@@ -503,3 +503,16 @@ Reached the `x6525 login:` prompt on 2026-10-18 with these, all in `main`:
 
 When the boot is stable, remove the debug options one at a time and re-test (cpuidle and cpufreq first,
 to find which one stalls), and re-enable the display driver (`initcall_blacklist=sprd_drm_init`).
+
+## Auditing the running phone, and getting the Wi-Fi firmware
+
+`tools/phone-audit.sh` (run on the phone, root for the kernel log) prints PASS / FAIL / WARN / INFO / SKIP per
+feature - stability, watchdog, CPUs, storage, USB, touch (device, interrupt count, firmware, rail), buttons,
+display, battery, thermal, Wi-Fi, audio, network - names the usual fix next to every FAIL and saves the table to
+`/tmp/phone-audit.txt`. `sh tools/test-phone-audit.sh` runs it against fake trees (no phone needed). It reports
+what the kernel exposes and logs; it cannot see whether the picture or the sound is right.
+
+The mainline fork already has the Unisoc Wi-Fi/Bluetooth stack (`sprd_wcn` remoteproc, `sc23xx_wlan_sipc`; the
+nodes are in `ums9230.dtsi`, the modules in the config). What is missing is firmware from the stock system:
+`sprd/wcnmodem.bin` and `sprd/wifi_board_config.bin`. `tools/extract-wcn-firmware.sh` collects every candidate
+(wcn partitions, matching files, a report) so the right files are chosen from facts.
