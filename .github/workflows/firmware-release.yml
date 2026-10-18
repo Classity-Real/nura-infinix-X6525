@@ -47,7 +47,7 @@ jobs:
           echo "tarball rebuilds byte for byte from hdl_firmware_01.img"
 
           want=$(sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' \
-            ../pmaports/device/testing/firmware-infinix-x6525/APKBUILD)
+            ../pmaports/device/testing/firmware-infinix-x6525/APKBUILD | head -1)
           got=$(sha512sum firmware-infinix-x6525-1.tar.gz | cut -d' ' -f1)
           [ "$want" = "$got" ] || {
             echo "tarball sha512 $got does not match the APKBUILD's $want"

@@ -245,9 +245,11 @@ jobs:
           # was never a URL, 404s, and the check below reports "not published
           # yet" about a file that has been published all along. Ask the shell.
           var() { ( . "$1"; eval "printf '%s\n' \"\${$2}\"" ); }
-          sha() { sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' "$1"; }
-          source_url() {   # first source= entry, with any "name::" rename dropped
-            var "$1" source | head -1 | sed 's/^[^:]*::\(.*\)$/\1/'
+          sha() {   # the Nth sha512 in the APKBUILD (default 1st), same order as source=
+            sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' "$1" | sed -n "${2:-1}p"
+          }
+          source_url() {   # Nth source= entry (default 1st), with any "name::" rename dropped
+            var "$1" source | sed -n "${2:-1}p" | sed 's/^[ \t]*//; s/^[^:]*::\(.*\)$/\1/'
           }
           fetch() { curl -sSLf -o /tmp/source.tar.gz "$1"; }
           compare() {   # <url> <sha512> - the APKBUILD is wrong if this fails
@@ -276,6 +278,12 @@ jobs:
             # button. A fetch that succeeds and then does not match still fails.
             echo "firmware: $url is not published yet - run the firmware release workflow"
           fi
+
+          # The Wi-Fi/BT firmware tarball is the second source= entry and
+          # second sha512; it is pinned to a commit, so it must fetch and match.
+          url=$(source_url "$P" 2)
+          [ -n "$url" ] || { echo "firmware: no second source= URL in $P"; exit 1; }
+          check "$url" "$(sha "$P" 2)"
 
       - name: Check the ROM's own kernel config takes our symbols
         run: |
