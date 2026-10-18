@@ -460,3 +460,15 @@ No rebuild needed, only `boot_a`:
     fastboot flash boot_a boot-new.img      # cache and userdata stay as they are
 
 Recovery is unchanged (stock boot.img to `boot_a`; `fastboot -w` also wipes `cache`).
+
+## Putting a command-line option straight into the boot fs image
+
+`tools/patch-cmdline.sh` does the `debugfs` edit from the debug-build notes in one step and proves it:
+it changes only the `append` line, skips options that are already there, checks the result by reading it
+back from the image, runs `e2fsck`, confirms `/vmlinuz` and `/initramfs` are still present, and keeps the
+first original as `<img>.orig`. Run it on every freshly downloaded `pmos-boot-fs.img` before flashing `cache`:
+
+    sh tools/patch-cmdline.sh pmos-boot-fs.img                 # adds cpuidle.off=1 cpufreq.off=1
+    sh tools/patch-cmdline.sh pmos-boot-fs.img "maxcpus=6"     # or any other option
+
+A reflash of `cache` from an unpatched image removes the option again, so the script is the check.
