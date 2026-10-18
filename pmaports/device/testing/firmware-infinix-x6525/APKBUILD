@@ -2,7 +2,7 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=firmware-infinix-x6525
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Firmware for the Infinix X6525"
 url="https://github.com/Seuj09/pmos-infinix-x6525"
 arch="aarch64"
@@ -24,10 +24,11 @@ options="!check !archcheck !strip !spdx !tracedeps pmb:cross-native"
 _tarball="firmware-infinix-x6525-$pkgver.tar.gz"
 # Built-in Wi-Fi/Bluetooth: the WCN remoteproc loads sprd/wcnmodem.bin, and the
 # sc23xx WLAN driver downloads sprd/wifi_board_config.bin (the stock
-# /odm/firmware/wifi_board_config.ini converted by tools/wifi-ini2bin.py).
-_wcn="firmware-infinix-x6525-wcn-1.tar.gz"
+# /odm/firmware/wifi_board_config.ini converted by tools/wifi-ini2bin.py, which
+# reproduces the stock driver's own four CRC-framed sections).
+_wcn="firmware-infinix-x6525-wcn-2.tar.gz"
 source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/186e3e0f21e12ffa194ca4a740053fc977b9c5ff/firmware/$_tarball
-	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/874b59e48cec426de7dc3cf6a6356e8bbc7da27f/firmware/$_wcn"
+	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/a8b30af6dffdc17e342a658dc05a85a9b4e2f214/firmware/$_wcn"
 
 package() {
 	install -Dm644 "$srcdir"/hdl_firmware_01.img \
@@ -40,5 +41,5 @@ package() {
 
 sha512sums="
 a8ae389d7479ad8b3226cfb3a0d153f5306cdbe6a9b85e31584c5e6c7c34232a06562134ac9b3669fb4a0919e3335a830bd2b7b08a87e132c500d22fe70fa176  $_tarball
-a2f1f1841785e80cef3907a2f6bb334dbcfd3e6b1ff3bbd14ae0d8a3d5cf10563c33f4b105ae46c2e78737a92c4178cae099e7dc52e132784fc45be2cc23280e  $_wcn
+9071ff1f2142a4a9f1c54dcd961b1433e6a425080e87450c54b82fd819307b8356b211cf5d13459cd60748b63ac40237301d50edd69bcec76e6110dd9988a40f  $_wcn
 "
