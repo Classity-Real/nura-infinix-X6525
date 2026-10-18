@@ -95,6 +95,45 @@ going in after the gadget was created; power-cycle with it connected. Otherwise 
 did not report "device": `dmesg | grep -i -E 'musb|gadget'` on the phone (over the UART) and the
 host's `dmesg` say which. `FIRST_BOOT.md` section 4 has the rest.
 
+## Internet on the phone
+
+The X6525 has no WiFi or Bluetooth driver in this kernel - the wcn block is powered, but there is no
+mainline stack (`tools/audit-features.sh` lists it as known-missing) - so its uplink is the USB link to
+the host, NATed out through the host's own connection. It runs over the same link SSH does.
+
+On the host, as root (`<if>` is the current `usbN`; on the A01 Core's Android userland these are
+iptables rules, and netd may flush them when WiFi reconnects - re-add them if the counters stop
+moving):
+
+```sh
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+iptables -A FORWARD -i <if> -o wlan0 -j ACCEPT
+iptables -A FORWARD -i wlan0 -o <if> -m state --state RELATED,ESTABLISHED -j ACCEPT
+```
+
+On the phone, over SSH:
+
+```sh
+sudo ip route add default via 172.16.42.2 dev usb0
+echo 'nameserver 1.1.1.1' | sudo tee /etc/resolv.conf
+ping -c2 1.1.1.1
+sudo apk update
+```
+
+Neither the route nor the resolver survives a reboot; the image ships `nmcli`, so the durable form is
+a profile on the interface the initramfs already addresses (`172.16.42.1/24`):
+
+```sh
+sudo nmcli con add type ethernet ifname usb0 ipv4.method manual \
+    ipv4.addresses 172.16.42.1/24 ipv4.gateway 172.16.42.2 ipv4.dns 1.1.1.1
+```
+
+`unudhcpd@usb0` is the DHCP *server* for the host, not a client on the phone, which is why the phone's
+side has to be set by hand (or by that profile). If names do not resolve from the phone but `ping
+172.16.42.2` works, watch the host's counters with `iptables -t nat -L -n -v`: a MASQUERADE rule that
+never counts means Android dropped the forwarded traffic.
+
 ## What runs by itself
 
 | Workflow | When | What it does |
