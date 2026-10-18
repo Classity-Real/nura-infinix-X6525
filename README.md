@@ -139,6 +139,29 @@ sudo nmcli con add type ethernet ifname usb0 ipv4.method manual \
 set by hand (or by that profile). Android's netd can flush the host's iptables rules when WiFi
 reconnects - if the internet stops working, re-run the step-5 host lines.
 
+#### If the Android host will not forward
+
+Android can drop forwarded packets in ways iptables does not control (netd programs eBPF, and it can
+reset `ip_forward`), and then `-I` rules never see the traffic. A userspace proxy on the host avoids
+all of it - the phone connects to `172.16.42.2`, which *is* the host, so nothing is forwarded:
+
+```sh
+# host, Termux
+pkg install tinyproxy
+printf 'Port 8888\nListen 0.0.0.0\nAllow 172.16.42.0/24\n' > ~/tinyproxy.conf
+tinyproxy -c ~/tinyproxy.conf
+```
+
+```sh
+# phone
+export http_proxy=http://172.16.42.2:8888
+export https_proxy=http://172.16.42.2:8888
+sudo -E apk update
+```
+
+That covers `apk`, `curl` and `wget` (the proxy resolves names, so the phone's resolver does not
+matter for them). `ping` and other raw traffic still need the NAT path.
+
 ## What runs by itself
 
 | Workflow | When | What it does |
