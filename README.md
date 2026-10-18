@@ -16,6 +16,47 @@ An earlier attempt used the stock 5.4 "Helix" kernel instead. Its files (`linux-
 `device-infinix-x6525/`, `build-kernel.sh`, `repack.sh`) are kept for reference; nothing in the
 mainline port uses them, and the workflow that built that kernel has been removed.
 
+`tools/audit-features.sh` reports which features the tree completes, is partial on, or is missing by
+design; with `--image <artifact>` it also checks a downloaded image (packaging, the built config, the
+modules in the initramfs, and the documented login).
+
+## Logging in
+
+The image has one account: `user`, with the password `rom.yml` passes to `pmbootstrap install`
+(`x6525pmos` today). `root` is locked and there is no SSH key. The password cannot be recovered from
+the image - only its hash is in `/etc/shadow` - so change it in the workflow and rebuild;
+`tools/audit-features.sh --image <artifact>` checks that a built image really carries it.
+
+**USB network: the normal way, and the one that gives you SSH.** Plug the cable in *before* powering
+on - the initramfs creates the USB gadget once, about two seconds in, and never retries. The phone is
+`172.16.42.1` and serves DHCP to the host (`172.16.42.2`); the gadget function is NCM
+(`deviceinfo_usb_network_function`). On a Linux host:
+
+```sh
+ip link                   # usb0, or an enx... name, appears
+sudo dhcpcd usb0          # or let NetworkManager/your desktop claim it
+ssh user@172.16.42.1      # after the rootfs has booted: sshd is enabled
+```
+
+While the debug cmdline carries `pmos.debug-shell`, the boot first stops in the initramfs debug shell,
+where **SSH is not running yet** - only telnet: `telnet 172.16.42.1`. Run `pmos_continue_boot` there
+to hand over to the rootfs. `tools/host-watch.sh` does the host side as the device appears, and
+`DEBUG_SHELL_GUIDE.md` covers an Android phone used as the host (netd policy routing, `/dev/ttyACM0`).
+
+**Serial UART.** `serial1` (ttyS1), 115200 8N1, on the pads. The kernel console is named on the
+command line (`console=ttyS1` in `kernel-cmdline.conf`), and systemd's getty generator starts a serial
+getty for consoles named there, so a UART adapter gives a login prompt without the USB network or the
+screen. It is also where kernel messages go before the display is up.
+
+**The screen.** `getty@tty1.service` is enabled, which is the `x6525 login:` prompt on the display -
+but touch cannot type, and `buffyboard`/`unl0kr` are installed without being wired to a getty, so the
+screen is read-only for login today.
+
+If USB networking does not come up - no interface, or no DHCP address - the usual cause is the cable
+going in after the gadget was created; power-cycle with it connected. Otherwise the SC27xx role switch
+did not report "device": `dmesg | grep -i -E 'musb|gadget'` on the phone (over the UART) and the
+host's `dmesg` say which. `FIRST_BOOT.md` section 4 has the rest.
+
 ## What runs by itself
 
 | Workflow | When | What it does |
@@ -78,7 +119,7 @@ in the **pmaports** kernel config — the one the ROM is actually built with. Th
 | `patches/upstream-uboot/` | the three U-Boot board patches for submission (device tree, defconfig, environment) |
 | `pmaports/` | the four packages to copy into pmaports: the device, the kernel (this port's eleven patches and its config), U-Boot, and the touch firmware |
 | `firmware/` | the touch HDL image off the device, the upload tarball and its hashes |
-| `tools/` | dtbo/dtb extraction, the live device-tree dumper, the HDL image checker and the vendor-sequence converter |
+| `tools/` | dtbo/dtb extraction, the live device-tree dumper, the HDL image checker, the vendor-sequence converter, the boot-image and boot-fs checks, and `audit-features.sh` |
 | `linux-infinix-x6525/`, `device-infinix-x6525/`, `build-kernel.sh`, `repack.sh` | the earlier downstream 5.4 approach, kept for reference |
 
 First boot of the mainline port, stage by stage with what to send back: [FIRST_BOOT.md](FIRST_BOOT.md).
