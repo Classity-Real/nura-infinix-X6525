@@ -275,18 +275,33 @@ link is NCM, which it can. Use `rndis.usb0` only for a Windows 10 host.
 - **Flashing (stock fastboot):** in the chroot, `apt install fastboot`, then expose USB to it from the
   Android side as root: `mount --bind /dev/bus/usb <chroot>/dev/bus/usb` and `setenforce 0` if SELinux
   blocks it. `fastboot devices` must list the X6525 before any flash. Keep about 2 GB free for the images.
-- **SSH after boot:** the X6525 serves DHCP (`unudhcpd`), but an Android chroot has no DHCP client set up.
-  On the host phone, as root: `ip link` (`usb0` is usually the host phone's own gadget; the NCM link appears as `usb1`, `eth*` or similar), then
-  `ip link set <if> up; ip addr add 172.16.42.2/24 dev <if>; ssh user@172.16.42.1`.
-  If no interface appears, `dmesg | grep -i -E 'cdc|ncm|usb'` on the host says whether it enumerated.
+- **Connecting after boot:**
+  - **In the initramfs debug shell:** SSH (`sshd`, port 22) is **not running yet** in the debug shell; only `telnet 172.16.42.1 23` and a USB CDC-ACM serial console (`/dev/ttyACM0` on the host) are listening!
+  - **Android host routing bypass:** Android's `netd` policy routing blocks non-default routing tables. In the host chroot as root, run:
+    ```sh
+    ip rule add from all to 172.16.42.0/24 lookup main pref 100
+    ip rule add from 172.16.42.0/24 lookup main pref 100
+    ```
+    (or run `tools/host-watch.sh`, which configures this automatically).
+  - **CDC-ACM USB Serial Console:** The initramfs debug shell spawns a getty on `/dev/ttyGS0`, which the Galaxy A01 Core host sees as `/dev/ttyACM0` (its kernel has `CONFIG_USB_ACM=y`). You can connect directly without IP networking:
+    ```sh
+    minicom -D /dev/ttyACM0
+    # or: microcom -p /dev/ttyACM0
+    ```
+  - **Network shell:** On the host phone as root: `ip link` (the NCM interface appears as `usb1` or `enx*`), then:
+    ```sh
+    ip link set <if> up && ip addr add 172.16.42.2/24 dev <if>
+    telnet 172.16.42.1        # in the initramfs debug shell
+    ssh user@172.16.42.1       # once booted into the rootfs (password: x6525pmos)
+    ```
 - **Watch instead of guessing:** `tools/host-watch.sh` (run as root on the host phone, in the chroot with
   `/sys` bind-mounted) logs every USB device that appears or disappears with a timestamp, relays the host
-  kernel's USB lines, and when the pmOS gadget (`18d1:d001`) appears it finds the interface, sets
-  `172.16.42.2/24` and tests the debug shell (23) and SSH (22). It separates three cases that all look like
+  kernel's USB lines, adds the Android routing rules, and when the pmOS gadget (`18d1:d001`) appears it finds the interface, sets
+  `172.16.42.2/24` and tests the debug shell (23) and SSH (22), and checks for `/dev/ttyACM0`. It separates three cases that all look like
   "lsusb shows nothing": no device ever attached; a device attached under another id (stock fastboot
   `18d1:4ee0`, Spreadtrum download `1782:4d00`); and an attach that fails (`error -71`, over-current). Until
   the pmOS kernel has brought its USB up there is nothing to see: U-Boot has no USB gadget. The logic is
-  tested against a fake `/sys` (`sh tools/test-host-watch.sh`), not yet on an A01 Core.
+  tested against a fake `/sys` (`sh tools/test-host-watch.sh`).
 - **Camera:** the host phone can also film the X6525's screen. Record video and step through it frame by
   frame; the debug build's 15 s pause in U-Boot is long enough to read the previous boot's log from a
   still frame.

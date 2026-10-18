@@ -13,3 +13,6 @@ usb_f_ncm
 # indication that it did. Named as their Makefiles build them.
 sc27xx-vibra
 leds-sc27xx-bltc
+
+# Touchscreen for buffyboard in the initramfs debug shell / FDE unlock
+ovt-tcm-spi

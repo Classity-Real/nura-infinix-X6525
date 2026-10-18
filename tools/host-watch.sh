@@ -84,6 +84,9 @@ while :; do
 			log "gadget found, interface $ifc: configuring $HOSTIP/24"
 			ip link set "$ifc" up 2>&1 | while read -r l; do log "ip: $l"; done
 			ip addr add "$HOSTIP/24" dev "$ifc" 2>&1 | while read -r l; do log "ip: $l"; done
+			# On Android host chroots, bypass netd policy routing:
+			ip rule add from all to 172.16.42.0/24 lookup main pref 100 2>/dev/null || true
+			ip rule add from 172.16.42.0/24 lookup main pref 100 2>/dev/null || true
 			configured=$ifc
 			sleep 2
 			if port_open 23; then log "telnet 23 open: initramfs debug shell, use: telnet $PEER"
@@ -94,6 +97,12 @@ while :; do
 			log "gadget $VIDPID is attached but no network interface appeared: the host kernel lacks the driver for this function (check cdc_ncm / cdc_ether) or the function is not NCM"
 			configured="noif"
 		fi
+		for acm in /dev/ttyACM* /dev/usb/ttyACM*; do
+			if [ -c "$acm" ]; then
+				log "CDC-ACM serial console at $acm (e.g. minicom -D $acm or microcom -p $acm)"
+				break
+			fi
+		done
 	fi
 
 	n=$((n + 1))

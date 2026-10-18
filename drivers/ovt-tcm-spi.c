@@ -981,6 +981,7 @@ static irqreturn_t tcm_irq_thread(int irq, void *data)
 			t->resp_code = STATUS_INVALID;
 			complete(&t->resp_done);
 		}
+		usleep_range(5000, 10000);
 		return IRQ_HANDLED;
 	}
 	if (code == STATUS_IDLE || code == STATUS_BUSY ||
@@ -1065,6 +1066,7 @@ static void tcm_init_work(struct work_struct *work)
 	unsigned int len;
 
 	tcm_hw_reset(t);
+	enable_irq(t->spi->irq);
 	msleep(200);
 	/*
 	 * With a level-triggered interrupt the identify report has already
@@ -1125,7 +1127,8 @@ static int ovt_tcm_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	ret = devm_request_threaded_irq(dev, spi->irq, NULL, tcm_irq_thread,
-					IRQF_ONESHOT, "ovt-tcm", t);
+					IRQF_ONESHOT | IRQF_NO_AUTOEN,
+					"ovt-tcm", t);
 	if (ret)
 		return dev_err_probe(dev, ret, "irq\n");
 
@@ -1175,6 +1178,7 @@ static const struct of_device_id ovt_tcm_of_match[] = {
 MODULE_DEVICE_TABLE(of, ovt_tcm_of_match);
 
 static const struct spi_device_id ovt_tcm_id[] = {
+	{ "tcm-spi" },
 	{ "omnivision_tcm_spi" },
 	{ }
 };
@@ -1192,5 +1196,6 @@ static struct spi_driver ovt_tcm_driver = {
 };
 module_spi_driver(ovt_tcm_driver);
 
+MODULE_FIRMWARE("postmarketos/sprd/hdl_firmware_01.img");
 MODULE_DESCRIPTION("OmniVision TCM touchscreen (SPI, host download)");
 MODULE_LICENSE("GPL");

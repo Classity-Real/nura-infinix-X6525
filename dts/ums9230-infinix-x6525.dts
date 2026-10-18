@@ -622,6 +622,15 @@
 	};
 };
 
+/*
+ * The stock device tree marks LDO_VDDLDO0 (2.8 V peripheral rail) always-on;
+ * sc2730.dtsi leaves it off by default, so regulator_late_cleanup disables it
+ * ~30 s into boot if nothing claims it.
+ */
+&vddldo0 {
+	regulator-always-on;
+};
+
 /* ---- SoC blocks that are already plain mainline ------------------------ */
 
 &cpufreq {
