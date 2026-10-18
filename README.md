@@ -75,6 +75,7 @@ iptables -I FORWARD 2 -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j A
 ```sh
 # X6525, in the SSH session.
 sudo ip route replace default via 172.16.42.2 dev usb0   # replace: a default route may already exist
+# any public resolver will do (8.8.8.8 too); the router's own, from the host's WiFi, is often best
 sudo sh -c "echo nameserver 1.1.1.1 > /etc/resolv.conf"  # a plain file here; resolved is not enabled
 ping -c2 1.1.1.1          # by IP, so this tests routing/NAT
 ping -c2 google.com       # and this adds DNS
