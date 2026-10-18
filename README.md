@@ -53,6 +53,13 @@ and Spreadtrum download-mode ids). The debug shell additionally exposes a CDC-AC
 interface takes its address from the phone's DHCP server (`sudo dhcpcd usb0`, or NetworkManager), and
 the same `telnet`/`ssh` follow.
 
+Two things about the transition out of the debug shell are easy to trip over. The debug shell's
+console is a **root shell, not a login**; and `pmos_continue_boot` stops telnetd and removes the
+ACM/storage functions, which rebinds the gadget - **after it, telnet is gone by design and SSH is the
+only IP way in**, and the host sees the interface disappear and return. Re-check `ip link`/`ip addr`
+on the host at that moment, or let `tools/host-watch.sh` do it: it waits for the gadget, sets
+`172.16.42.2/24`, and tests ports 23 and 22 as each stage appears.
+
 **Serial UART.** `serial1` (ttyS1), 115200 8N1, on the pads. The kernel console is named on the
 command line (`console=ttyS1` in `kernel-cmdline.conf`), and systemd's getty generator starts a serial
 getty for consoles named there, so a UART adapter gives a login prompt without the USB network or the
