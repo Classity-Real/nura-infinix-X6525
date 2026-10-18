@@ -11,11 +11,19 @@ options="!check !archcheck"
 depends="
 	android-tools
 	firmware-infinix-x6525
+	iw
 	linux-postmarketos-unisoc-ums9230
+	networkmanager-wifi
 	postmarketos-base
 	soc-unisoc-ums9230
 	u-boot-infinix-x6525
+	wireless-regdb
+	wpa_supplicant
 "
+# iw, wpa_supplicant, wireless-regdb and networkmanager-wifi are the Wi-Fi userspace for the
+# built-in chip (sc23xx_wlan, a cfg80211 driver): NetworkManager drives it through
+# wpa_supplicant, and cfg80211 needs the regulatory database or it stays at the world domain.
+#
 # u-boot-infinix-x6525 is not optional: U-Boot is chainloaded from boot_a, so
 # without it there is no way to boot the device at all (its u-boot.bin and the
 # dummy initramfs below make up the boot image).
@@ -78,6 +86,33 @@ package() {
 	mkdir -p "$pkgdir"/usr/share/mkinitfs/files
 	echo "/lib/firmware/postmarketos/sprd/hdl_firmware_01.img" \
 		> "$pkgdir"/usr/share/mkinitfs/files/30-device-infinix-x6525.files
+
+	# Built-in Wi-Fi. The remoteproc (loads sprd/wcnmodem.bin) and the WLAN driver
+	# (downloads sprd/wifi_board_config.bin) are modules living in the rootfs, so
+	# they are loaded explicitly here once the root filesystem is up.
+	mkdir -p "$pkgdir"/usr/lib/modules-load.d
+	printf '%s\n' sprd_wcn sc23xx_wlan sc23xx_wlan_sipc \
+		> "$pkgdir"/usr/lib/modules-load.d/x6525-wifi.conf
+
+	# The device tree's local-mac-address for the WLAN channel is all zeroes ("filled
+	# in by the bootloader", which this U-Boot does not do), so the interface would
+	# come up with 00:00:00:00:00:00. Give it a random locally administered address,
+	# generated once and kept, as soon as the interface exists.
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-wlan-mac <<'EOF'
+#!/bin/sh
+# usage: x6525-wlan-mac <ifname>
+f=/var/lib/x6525/wlan-mac
+mkdir -p /var/lib/x6525
+if [ ! -s "$f" ]; then
+	od -An -N5 -tx1 /dev/urandom | awk '{printf "02:%s:%s:%s:%s:%s\n", $1,$2,$3,$4,$5}' > "$f"
+fi
+cur=$(cat /sys/class/net/"$1"/address 2>/dev/null)
+[ "$cur" = "00:00:00:00:00:00" ] || exit 0
+ip link set dev "$1" address "$(cat "$f")"
+EOF
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-wlan-mac.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/bin/x6525-wlan-mac %k"
+EOF
 }
 
 sha512sums="
