@@ -63,10 +63,13 @@ ssh user@172.16.42.1        # password: x6525pmos
 
 ```sh
 # A01 Core, as root. usb0 = the name from step 3; wlan0 = the host's internet interface.
+# First check the host is online itself:  ping -c2 1.1.1.1
 echo 1 > /proc/sys/net/ipv4/ip_forward
-iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-iptables -A FORWARD -i usb0 -o wlan0 -j ACCEPT
-iptables -A FORWARD -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+# Insert at the top (-I), do not append (-A): Android's FORWARD chain contains
+# netd's DROP rules, and an appended ACCEPT would sit behind them.
+iptables -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE
+iptables -I FORWARD 1 -i usb0 -o wlan0 -j ACCEPT
+iptables -I FORWARD 2 -i wlan0 -o usb0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 ```
 
 ```sh
@@ -88,7 +91,7 @@ reference.
 | `RTNETLINK answers: File exists` from `ip rule` | harmless - those rules are global and already added | ignore |
 | no USB interface at all | the cable went in after boot, or the phone did not come up | power-cycle with it connected; `lsusb` should show `18d1:d001 Infinix X6525` |
 | SSH refused, but you have a console | you are still in the initramfs debug shell | run `pmos_continue_boot` there; telnet works in that shell, SSH only after it |
-| `ping 1.1.1.1` fails | the host is not forwarding, or the default route is wrong | `sudo ip route replace default via 172.16.42.2 dev usb0`; re-run the step-5 host lines; `iptables -t nat -L POSTROUTING -n -v` must count up |
+| `ping 1.1.1.1` fails | the host is not forwarding, or the default route is wrong | `sudo ip route replace default via 172.16.42.2 dev usb0`; re-run the step-5 host lines *with `-I`*; `iptables -t nat -L POSTROUTING -n -v` must count up |
 | names fail but IPs work | the resolver line did not take | redo the `nameserver 1.1.1.1` line; `/etc/resolv.conf` is a plain file in this image (systemd-resolved is not enabled), and NetworkManager can rewrite it - the `nmcli` profile in *Details* carries `ipv4.dns` and survives that |
 
 ## Details
