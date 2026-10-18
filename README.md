@@ -39,8 +39,9 @@ details: the micro-USB OTG adapter to USB-C, the armhf chroot, and why NCM matte
 host, in the chroot as root:
 
 ```sh
-ip link                          # the NCM interface appears as usb1 or enx...
-ip addr add 172.16.42.2/24 dev <if>
+ip link                          # the NCM interface: usb0 on this NetHunter kernel (usbN/enx* elsewhere)
+ip link set usb0 up              # Android leaves it DOWN when it enumerates
+ip addr add 172.16.42.2/24 dev usb0
 ip rule add from all to 172.16.42.0/24 lookup main pref 100   # bypass Android netd routing
 ip rule add from 172.16.42.0/24 lookup main pref 100
 telnet 172.16.42.1               # initramfs debug shell, while pmos.debug-shell holds the boot

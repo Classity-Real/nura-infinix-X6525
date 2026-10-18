@@ -36,11 +36,13 @@ Press **Enter** and you will be immediately dropped into the root debug shell!
 Because Android's `netd` has policy routing rules that drop packets outside Android's default tables, you must bypass netd in the host chroot:
 
 ```sh
-# 1. Bring up the USB network interface (usually usb1 or enx* on the A01 Core):
-ip link set usb1 up 2>/dev/null || ip link set eth0 up
+# 1. Bring up the USB network interface. On the A01 Core's NetHunter kernel it is
+#    usb0 (seen with `ip link`); Android leaves it DOWN when the gadget enumerates.
+#    Other kernels may name it usbN or enx*.
+ip link set usb0 up 2>/dev/null || ip link set usb1 up 2>/dev/null || ip link set eth0 up
 
 # 2. Assign the host IP:
-ip addr add 172.16.42.2/24 dev usb1 2>/dev/null || ip addr add 172.16.42.2/24 dev eth0
+ip addr add 172.16.42.2/24 dev usb0 2>/dev/null || ip addr add 172.16.42.2/24 dev usb1 2>/dev/null || ip addr add 172.16.42.2/24 dev eth0
 
 # 3. Add Android routing bypass rules (CRITICAL for Android host chroots):
 ip rule add from all to 172.16.42.0/24 lookup main pref 100

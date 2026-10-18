@@ -290,10 +290,17 @@ link is NCM, which it can. Use `rndis.usb0` only for a Windows 10 host.
     minicom -D /dev/ttyACM0
     # or: microcom -p /dev/ttyACM0
     ```
-  - **Network shell:** On the host phone as root: `ip link` (the NCM interface appears as `usb1` or `enx*`), then:
+  - **Network shell:** On the host phone as root, `ip link` shows the NCM interface as **`usb0`** on the
+    A01 Core's NetHunter kernel (`usbN`/`enx*` on other kernels), **DOWN** with no address - the gadget
+    enumerates fine (`lsusb`: `18d1:d001 Infinix X6525`) but Android does not configure it. Bring it up
+    and address it yourself, and re-do this after every reboot (the gadget rebinds when the initramfs
+    hands over to the rootfs):
     ```sh
-    ip link set <if> up && ip addr add 172.16.42.2/24 dev <if>
-    telnet 172.16.42.1        # in the initramfs debug shell
+    ip link set usb0 up
+    ip addr add 172.16.42.2/24 dev usb0
+    ip rule add from all to 172.16.42.0/24 lookup main pref 100
+    ip rule add from 172.16.42.0/24 lookup main pref 100
+    telnet 172.16.42.1        # in the initramfs debug shell (telnetd stops when it ends)
     ssh user@172.16.42.1       # once booted into the rootfs (password: x6525pmos)
     ```
 - **Watch instead of guessing:** `tools/host-watch.sh` (run as root on the host phone, in the chroot with
