@@ -60,6 +60,54 @@ Always send, whichever row: the output of the 1.1 commands, and the first 100 li
 The phone is fully usable from the host: serial console `minicom -D /dev/ttyACM0`, and SSH
 (`ssh user@172.16.42.1`, password `x6525pmos`) after boot. Touch is only needed for the GUI.
 
+### 1.5 The keyboard appears but does not respond
+
+"The keyboard is on screen" and "the keyboard is running" are different things. Check first:
+
+```sh
+pgrep -a buffyboard
+```
+
+| `pgrep` | What it is | What to do |
+|---|---|---|
+| nothing | a dead frame. `buffyboard` drew the keyboard, then `pmos_continue_boot` ran `pkill -f buffyboard` (`postmarketos-initramfs`, `init_functions.sh:1219`); fbcon repaints only the rows something writes, so the keyboard stays on screen with nothing behind it. | the rootfs, not touch - see below |
+| a `buffyboard` process | the keyboard is live and touch is not reaching it | restart it with verbose logging (the initramfs instance logs errors only) and read what it does with the input device |
+
+If nothing is listed, the process was killed at switch_root and no service restarted it. An image
+built with `ui = console` has no `buffyboard.service` - the unit is shipped by
+`postmarketos-ui-buffyboard` - while `rom.yml` now selects `ui = buffyboard`, whose unit
+`postmarketos-base`'s `90-base.preset` enables. Until that image is flashed, start it by hand over
+SSH as `user`; it draws on the console and injects keys there, so an SSH session is enough:
+
+```sh
+sudo sh -c 'r=$(cat /sys/class/graphics/fbcon/rotate 2>/dev/null || echo 0); \
+  modprobe uinput 2>/dev/null; \
+  nohup /usr/bin/buffyboard -r "$r" </dev/null >/tmp/buffyboard.log 2>&1 &'
+```
+
+If a process is listed, restart it with verbose logging and read what it does with the input device:
+
+```sh
+pkill -f buffyboard
+buffyboard -v >/tmp/bb.log 2>&1 &
+sleep 2
+grep -iE 'input|fb0|libinput|error|can.t' /tmp/bb.log
+```
+
+`buffyboard` reads touches through libinput and accepts a device only after udev has tagged it
+(`ID_INPUT_TOUCHSCREEN=1`). What the log says:
+
+| Line in `/tmp/bb.log` | Meaning | Next |
+|---|---|---|
+| `New input device: omnivision_tcm_touch` | buffyboard took the node | if taps still do nothing, events are not arriving: 1.1's `od` test and the interrupt count in 1.3 |
+| `... is not an input device` | udev has no `ID_INPUT=1` for it | `udevadm info -q property -n /dev/input/eventN`; send that with `ls -l /dev/input/` |
+| `libinput can't use /dev/input/eventN` | libinput refused the node | send the line with `cat /proc/bus/input/devices` |
+| `Key ... is ignored`, `Keyboard ... is ignored` | it is a key device, not touch | correct for this board; not the keyboard's problem |
+| `/dev/fb0 is not available` | display, not touch | the boot lost the framebuffer early; send `dmesg` |
+
+If no line mentions the touch device, it never reached udev: use `/proc/bus/input/devices` and the
+`dmesg` output from 1.1 to find out whether the driver got to `touch ready`.
+
 ## 2. Wi-Fi
 
 Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It needs

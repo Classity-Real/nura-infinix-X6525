@@ -121,7 +121,7 @@ cat /sys/kernel/debug/regulator/regulator_summary | grep -E "vddldo0|vddusb"
 ```
 Ensure `vddldo0` (2.8V touch/panel rail) is `enabled` with `use_count >= 1`.
 
-### Step 3: Check Input Device & Test with `evtest`
+### Step 3: Check Input Device & Test Touch Events
 ```sh
 # Verify input device registration:
 cat /proc/bus/input/devices
@@ -132,22 +132,39 @@ You should see:
 N: Name="omnivision_tcm_touch"
 H: Handlers=eventX
 ```
-Test live touch events directly:
+`evtest` is not installed in this image. Read the event node directly instead - `od` is a busybox
+applet in the initramfs, and the rootfs also has `/usr/bin/hexdump`:
+
 ```sh
-evtest /dev/input/eventX  # replace X with the event number from above
+od -An -tx1 /dev/input/eventX   # replace X; Ctrl-C after touching the screen
 ```
-Touch the screen. If you see `EV_ABS / ABS_MT_POSITION_X` coordinates scrolling, the touch driver and hardware are working.
+
+Bytes appearing while you touch the screen means the driver and hardware are delivering events.
 
 ### Step 4: Check or Restart Buffyboard
-If `evtest` receives events but the on-screen keyboard doesn't type:
-```sh
-# Check if buffyboard is running:
-ps | grep buffyboard
+"The keyboard is on screen" does not mean it is running - `pmos_continue_boot` kills it
+(`pkill -f buffyboard`) and fbcon does not repaint the pixels it drew. Check the process first:
 
-# Kill and restart buffyboard manually:
-pkill -9 buffyboard
-buffyboard &
+```sh
+pgrep -a buffyboard
 ```
+
+- **Nothing listed** - the keyboard is a dead frame. In the rootfs, an image built with `ui = console`
+  has no `buffyboard.service`; the tree now selects `ui = buffyboard`. The full explanation and the
+  manual start command are in [BRING_UP_CHECKLIST.md](BRING_UP_CHECKLIST.md), section 1.5.
+- **A process is listed, but taps do nothing** - the keyboard is live and touch is not reaching it.
+  Restart it with verbose logging (the initramfs instance logs errors only):
+
+```sh
+pkill -f buffyboard
+buffyboard -v >/tmp/bb.log 2>&1 &
+sleep 2
+grep -iE 'input|fb0|libinput|error|can.t' /tmp/bb.log
+```
+
+`New input device: omnivision_tcm_touch` means buffyboard accepted the node; if that line is absent,
+the problem is between the driver and udev - the table in BRING_UP_CHECKLIST.md 1.5 says which log
+line means what.
 
 ### Step 5: Save Log Dump for Investigation
 ```sh

@@ -98,6 +98,7 @@ reference.
 | SSH refused, but you have a console | you are still in the initramfs debug shell | run `pmos_continue_boot` there; telnet works in that shell, SSH only after it |
 | `ping 1.1.1.1` fails | the host is not forwarding, or the default route is wrong | `sudo ip route replace default via 172.16.42.2 dev usb0`; re-run the step-5 host lines *with `-I`*; `iptables -t nat -L POSTROUTING -n -v` must count up |
 | names fail but IPs work | the resolver line did not take | redo the `nameserver 1.1.1.1` line; `/etc/resolv.conf` is a plain file in this image (systemd-resolved is not enabled), and NetworkManager can rewrite it - the `nmcli` profile in *Details* carries `ipv4.dns` and survives that |
+| the screen shows the keyboard but taps do nothing | either buffyboard is not running (a dead frame left by the initramfs) or touch is not delivering events | `pgrep -a buffyboard`; [BRING_UP_CHECKLIST.md](BRING_UP_CHECKLIST.md) section 1.5 tells the two apart |
 
 ## Details
 
