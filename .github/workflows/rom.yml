@@ -97,7 +97,12 @@ jobs:
           [pmbootstrap]
           device = infinix-x6525
           kernel = stable
-          ui = console
+          # buffyboard, not console: the on-screen keyboard's systemd unit
+          # (buffyboard.service) is shipped by postmarketos-ui-buffyboard, and
+          # postmarketos-base's 90-base.preset already enables it. With
+          # ui = console the buffyboard binary is installed but no service
+          # starts it in the rootfs, so the screen accepts nothing.
+          ui = buffyboard
           user = user
           hostname = x6525
           timezone = GMT

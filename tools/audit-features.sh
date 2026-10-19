@@ -148,6 +148,15 @@ need "HDL firmware in firmware/"                 test -f "$ROOT/firmware/hdl_fir
 need "the firmware package is a dependency"      sh -c ". '$DPKG/APKBUILD'; printf '%s\n' \"\$depends\" | grep -q firmware-infinix-x6525"
 finish
 
+feature "framebuffer keyboard (buffyboard)"
+# postmarketos-ui-buffyboard ships buffyboard.service, and postmarketos-base's
+# 90-base.preset enables it; ui = console installs the binary but no service.
+need "rom.yml selects the buffyboard UI"         grep -q '^ *ui = buffyboard' "$ROOT/.github/workflows/rom.yml"
+need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
+need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
+need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
+finish
+
 feature "USB networking (the login path)"
 need "CONFIG_USB_MUSB_SPRD=y"                    cfg USB_MUSB_SPRD "$CFG"
 need "CONFIG_TYPEC_SC27XX_PD=y (role switch)"    cfg TYPEC_SC27XX_PD "$CFG"
@@ -193,8 +202,6 @@ printf '                 firmware package exists (firmware-infinix-x6525-wcn doe
 printf '  known-missing  cameras: no mainline driver work started\n'
 printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
-printf '  known-missing  typing on the console screen: touch cannot type, and no on-screen keyboard\n'
-printf '                 is wired to a getty (buffyboard/unl0kr are present but not started)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then
@@ -293,6 +300,24 @@ if [ -n "$IMAGE" ]; then
 		else
 			bad "the root filesystem has no /etc/shadow"
 		fi
+	fi
+
+	# the on-screen keyboard: the unit must be installed (ui = buffyboard) and
+	# enabled. postmarketos-base's 90-base.preset does the enabling, and
+	# pmbootstrap applies presets while building the image, so the wants
+	# symlink is in the rootfs - not left for first boot.
+	if [ -s "$TMP/root.img" ]; then
+		debugfs -R "stat /usr/lib/systemd/system/buffyboard.service" \
+			"$TMP/root.img" 2>/dev/null | grep -q . &&
+			ok "the root filesystem installs buffyboard.service" ||
+			bad "no buffyboard.service in the root filesystem (ui is not buffyboard)"
+		debugfs -R "stat /etc/systemd/system/multi-user.target.wants/buffyboard.service" \
+			"$TMP/root.img" 2>/dev/null | grep -q . &&
+			ok "buffyboard.service is enabled at boot" ||
+			bad "buffyboard.service is not enabled at boot"
+		debugfs -R "stat /usr/bin/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+			ok "the buffyboard binary is installed" ||
+			bad "the buffyboard binary is not installed"
 	fi
 
 	# every module the initramfs is supposed to carry is in it

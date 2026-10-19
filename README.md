@@ -113,8 +113,10 @@ Three ways in:
 - **Serial UART** - `serial1` (ttyS1), 115200 8N1, on the pads. `console=ttyS1` is on the kernel
   command line, so kernel logs and a login getty both appear there. On the A01 Core an FTDI or PL2303
   adapter is `/dev/ttyUSB0` (CH341/CP210x are not in that kernel): `screen /dev/ttyUSB0 115200`.
-- **The screen** - the `x6525 login:` prompt is real (`getty@tty1`), but touch cannot type and no
-  on-screen keyboard is wired to a getty, so it is read-only for login today.
+- **The screen** - the `x6525 login:` prompt is real (`getty@tty1`), and the image is built with the
+  `buffyboard` UI: its on-screen keyboard service starts on tty1, and `postmarketos-base`'s preset
+  enables it. Typing there needs the touchscreen, which is still being brought up - until it delivers
+  input events, tapping the keyboard does nothing.
 
 The debug cmdline carries `pmos.debug-shell`, so every boot stops in the initramfs first: a root shell
 on the USB serial port (`/dev/ttyACM0` on the host, `minicom -D /dev/ttyACM0`) and `telnet
