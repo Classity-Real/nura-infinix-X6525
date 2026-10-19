@@ -122,7 +122,7 @@ on the USB serial port (`/dev/ttyACM0` on the host, `minicom -D /dev/ttyACM0`) a
 on) and rebinds the gadget, so the host has to re-check the interface name and address.
 
 Host-side details - the OTG cable, the armhf chroot, Android's routing: [FIRST_BOOT.md](FIRST_BOOT.md),
-*Using a second Android phone as the host*, and [DEBUG_SHELL_GUIDE.md](DEBUG_SHELL_GUIDE.md).
+*Using a second Android phone as the host*, and [DEBUG_SHELL_GUIDE.md](DEBUG_SHELL_GUIDE.md). After flashing a build, [BRING_UP_CHECKLIST.md](BRING_UP_CHECKLIST.md) says what to test (touch, Wi-Fi, GUI) and what each result means.
 `tools/host-watch.sh` performs the step-3 host part by itself as the device appears.
 
 ### Internet, permanently
