@@ -23,9 +23,10 @@ controller asserts and the driver's threaded handler runs. buffyboard accepts th
 started with `-v` it logs `New input device: omnivision_tcm_touch`.
 
 The event node delivers as well: the captured stream decodes as a complete touch - tracking id,
-position, pressure, `BTN_TOUCH` and `SYN_REPORT` (1.7). The driver side is done. What remains is
-where the taps land relative to the keyboard strip, and whether buffyboard reacts to a tap inside
-it.
+position, pressure, `BTN_TOUCH` and `SYN_REPORT` (1.7). The captured space-bar tap then showed why
+the keyboard ignored it: the driver asked for 12-bit position fields, and raw Y above 4095 wrapped
+modulo 4096, so a tap could never land in the keyboard strip. That is fixed in the driver (1.7); the
+next build is the test.
 
 An IRQ count that also rises while nobody touches would mean the controller keeps sending reports
 (or re-asserts the line); the event stream says which of them reach userspace.
@@ -195,7 +196,7 @@ pgrep -a buffyboard
 while the `ovt-tcm` count still rises = the driver's report path. An empty `pgrep` at the end =
 buffyboard exited; the tail of the log says why.
 
-### 1.7 Touch works; check where the tap lands
+### 1.7 Touch works; why taps could not reach the keyboard
 
 On 2026-10-20 the event stream was captured and decodes as a complete touch:
 
@@ -210,22 +211,22 @@ Each record is 24 bytes: 8-byte seconds, 8-byte microseconds, `u16 type`, `u16 c
 (little-endian). The driver side is therefore done; buffyboard also accepted the device
 (`New input device: omnivision_tcm_touch`).
 
-The controller's raw range is 5759 x 12895, which maps onto the 720 x 1612 screen. buffyboard draws
-its keyboard in the bottom third: physical y 1075..1611, `tty_height = 1612 - 1612/3 = 1075`
-(`buffybox`, `buffyboard/main.c`). Taps above that are inside no key and are dropped by its bounds
-check - the captured sample at raw (133, 2905) is physical (16, 363), so it was above the keyboard
-and proves nothing about keys.
+The controller's raw range is 5759 x 12895 (8x the 720 x 1612 panel). buffyboard draws its keyboard
+in the bottom third: physical y 1075..1611, `tty_height = 1612 - 1612/3 = 1075`
+(`buffybox`, `buffyboard/main.c`), so a key tap has raw Y at or above about 8600.
 
-The controlled test is to tap the space bar (bottom centre) and read the raw values:
+The controlled space-bar tap reported `ABS_MT_POSITION_X=2760` (centre) but `ABS_MT_POSITION_Y=337`.
+That was the bug: `tcm_set_report_config()` asked for **12-bit** X and Y fields, and 12 bits hold
+only 0..4095, so every raw Y past 4095 wrapped modulo 4096. Y was therefore always reported in
+0..4095, buffyboard mapped it to physical y 0..512 - above its keyboard at 1075 - and no tap could
+ever reach a key.
 
-- expected: `ABS_MT_POSITION_X` around 2900 (half of 5759), `ABS_MT_POSITION_Y` around 12000
-  (raw y for physical y ~1550); anything with `ABS_MT_POSITION_Y` at or above about 8600 is inside
-  the keyboard strip;
-- if a key tap reports values near `Y=2900` (or `X` near 12000), the axes are swapped or inverted
-  relative to the panel, and the device tree needs the corresponding touchscreen properties - that
-  is a mapping bug, not a lost event;
-- if the values are in range and buffyboard still does not react, the fault is in its hit-testing,
-  and the next step is to confirm exactly one instance is running (see 1.5).
+The fix: positions are now 16-bit, `4+4+16+16+12+12+16` bits/object, the TouchComm normal-report
+layout (12-bit widths). The total per object is still 80 bits, so the report payload size is
+unchanged. After flashing the rebuilt kernel, a space-bar tap should report
+`ABS_MT_POSITION_X` ~2760 and `ABS_MT_POSITION_Y` ~12000. If Y still comes back small, the firmware
+did not accept 16-bit fields, and the configuration it returns (`CMD_GET_TOUCH_REPORT_CONFIG`) is
+what to look at next.
 
 ## 2. Wi-Fi
 

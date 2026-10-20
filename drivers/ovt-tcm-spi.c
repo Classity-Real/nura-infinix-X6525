@@ -714,17 +714,26 @@ static void tcm_release_all(struct ovt_tcm *t)
 	input_sync(t->input);
 }
 
-/* Fixed layout, same as the stock driver: 4+4+12+12+16+16+16 bits/object. */
+/*
+ * Report layout: 4+4+16+16+12+12+16 bits/object. The positions must be 16
+ * bits: the application info advertises 5759x12895 (8x the panel), and a
+ * 12-bit field made the controller truncate Y modulo 4096 - every raw Y past
+ * 4095 wrapped, so the bottom third of the screen (raw Y >= ~8600, where
+ * buffyboard draws its keyboard) could never be reported. The widths are 12
+ * bits, as in the TouchComm normal-report layout used by the Synaptics TCM
+ * driver. The total bits per object is unchanged (80), so the report payload
+ * still fits the size the firmware advertises.
+ */
 static int tcm_set_report_config(struct ovt_tcm *t)
 {
 	static const u8 layout[] = {
 		TOUCH_FOREACH_ACTIVE_OBJECT,
 		TOUCH_OBJECT_N_INDEX, 4,
 		TOUCH_OBJECT_N_CLASSIFICATION, 4,
-		TOUCH_OBJECT_N_X_POSITION, 12,
-		TOUCH_OBJECT_N_Y_POSITION, 12,
-		TOUCH_OBJECT_N_X_WIDTH, 16,
-		TOUCH_OBJECT_N_Y_WIDTH, 16,
+		TOUCH_OBJECT_N_X_POSITION, 16,
+		TOUCH_OBJECT_N_Y_POSITION, 16,
+		TOUCH_OBJECT_N_X_WIDTH, 12,
+		TOUCH_OBJECT_N_Y_WIDTH, 12,
 		TOUCH_OBJECT_N_Z, 16,
 		TOUCH_FOREACH_END,
 		TOUCH_END,
