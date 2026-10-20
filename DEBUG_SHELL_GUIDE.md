@@ -136,9 +136,13 @@ H: Handlers=eventX
 applet in the initramfs, and the rootfs also has `/usr/bin/hexdump`:
 
 ```sh
-od -An -tx1 /dev/input/eventX   # replace X; Ctrl-C after touching the screen
+node=$(grep -A4 -i omnivision /proc/bus/input/devices |
+       sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
+echo "reading /dev/input/$node"
+timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch the screen during these 10 s
 ```
 
+Deriving the node from `Handlers=` is deliberate: `eventN` as written in notes is not a file.
 Bytes appearing while you touch the screen means the driver and hardware are delivering events.
 
 ### Step 4: Check or Restart Buffyboard
@@ -168,9 +172,19 @@ Two things seen in the initramfs are expected and are not the fault:
 defaults - and a `[1]- Done buffyboard` line, which only means the process exited. To see why it
 exited, run it in the foreground with `-v`; the log then stays on the terminal.
 
+Tap the screen, then look at the end of the log and whether it is still running:
+
+```sh
+tail -20 /tmp/bb.log
+pgrep -a buffyboard
+```
+
 `New input device: omnivision_tcm_touch` means buffyboard accepted the node; if that line is absent,
 the problem is between the driver and udev - the table in BRING_UP_CHECKLIST.md 1.5 says which log
-line means what.
+line means what. Read this together with the `od` result above: bytes plus the "New input device"
+line means input and buffyboard are both fine and the fault is in buffyboard's hit-testing; no bytes
+while the `ovt-tcm` IRQ count still rises means the driver is reading the controller but not
+emitting input.
 
 ### Step 5: Save Log Dump for Investigation
 ```sh

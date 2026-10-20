@@ -29,11 +29,18 @@ In the debug shell:
 
 ```sh
 ls /dev/input
-grep -A4 omnivision /proc/bus/input/devices          # note the eventN handler
+grep -A4 omnivision /proc/bus/input/devices
 dmesg | grep -iE "tcm|ovt|vddldo0|regulator"
-grep -iE "ovt-tcm|eic" /proc/interrupts              # note the count
-od -An -tx1 /dev/input/eventN                        # now touch the screen; Ctrl-C to stop
-grep -iE "ovt-tcm|eic" /proc/interrupts              # count again
+grep -iE "ovt-tcm|eic" /proc/interrupts
+
+# let the command pick the event node from the Handlers= line, so a literal
+# "eventN" cannot be read by mistake
+node=$(grep -A4 -i omnivision /proc/bus/input/devices |
+       sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
+echo "reading /dev/input/$node"                # must be event<number>, not empty
+timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch the screen during these 10 s
+
+grep -iE "ovt-tcm|eic" /proc/interrupts
 ```
 
 `buffyboard` (the on-screen keyboard) is not the test: it can ignore a device that appeared after it
@@ -126,6 +133,23 @@ grep -iE 'input|fb0|libinput|error|can.t' /tmp/bb.log
 | `libinput can't use /dev/input/eventN` | libinput refused the node | send the line with `cat /proc/bus/input/devices` |
 | `Key ... is ignored`, `Keyboard ... is ignored` | it is a key device, not touch | correct for this board; not the keyboard's problem |
 | `/dev/fb0 is not available` | display, not touch | the boot lost the framebuffer early; send `dmesg` |
+
+Tap the screen, then:
+
+```sh
+tail -20 /tmp/bb.log
+pgrep -a buffyboard
+```
+
+Read it together with the `od` result from 1.1:
+
+| `od` on the event node | `bb.log` | Meaning |
+|---|---|---|
+| bytes | `New input device: omnivision_tcm_touch` | touch and buffyboard are both fine; the fault is in buffyboard's hit-testing |
+| bytes | no line for the device | udev/libinput did not hand it over; the log's warning says why |
+| nothing, while the `ovt-tcm` IRQ count rises | - | the handler reads the controller but `tcm_report_touch()` emits nothing; that needs a debug print in the driver |
+| nothing, IRQ count static | - | the IRQ is not arriving; see 1.3 |
+| - | `pgrep` empty | it exited; the last log lines say why |
 
 If no line mentions the touch device, it never reached udev: use `/proc/bus/input/devices` and the
 `dmesg` output from 1.1 to find out whether the driver got to `touch ready`.
