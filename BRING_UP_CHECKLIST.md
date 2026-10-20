@@ -22,13 +22,13 @@ That boot had it as `event2`. The interrupt is not the blocker: `/proc/interrupt
 controller asserts and the driver's threaded handler runs. buffyboard accepts the device as well:
 started with `-v` it logs `New input device: omnivision_tcm_touch`.
 
-The event node itself has not been read yet - all three attempts failed before an event was read:
-two used the literal `/dev/input/eventN`, and `od /dev/input/event2` alone reads 16-byte blocks while
-evdev rejects any read shorter than one `struct input_event` (24 bytes on aarch64), so it reports
-`read error`. Use the `cat ... | od` block in 1.1.
+The event node delivers as well: the captured stream decodes as a complete touch - tracking id,
+position, pressure, `BTN_TOUCH` and `SYN_REPORT` (1.7). The driver side is done. What remains is
+where the taps land relative to the keyboard strip, and whether buffyboard reacts to a tap inside
+it.
 
 An IRQ count that also rises while nobody touches would mean the controller keeps sending reports
-(or re-asserts the line); the event read says which of them reach userspace.
+(or re-asserts the line); the event stream says which of them reach userspace.
 
 ### 1.1 The test
 
@@ -153,7 +153,8 @@ pgrep -a buffyboard
 ```
 
 `pgrep` should print one line. More than one means an earlier instance is still running; kill them
-all, confirm `pgrep` is empty, and start one, so the log belongs to a single process.
+all (`kill -9 <pid>` if `pkill -f buffyboard` leaves any behind), confirm `pgrep` is empty, and start
+one, so the log belongs to a single process.
 
 Read it together with the event read from 1.1:
 
@@ -193,6 +194,38 @@ pgrep -a buffyboard
 `cat | od` bytes + `New input device: omnivision_tcm_touch` = buffyboard's hit-testing. No bytes
 while the `ovt-tcm` count still rises = the driver's report path. An empty `pgrep` at the end =
 buffyboard exited; the tail of the log says why.
+
+### 1.7 Touch works; check where the tap lands
+
+On 2026-10-20 the event stream was captured and decodes as a complete touch:
+
+```
+ABS_MT_TRACKING_ID=296
+ABS_MT_POSITION_X=133   ABS_MT_POSITION_Y=2905
+ABS_MT_PRESSURE=19 -> 21 -> 23 -> 20 -> 8
+BTN_TOUCH=1 ... BTN_TOUCH=0   ABS_MT_TRACKING_ID=-1   SYN_REPORT
+```
+
+Each record is 24 bytes: 8-byte seconds, 8-byte microseconds, `u16 type`, `u16 code`, `s32 value`
+(little-endian). The driver side is therefore done; buffyboard also accepted the device
+(`New input device: omnivision_tcm_touch`).
+
+The controller's raw range is 5759 x 12895, which maps onto the 720 x 1612 screen. buffyboard draws
+its keyboard in the bottom third: physical y 1075..1611, `tty_height = 1612 - 1612/3 = 1075`
+(`buffybox`, `buffyboard/main.c`). Taps above that are inside no key and are dropped by its bounds
+check - the captured sample at raw (133, 2905) is physical (16, 363), so it was above the keyboard
+and proves nothing about keys.
+
+The controlled test is to tap the space bar (bottom centre) and read the raw values:
+
+- expected: `ABS_MT_POSITION_X` around 2900 (half of 5759), `ABS_MT_POSITION_Y` around 12000
+  (raw y for physical y ~1550); anything with `ABS_MT_POSITION_Y` at or above about 8600 is inside
+  the keyboard strip;
+- if a key tap reports values near `Y=2900` (or `X` near 12000), the axes are swapped or inverted
+  relative to the panel, and the device tree needs the corresponding touchscreen properties - that
+  is a mapping bug, not a lost event;
+- if the values are in range and buffyboard still does not react, the fault is in its hit-testing,
+  and the next step is to confirm exactly one instance is running (see 1.5).
 
 ## 2. Wi-Fi
 
