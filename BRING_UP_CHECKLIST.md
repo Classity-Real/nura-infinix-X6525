@@ -172,11 +172,24 @@ same image you are flashing, then flash it:
 ```sh
 sh tools/patch-cmdline.sh --remove pmos-boot-fs.img pmos.debug-shell
 fastboot flash cache pmos-boot-fs.img
+fastboot flash userdata pmos-root-fs.img   # only if the phone's userdata is another run's
+```
+
+Both files must come from one ROM run; check before flashing that the rootfs UUID is the one the
+patched extlinux names:
+
+```sh
+blkid -p pmos-root-fs.img                    # UUID= must match...
+sh tools/patch-cmdline.sh pmos-boot-fs.img   # ...pmos_root_uuid= on the append line
 ```
 
 The tool keeps the unpatched copy as `pmos-boot-fs.img.orig`; add the option back with
 `sh tools/patch-cmdline.sh pmos-boot-fs.img pmos.debug-shell` when the boot works. With no debug
 shell, hold **volume-down** during boot to get one (the initramfs `check_keys` path) if it fails.
+
+There is no ACM console on this boot by construction, so success looks different: the NCM interface
+appears on the host and SSH answers `172.16.42.1` (commands in 1.4). A phone that stays on the
+splash for a minute with no new USB interface is a failed boot - use volume-down.
 
 ### 1.5 The keyboard appears but does not respond
 
