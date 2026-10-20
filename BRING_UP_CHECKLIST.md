@@ -146,6 +146,22 @@ partition). If it does not, the rootfs on the phone is from a different build, a
 `pmos_continue_boot` has nothing to mount. To read extlinux itself, mount the boot filesystem by
 its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt; cat /mnt/extlinux/extlinux.conf`.
 
+If the UUIDs match and the boot still stops, walk the same steps by hand. Each prints, so the one
+that errors or never returns is the step `pmos_continue_boot` dies in:
+
+```sh
+root=$(blkid -L pmOS_root); echo "root=$root"
+e2fsck -p "$root"; echo "fsck=$?"
+resize2fs "$root"; echo "resize=$?"
+mkdir -p /mnt; mount -t ext4 -o rw "$root" /mnt; echo "mount=$?"
+cat /mnt/etc/os-release; umount /mnt
+```
+
+`resize2fs` growing the freshly flashed 907 MB filesystem to the 110 GiB `userdata` partition is
+the expected long step; if it is the one that hangs, let it run and note how long. If all four
+succeed quickly, the stop is after the mount (systemd or `switch_root`), and the UART on `ttyS1`
+is the next place to look.
+
 ### 1.5 The keyboard appears but does not respond
 
 "The keyboard is on screen" and "the keyboard is running" are different things. Check first:
