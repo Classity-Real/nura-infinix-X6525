@@ -17,13 +17,18 @@ In the debug shell:
 ls /dev/input
 grep -A4 omnivision /proc/bus/input/devices          # note the eventN handler
 dmesg | grep -iE "tcm|ovt|vddldo0|regulator"
-grep -i omnivision /proc/interrupts                  # note the count
-cat /dev/input/eventN | hexdump -C                   # now touch the screen; Ctrl-C to stop
-grep -i omnivision /proc/interrupts                  # count again
+grep -iE "ovt-tcm|eic" /proc/interrupts              # note the count
+od -An -tx1 /dev/input/eventN                        # now touch the screen; Ctrl-C to stop
+grep -iE "ovt-tcm|eic" /proc/interrupts              # count again
 ```
 
 `buffyboard` (the on-screen keyboard) is not the test: it can ignore a device that appeared after it
-started. The `hexdump` is the test.
+started. The `od` output is the test. Replace `eventN` with the number from `Handlers=eventN` -
+`eventN` as written is not a file. (`od` is a busybox applet; the rootfs also has `/usr/bin/hexdump`.)
+
+The IRQ action is registered as **`ovt-tcm`** (`devm_request_threaded_irq(..., "ovt-tcm", ...)` in
+`drivers/ovt-tcm-spi.c`); `omnivision` is the input device's name, not the interrupt's. A
+`grep omnivision /proc/interrupts` that prints nothing therefore proves nothing.
 
 ### 1.2 If events appear (touch works)
 
