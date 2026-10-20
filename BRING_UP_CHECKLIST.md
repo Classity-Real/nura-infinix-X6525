@@ -17,9 +17,11 @@ input: omnivision_tcm_touch as .../spi0.0/input/input2
 omnivision_tcm_spi spi0.0: touch ready: 5759x12895, 5 objects, config id
 ```
 
-That boot had it as `event2`. What is still unknown is whether the interrupt fires and whether the
-event node produces anything - that is exactly what 1.1 measures. The first attempt at 1.1 measured
-neither (it grepped `omnivision` in `/proc/interrupts` and read the literal `/dev/input/eventN`).
+That boot had it as `event2`. The interrupt fires: `/proc/interrupts` shows
+`sprd-eic 16 Level ovt-tcm` and its count rose 1050 -> 1166 between the two reads, so the controller
+asserts and the driver's threaded handler runs. What is still unknown is whether the event node
+produces anything - the `od` attempt read the literal `/dev/input/eventN` again, so that measurement
+is still open. Use the number from `Handlers=`.
 
 ### 1.1 The test
 
