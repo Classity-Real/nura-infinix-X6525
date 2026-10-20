@@ -121,6 +121,18 @@ ssh user@172.16.42.1            # password x6525pmos
 If SSH does not answer a minute after `pmos_continue_boot`, it is a real boot failure: capture the
 last screen lines (a photo is fine) and, if available, the UART output on `ttyS1` (115200 8N1).
 
+**`cache` and `userdata` must come from the same run.** `extlinux.conf` on `cache` carries
+`pmos_root_uuid`, and the initramfs mounts the root only by that UUID. A cache-only flash (the usual
+way to try a new kernel) points at a filesystem UUID that is not on the phone, and the boot stops
+right after the console handover with no further error on screen. Flash the matching rootfs:
+
+```sh
+fastboot flash userdata pmos-root-fs.img   # same run as the cache you flashed
+```
+
+The same applies in reverse: a new userdata with an old cache has a UUID the old extlinux does not
+name. Both files come out of one ROM artifact; flash them together.
+
 ### 1.5 The keyboard appears but does not respond
 
 "The keyboard is on screen" and "the keyboard is running" are different things. Check first:
