@@ -98,6 +98,29 @@ Always send, whichever row: the output of the 1.1 commands, and the first 100 li
 The phone is fully usable from the host: serial console `minicom -D /dev/ttyACM0`, and SSH
 (`ssh user@172.16.42.1`, password `x6525pmos`) after boot. Touch is only needed for the GUI.
 
+#### After `pmos_continue_boot`
+
+The USB ACM console (`/dev/ttyACM0`) and telnet are removed by design at this point: the initramfs
+removes the ACM function before `switch_root`, and telnetd stops. The NCM link re-enumerates, often
+under the next free name. A line like `printk: legacy console [tty0] disabled` is the kernel's
+console handover notice, not a failure.
+
+The rootfs is up when SSH answers. The image has systemd, `sshd`, `getty@tty1` and
+`buffyboard.service` enabled, so:
+
+```sh
+# host (A01 Core), after pmos_continue_boot; wait ~60 s for the gadget
+ip -br link                     # the NCM interface, possibly usb1 or higher now
+ip link set usbN up             # usbN = the name ip -br link printed (usb0, usb1, ...)
+ip addr add 172.16.42.2/24 dev usbN
+ip rule add from all to 172.16.42.0/24 lookup main pref 100
+ip rule add from 172.16.42.0/24 lookup main pref 100
+ssh user@172.16.42.1            # password x6525pmos
+```
+
+If SSH does not answer a minute after `pmos_continue_boot`, it is a real boot failure: capture the
+last screen lines (a photo is fine) and, if available, the UART output on `ttyS1` (115200 8N1).
+
 ### 1.5 The keyboard appears but does not respond
 
 "The keyboard is on screen" and "the keyboard is running" are different things. Check first:
