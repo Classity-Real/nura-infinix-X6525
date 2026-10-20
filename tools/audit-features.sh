@@ -213,9 +213,16 @@ if [ -n "$IMAGE" ]; then
 	[ -d "$IMAGE" ] || { bad "no such directory: $IMAGE"; }
 	IMGDIR=$(cd "$IMAGE" 2>/dev/null && pwd) || exit 1
 	cd "$IMGDIR" || exit 1
-	for f in boot.img infinix-x6525.img initramfs vmlinuz; do
+	for f in boot.img initramfs vmlinuz; do
 		[ -e "$f" ] || bad "the artifact has no $f"
 	done
+	# the disk image is what the workflow uploads, but the two filesystems
+	# are enough to audit; a copy saved without the 1.3 GB disk image (to
+	# fit on a small host) must not count as broken
+	if [ ! -e infinix-x6525.img ] &&
+	   { [ ! -e pmos-boot-fs.img ] || [ ! -e pmos-root-fs.img ]; }; then
+		bad "the artifact has neither infinix-x6525.img nor both split filesystems"
+	fi
 	if [ -f boot.img ]; then
 		python3 -I "$ROOT/tools/check-boot-img.py" boot.img >/dev/null 2>&1 &&
 			ok "boot.img passes check-boot-img.py" || bad "boot.img fails check-boot-img.py"

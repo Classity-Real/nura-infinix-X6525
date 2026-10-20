@@ -262,6 +262,10 @@ Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It 
 `/lib/firmware/sprd/wcnmodem.bin` and `/lib/firmware/sprd/wifi_board_config.bin` (the package
 `firmware-infinix-x6525`; the config is converted from the stock `.ini` by `tools/wifi-ini2bin.py`).
 
+The firmware and the modules live in the **rootfs**, not the initramfs: run this after
+`pmos_continue_boot`, over SSH. The modules are `sprd_wcn`, `sc23xx_wlan`, `sc23xx_wlan_sipc`
+(the built tree also has `btsprdsipc` for Bluetooth).
+
 ```sh
 ls -l /lib/firmware/sprd/
 lsmod | grep -E "sprd_wcn|sc23xx"
@@ -275,7 +279,7 @@ ip link
 | no `sprd/wcnmodem.bin` in `ls` | the firmware package did not get installed | send `apk info -L firmware-infinix-x6525`. |
 | `firmware too large` / `rproc` errors | the modem image does not fit or the region is wrong | send the `dmesg` lines. |
 | remoteproc starts but no `wlan0`, `failed to download config section N` | the WLAN firmware rejected a section | note N. `CRC_ERROR` means the checksums in `wifi_board_config.bin` are not what the firmware expects; any other error with N means the section layout is off. Send the lines. |
-| modules not loaded | autoload failed | `modprobe sprd_wcn; modprobe sc23xx_wlan_sipc`, then repeat, and send the output. |
+| modules not loaded | autoload failed | `modprobe sprd_wcn; modprobe sc23xx_wlan; modprobe sc23xx_wlan_sipc`, then repeat, and send the output. |
 
 The firmware layout of `wifi_board_config.bin` was reconstructed from the stock `sprd_wlan_combo.ko`
 and has not been run on the hardware yet; a failure here is expected to be informative, not final.
@@ -283,6 +287,11 @@ and has not been run on the hardware yet; a failure here is expected to be infor
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 
 ## 3. GUI
+
+Order: Wi-Fi (2) before the GUI. It is already packaged and testable in a few commands, it does not
+touch the display stack, and it gives the device its own internet for installing and debugging a UI.
+Cellular (SIM) is a much larger job - modem firmware, ModemManager and the Sipc/AT stacks - and is
+not on this path. Bluetooth shares the WCN bring-up, so it follows Wi-Fi.
 
 Needs 1 (touch) and a stable boot. In order:
 
