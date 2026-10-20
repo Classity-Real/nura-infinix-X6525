@@ -687,11 +687,19 @@ static void tcm_report_touch(struct ovt_tcm *t, const u8 *rep, unsigned int len)
 		input_mt_slot(t->input, i);
 		input_mt_report_slot_state(t->input, MT_TOOL_FINGER, down);
 		if (down) {
-			input_report_abs(t->input, ABS_MT_POSITION_X, t->objs[i].x);
-			input_report_abs(t->input, ABS_MT_POSITION_Y, t->objs[i].y);
+			/* A garbled frame, or a firmware using a larger coordinate
+			 * space than the app info advertises, must not push values
+			 * past the abs ranges registered for this device. */
+			unsigned int x = min_t(unsigned int, t->objs[i].x, t->max_x);
+			unsigned int y = min_t(unsigned int, t->objs[i].y, t->max_y);
+			unsigned int major =
+				(t->objs[i].x_width + t->objs[i].y_width) / 2;
+
+			input_report_abs(t->input, ABS_MT_POSITION_X, x);
+			input_report_abs(t->input, ABS_MT_POSITION_Y, y);
 			input_report_abs(t->input, ABS_MT_PRESSURE, t->objs[i].z);
 			input_report_abs(t->input, ABS_MT_TOUCH_MAJOR,
-					 (t->objs[i].x_width + t->objs[i].y_width) / 2);
+					 min_t(unsigned int, major, MAX_MAJOR_VALUE));
 		}
 		t->prev_status[i] = down;
 	}
@@ -715,14 +723,23 @@ static void tcm_release_all(struct ovt_tcm *t)
 }
 
 /*
- * Report layout: 4+4+16+16+12+12+16 bits/object. The positions must be 16
- * bits: the application info advertises 5759x12895 (8x the panel), and a
- * 12-bit field made the controller truncate Y modulo 4096 - every raw Y past
- * 4095 wrapped, so the bottom third of the screen (raw Y >= ~8600, where
- * buffyboard draws its keyboard) could never be reported. The widths are 12
- * bits, as in the TouchComm normal-report layout used by the Synaptics TCM
- * driver. The total bits per object is unchanged (80), so the report payload
- * still fits the size the firmware advertises.
+ * Report layout: 4+4+16+16+12+12+16 bits/object.
+ *
+ * The positions are requested as 16 bits because the application info
+ * advertises 5759x12895 (8x the panel), and 12 bits hold only 0..4095. A
+ * measured space-bar tap came back as Y=337, which is raw Y wrapped modulo
+ * 4096; with a 12-bit field the bottom third of the screen (raw Y >= ~8600,
+ * where buffyboard draws its keyboard) can never be reported. The widths are
+ * 12 bits, as in the TouchComm normal-report layout used by the Synaptics TCM
+ * driver, and the total stays 80 bits per object, so the payload size is
+ * unchanged.
+ *
+ * The firmware's own default layout uses 12-bit positions (the bytes
+ * 01 06 04 07 04 08 0c 09 0c appear in hdl_firmware_01.img at 0x15c2f and
+ * 0x19c53), and the vendor driver for other projects requests the same, so
+ * whether this controller honours 16-bit fields is not assumed:
+ * tcm_bring_up_touch() logs both the default layout and the one the
+ * controller reports after this request.
  */
 static int tcm_set_report_config(struct ovt_tcm *t)
 {
@@ -833,6 +850,23 @@ static int tcm_bring_up_touch(struct ovt_tcm *t)
 		return -EINVAL;
 	}
 
+	dev_info(&t->spi->dev, "report limits: config %u bytes, payload %u bytes\n",
+		 get_unaligned_le16(t->app.max_touch_report_config_size),
+		 get_unaligned_le16(t->app.max_touch_report_payload_size));
+
+	/*
+	 * This HDL image ships a default layout whose X/Y fields are 12 bits
+	 * (the same 01 06 04 07 04 08 0c 09 0c ... sequence found in the
+	 * firmware at 0x15c2f and 0x19c53). Log it before replacing it: if a
+	 * later request is ignored or clamped, these two lines show it.
+	 */
+	resp = NULL;
+	if (!tcm_command(t, CMD_GET_TOUCH_REPORT_CONFIG, NULL, 0, &resp, &rlen)) {
+		dev_info(&t->spi->dev, "default report config (%u bytes): %*ph\n",
+			 rlen, min_t(unsigned int, rlen, 32), resp);
+		kfree(resp);
+	}
+
 	ret = tcm_set_report_config(t);
 	if (ret)
 		return ret;
@@ -841,6 +875,8 @@ static int tcm_bring_up_touch(struct ovt_tcm *t)
 	ret = tcm_command(t, CMD_GET_TOUCH_REPORT_CONFIG, NULL, 0, &resp, &rlen);
 	if (ret)
 		return ret;
+	dev_info(&t->spi->dev, "report config in use (%u bytes): %*ph\n",
+		 rlen, min_t(unsigned int, rlen, 32), resp);
 
 	t->touch_ready = false;
 	/* let a touch report being parsed finish before its config is freed */

@@ -208,37 +208,53 @@ BTN_TOUCH=1 ... BTN_TOUCH=0   ABS_MT_TRACKING_ID=-1   SYN_REPORT
 ```
 
 Each record is 24 bytes: 8-byte seconds, 8-byte microseconds, `u16 type`, `u16 code`, `s32 value`
-(little-endian). The driver side is therefore done; buffyboard also accepted the device
-(`New input device: omnivision_tcm_touch`).
+(little-endian). The driver delivers events; whether it encodes positions correctly is the next
+question. buffyboard accepted the device (`New input device: omnivision_tcm_touch`).
 
 The controller's raw range is 5759 x 12895 (8x the 720 x 1612 panel). buffyboard draws its keyboard
 in the bottom third: physical y 1075..1611, `tty_height = 1612 - 1612/3 = 1075`
 (`buffybox`, `buffyboard/main.c`), so a key tap has raw Y at or above about 8600.
 
 The controlled space-bar tap reported `ABS_MT_POSITION_X=2760` (centre) but `ABS_MT_POSITION_Y=337`.
-That was the bug: `tcm_set_report_config()` asked for **12-bit** X and Y fields, and 12 bits hold
-only 0..4095, so every raw Y past 4095 wrapped modulo 4096. Y was therefore always reported in
-0..4095, buffyboard mapped it to physical y 0..512 - above its keyboard at 1075 - and no tap could
-ever reach a key.
+A bottom tap must produce raw Y ~12600, so the position did not arrive intact.
+`tcm_set_report_config()` asked for **12-bit** X and Y fields, and 12 bits hold only 0..4095; raw Y
+above 4095 wraps modulo 4096 (`337 + 3*4096 = 12625`, a plausible space-bar position). Y was
+therefore always reported in 0..4095, buffyboard mapped it to physical y 0..512 - above its keyboard
+at 1075 - and no tap could reach a key.
 
-The fix: positions are now 16-bit, `4+4+16+16+12+12+16` bits/object, the TouchComm normal-report
-layout (12-bit widths). The total per object is still 80 bits, so the report payload size is
-unchanged.
+That is a hypothesis to confirm, not a fact: the firmware image carries the same 12-bit default
+(`01 06 04 07 04 08 0c 09 0c ...` at `0x15c2f` and `0x19c53` in `hdl_firmware_01.img`), and the
+OmniVision vendor driver for other projects requests 12-bit positions too. What supports the
+hypothesis:
 
-Why 16 and not the vendor's 12: the value after each field code is a **bit width** - both the
-in-tree Synaptics TCM driver and the OmniVision vendor parser read it as `bits` and advance the
-offset by it. The OmniVision reference driver used by other projects does send 12-bit positions,
-but that firmware reports a coordinate space that fits in 12 bits. This one advertises
-5759 x 12895, which needs 13 and 14 bits; the host chooses the widths for exactly that reason, and
-the payload size does not change.
+- the value after each field code is a **bit width** - both the in-tree Synaptics TCM driver and
+  the vendor parser read `bits` and advance the bit offset by it;
+- this chip advertises **5759 x 12895**, which needs 13 and 14 bits, and the host chooses the widths
+  for exactly that reason;
+- the driver now requests 16-bit positions (`4+4+16+16+12+12+16` bits/object; the per-object total
+  stays 80 bits, so the payload size is unchanged) and logs at bring-up:
+  - `report limits: config N bytes, payload M bytes`
+  - `default report config (N bytes): ...` - what the firmware had before the request
+  - `report config in use (N bytes): ...` - what the controller reports after it
 
-After flashing the rebuilt kernel, a space-bar tap should report
-`ABS_MT_POSITION_X` ~2760 and `ABS_MT_POSITION_Y` ~12000. What other results would mean:
+Those three `dmesg` lines say whether the 16-bit request was accepted.
 
-- Y ~600..900 (12895 minus the expected value) - the panel also reports Y inverted; the driver then
-  needs a Y flip (or a `touchscreen-inverted-y` property plus the standard helper);
-- Y still ~337 - the firmware ignored the wider fields; the next step is to read its own default
-  report config (`CMD_GET_TOUCH_REPORT_CONFIG` before setting ours) and parse what it returns.
+Before flashing, the current 12-bit kernel can tell wrap from scaling: tap the bottom-left corner of
+the display and read the event. Raw Y there is ~12800; a 12-bit wrap reports ~512, while a firmware
+that scales into 12 bits reports ~4064.
+
+```sh
+node=$(grep -A4 -i omnivision /proc/bus/input/devices | sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
+timeout 10 cat "/dev/input/$node" | od -An -tx1 -v   # tap the bottom-left corner during these 10 s
+```
+
+After flashing the rebuilt kernel, a space-bar tap should report X ~2760 and Y ~12600 (the true raw
+position; the exact value depends on where on the bar it lands). Other results:
+
+- **Y ~270** (`12895 - 12625`) - the panel also reports Y inverted; the driver then needs a Y flip;
+- **Y still ~337 and `report config in use` still shows `0c` for X and Y** - the controller ignored
+  the wider fields; the next step is to parse the firmware's own layout (the logged default) and
+  scale or flip according to what its values show.
 
 ## 2. Wi-Fi
 
