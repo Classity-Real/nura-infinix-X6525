@@ -139,10 +139,13 @@ applet in the initramfs, and the rootfs also has `/usr/bin/hexdump`:
 node=$(grep -A4 -i omnivision /proc/bus/input/devices |
        sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
 echo "reading /dev/input/$node"
-timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch the screen during these 10 s
+timeout 10 cat "/dev/input/$node" | od -An -tx1 -v   # touch the screen during these 10 s
 ```
 
 Deriving the node from `Handlers=` is deliberate: `eventN` as written in notes is not a file.
+`cat` in front of `od` is deliberate too: evdev rejects reads shorter than one `struct input_event`
+(24 bytes on aarch64), and busybox `od` reads 16-byte blocks, so `od /dev/input/event2` alone fails
+with `read error`.
 Bytes appearing while you touch the screen means the driver and hardware are delivering events.
 
 ### Step 4: Check or Restart Buffyboard

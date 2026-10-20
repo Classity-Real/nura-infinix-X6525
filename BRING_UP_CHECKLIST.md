@@ -19,13 +19,16 @@ omnivision_tcm_spi spi0.0: touch ready: 5759x12895, 5 objects, config id
 
 That boot had it as `event2`. The interrupt is not the blocker: `/proc/interrupts` shows
 `sprd-eic 16 Level ovt-tcm`, and its count went 1050 -> 1166 -> 1610 across the session, so the
-controller asserts and the driver's threaded handler runs. What is still unknown is whether the
-handler turns those interrupts into input events - the event node has not been read successfully yet
-(both attempts used the literal `/dev/input/eventN`). Use the block in 1.1, which derives the node
-from `Handlers=`.
+controller asserts and the driver's threaded handler runs. buffyboard accepts the device as well:
+started with `-v` it logs `New input device: omnivision_tcm_touch`.
 
-A count that also rises while nobody touches would mean the controller keeps sending reports (or
-re-asserts the line); the `od` result says which of them reach userspace.
+The event node itself has not been read yet - all three attempts failed before an event was read:
+two used the literal `/dev/input/eventN`, and `od /dev/input/event2` alone reads 16-byte blocks while
+evdev rejects any read shorter than one `struct input_event` (24 bytes on aarch64), so it reports
+`read error`. Use the `cat ... | od` block in 1.1.
+
+An IRQ count that also rises while nobody touches would mean the controller keeps sending reports
+(or re-asserts the line); the event read says which of them reach userspace.
 
 ### 1.1 The test
 
@@ -41,11 +44,15 @@ grep -iE "ovt-tcm|eic" /proc/interrupts
 # "eventN" cannot be read by mistake
 node=$(grep -A4 -i omnivision /proc/bus/input/devices |
        sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
-echo "reading /dev/input/$node"                # must be event<number>, not empty
-timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch the screen during these 10 s
+echo "reading /dev/input/$node"                     # must be event<number>, not empty
+timeout 10 cat "/dev/input/$node" | od -An -tx1 -v  # touch the screen during these 10 s
 
 grep -iE "ovt-tcm|eic" /proc/interrupts
 ```
+
+`od` cannot read an evdev node by itself: it reads 16-byte blocks, and evdev rejects any read
+shorter than one `struct input_event` (24 bytes on aarch64) with `EINVAL` - the symptom is
+`od: /dev/input/event2: read error`. Pipe through `cat`, which reads in large blocks.
 
 `buffyboard` (the on-screen keyboard) is not the test: it can ignore a device that appeared after it
 started. The `od` output is the test. Replace `eventN` with the number from `Handlers=eventN` -
@@ -145,9 +152,12 @@ tail -20 /tmp/bb.log
 pgrep -a buffyboard
 ```
 
-Read it together with the `od` result from 1.1:
+`pgrep` should print one line. More than one means an earlier instance is still running; kill them
+all, confirm `pgrep` is empty, and start one, so the log belongs to a single process.
 
-| `od` on the event node | `bb.log` | Meaning |
+Read it together with the event read from 1.1:
+
+| event node (`cat \| od`) | `bb.log` | Meaning |
 |---|---|---|
 | bytes | `New input device: omnivision_tcm_touch` | touch and buffyboard are both fine; the fault is in buffyboard's hit-testing |
 | bytes | no line for the device | udev/libinput did not hand it over; the log's warning says why |
@@ -165,7 +175,7 @@ These two reads decide between the driver and buffyboard. Run them in the debug 
 ```sh
 node=$(grep -A4 -i omnivision /proc/bus/input/devices | sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
 echo "node=$node"
-timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch and drag during these 10 s
+timeout 10 cat "/dev/input/$node" | od -An -tx1 -v   # touch and drag during these 10 s
 ```
 
 ```sh
