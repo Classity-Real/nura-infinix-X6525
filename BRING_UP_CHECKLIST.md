@@ -355,20 +355,32 @@ Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It 
 `/lib/firmware/sprd/wcnmodem.bin` and `/lib/firmware/sprd/wifi_board_config.bin` (the package
 `firmware-infinix-x6525`; the config is converted from the stock `.ini` by `tools/wifi-ini2bin.py`).
 
-The firmware and the modules live in the **rootfs**, not the initramfs: run this after
-`pmos_continue_boot`, over SSH. The modules are `sprd_wcn`, `sc23xx_wlan`, `sc23xx_wlan_sipc`
-(the built tree also has `btsprdsipc` for Bluetooth).
+The firmware and the modules live in the **rootfs**, not the initramfs: run this in the rootfs, on
+the screen or over SSH. `dmesg` needs root. The modules are `sprd_wcn`, `sc23xx_wlan`,
+`sc23xx_wlan_sipc` (the built tree also has `btsprdsipc` for Bluetooth).
 
 ```sh
 ls -l /lib/firmware/sprd/
 lsmod | grep -E "sprd_wcn|sc23xx"
-dmesg | grep -iE "wcn|sc23xx|sprd_wcn|wlan|rproc|firmware"
+sudo dmesg | grep -iE "wcn|sc23xx|sprd_wcn|wlan|rproc|firmware"
 ip link
+```
+
+Then let NetworkManager use it:
+
+```sh
+rfkill list
+nmcli device status
+nmcli radio wifi on
+nmcli device wifi list
+nmcli device wifi connect "SSID" password "PASS"
 ```
 
 | What you see | Meaning | Next |
 |---|---|---|
-| `wlan0` exists | firmware and config loaded | `nmcli device wifi list`, then `nmcli device wifi connect SSID password PASS`. Check `cat /sys/class/net/wlan0/address` is not all zeroes (the device package sets a random one). |
+| `wlan0` exists | the driver and firmware loaded; `NO-CARRIER,DORMANT` before association is normal | `nmcli device status` must show it managed, then scan and connect; check `cat /sys/class/net/wlan0/address` is not all zeroes. |
+| `nmcli device wifi list` is empty or errors | the scan did not work | send `sudo dmesg \| grep -iE 'sc23xx\|wcn' \| tail -40`. |
+| `rfkill` says the radio is blocked | soft/hard block | `sudo rfkill unblock wifi`. |
 | no `sprd/wcnmodem.bin` in `ls` | the firmware package did not get installed | send `apk info -L firmware-infinix-x6525`. |
 | `firmware too large` / `rproc` errors | the modem image does not fit or the region is wrong | send the `dmesg` lines. |
 | remoteproc starts but no `wlan0`, `failed to download config section N` | the WLAN firmware rejected a section | note N. `CRC_ERROR` means the checksums in `wifi_board_config.bin` are not what the firmware expects; any other error with N means the section layout is off. Send the lines. |
