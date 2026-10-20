@@ -158,6 +158,30 @@ Read it together with the `od` result from 1.1:
 If no line mentions the touch device, it never reached udev: use `/proc/bus/input/devices` and the
 `dmesg` output from 1.1 to find out whether the driver got to `touch ready`.
 
+### 1.6 Copy-paste: the remaining measurements
+
+These two reads decide between the driver and buffyboard. Run them in the debug shell.
+
+```sh
+node=$(grep -A4 -i omnivision /proc/bus/input/devices | sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
+echo "node=$node"
+timeout 10 od -An -tx1 -v "/dev/input/$node"   # touch and drag during these 10 s
+```
+
+```sh
+pkill -f buffyboard
+buffyboard -v >/tmp/bb.log 2>&1 &
+sleep 3
+grep -iE 'New input device|not an input|libinput|fb0|error|can.t' /tmp/bb.log
+# tap the screen, then:
+tail -20 /tmp/bb.log
+pgrep -a buffyboard
+```
+
+`od` bytes + `New input device: omnivision_tcm_touch` = buffyboard's hit-testing. No `od` bytes while
+the `ovt-tcm` IRQ count still rises = the driver's report path. An empty `pgrep` = buffyboard exited;
+the tail of the log says why.
+
 ## 2. Wi-Fi
 
 Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It needs
