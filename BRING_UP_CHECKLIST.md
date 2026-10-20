@@ -17,11 +17,15 @@ input: omnivision_tcm_touch as .../spi0.0/input/input2
 omnivision_tcm_spi spi0.0: touch ready: 5759x12895, 5 objects, config id
 ```
 
-That boot had it as `event2`. The interrupt fires: `/proc/interrupts` shows
-`sprd-eic 16 Level ovt-tcm` and its count rose 1050 -> 1166 between the two reads, so the controller
-asserts and the driver's threaded handler runs. What is still unknown is whether the event node
-produces anything - the `od` attempt read the literal `/dev/input/eventN` again, so that measurement
-is still open. Use the number from `Handlers=`.
+That boot had it as `event2`. The interrupt is not the blocker: `/proc/interrupts` shows
+`sprd-eic 16 Level ovt-tcm`, and its count went 1050 -> 1166 -> 1610 across the session, so the
+controller asserts and the driver's threaded handler runs. What is still unknown is whether the
+handler turns those interrupts into input events - the event node has not been read successfully yet
+(both attempts used the literal `/dev/input/eventN`). Use the block in 1.1, which derives the node
+from `Handlers=`.
+
+A count that also rises while nobody touches would mean the controller keeps sending reports (or
+re-asserts the line); the `od` result says which of them reach userspace.
 
 ### 1.1 The test
 
