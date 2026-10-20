@@ -133,6 +133,17 @@ fastboot flash userdata pmos-root-fs.img   # same run as the cache you flashed
 The same applies in reverse: a new userdata with an old cache has a UUID the old extlinux does not
 name. Both files come out of one ROM artifact; flash them together.
 
+Check it in the debug shell before continuing:
+
+```sh
+grep -o 'pmos_root_uuid=[^ ]*' /boot/extlinux/extlinux.conf
+blkid
+```
+
+The UUID printed by the first command must appear in `blkid`'s output (on `mmcblk0p73`, the
+`userdata` partition). If it does not, the rootfs on the phone is from a different build, and
+`pmos_continue_boot` has nothing to mount.
+
 ### 1.5 The keyboard appears but does not respond
 
 "The keyboard is on screen" and "the keyboard is running" are different things. Check first:
