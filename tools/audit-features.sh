@@ -149,9 +149,12 @@ need "the firmware package is a dependency"      sh -c ". '$DPKG/APKBUILD'; prin
 finish
 
 feature "framebuffer keyboard (buffyboard)"
-# postmarketos-ui-buffyboard ships buffyboard.service, and postmarketos-base's
-# 90-base.preset enables it; ui = console installs the binary but no service.
+# postmarketos-ui-buffyboard ships the service (systemd unit or OpenRC script)
+# and enables it; ui = console installs only the binary. Its APKBUILD has
+# pmb:default-openrc, so rom.yml must pin service_manager or the UI choice
+# would also change the image's init system.
 need "rom.yml selects the buffyboard UI"         grep -q '^ *ui = buffyboard' "$ROOT/.github/workflows/rom.yml"
+need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
@@ -302,22 +305,42 @@ if [ -n "$IMAGE" ]; then
 		fi
 	fi
 
-	# the on-screen keyboard: the unit must be installed (ui = buffyboard) and
-	# enabled. postmarketos-base's 90-base.preset does the enabling, and
-	# pmbootstrap applies presets while building the image, so the wants
-	# symlink is in the rootfs - not left for first boot.
+	# the on-screen keyboard: its service must be installed (ui = buffyboard)
+	# and enabled. Which service depends on the image's init system: systemd
+	# (the unit, enabled by postmarketos-base's 90-base.preset at build time)
+	# or OpenRC (the init script, added to the default runlevel by the UI's
+	# openrc subpackage post-install).
 	if [ -s "$TMP/root.img" ]; then
-		debugfs -R "stat /usr/lib/systemd/system/buffyboard.service" \
-			"$TMP/root.img" 2>/dev/null | grep -q . &&
-			ok "the root filesystem installs buffyboard.service" ||
-			bad "no buffyboard.service in the root filesystem (ui is not buffyboard)"
-		debugfs -R "stat /etc/systemd/system/multi-user.target.wants/buffyboard.service" \
-			"$TMP/root.img" 2>/dev/null | grep -q . &&
-			ok "buffyboard.service is enabled at boot" ||
-			bad "buffyboard.service is not enabled at boot"
+		if debugfs -R "stat /usr/lib/systemd/systemd" "$TMP/root.img" 2>/dev/null | grep -q .; then
+			init=systemd
+		elif debugfs -R "stat /sbin/openrc" "$TMP/root.img" 2>/dev/null | grep -q .; then
+			init=openrc
+		else
+			init=unknown
+		fi
 		debugfs -R "stat /usr/bin/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
 			ok "the buffyboard binary is installed" ||
 			bad "the buffyboard binary is not installed"
+		case $init in
+		systemd)
+			debugfs -R "stat /usr/lib/systemd/system/buffyboard.service" \
+				"$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "the systemd image installs buffyboard.service" ||
+				bad "no buffyboard.service in the systemd root filesystem (ui is not buffyboard)"
+			debugfs -R "stat /etc/systemd/system/multi-user.target.wants/buffyboard.service" \
+				"$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "buffyboard.service is enabled at boot" ||
+				bad "buffyboard.service is not enabled at boot" ;;
+		openrc)
+			debugfs -R "stat /etc/init.d/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "the OpenRC image installs the buffyboard init script" ||
+				bad "no /etc/init.d/buffyboard in the OpenRC root filesystem (ui is not buffyboard)"
+			debugfs -R "stat /etc/runlevels/default/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "buffyboard is in the default runlevel" ||
+				bad "buffyboard is not in the default runlevel" ;;
+		*)
+			bad "cannot tell the root filesystem's init system" ;;
+		esac
 	fi
 
 	# every module the initramfs is supposed to carry is in it

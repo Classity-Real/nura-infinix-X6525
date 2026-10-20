@@ -97,12 +97,18 @@ jobs:
           [pmbootstrap]
           device = infinix-x6525
           kernel = stable
-          # buffyboard, not console: the on-screen keyboard's systemd unit
-          # (buffyboard.service) is shipped by postmarketos-ui-buffyboard, and
-          # postmarketos-base's 90-base.preset already enables it. With
-          # ui = console the buffyboard binary is installed but no service
-          # starts it in the rootfs, so the screen accepts nothing.
+          # buffyboard, not console: the service that starts the on-screen
+          # keyboard is shipped by postmarketos-ui-buffyboard. With ui = console
+          # the buffyboard binary is installed (the initramfs depends on it) but
+          # nothing starts it in the rootfs, so the screen accepts nothing.
           ui = buffyboard
+          # Keep systemd. postmarketos-ui-buffyboard's APKBUILD carries
+          # pmb:default-openrc, so selecting the UI would otherwise switch the
+          # whole image from systemd to OpenRC as a side effect. Both are
+          # supported (it carries pmb:support-systemd too); systemd is what this
+          # port has been tested with, and postmarketos-base's 90-base.preset
+          # enables buffyboard.service on it.
+          service_manager = systemd
           user = user
           hostname = x6525
           timezone = GMT

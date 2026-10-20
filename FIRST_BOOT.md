@@ -500,7 +500,7 @@ Reached the `x6525 login:` prompt on 2026-10-18 with these, all in `main`:
 | `console=tty0` last, `pmos.debug-shell` | `kernel-cmdline.conf` | init output on the screen; debug shell on USB (telnet 23, serial `ttyACM0`) |
 | `regulator_ignore_unused` + `&vddldo0` always-on | cmdline + DT | touch controller rail cut after 30 s |
 | touch firmware in initramfs/rootfs, `ovt-tcm-spi` in initramfs, SPI full-duplex fix | pmaports (b0e8b31) | touch bring-up (not yet delivering input on hardware) |
-| `ui = buffyboard` (was `console`) | `rom.yml` | `ui = console` installs the `buffyboard` binary but not `buffyboard.service` (that is `postmarketos-ui-buffyboard`), so nothing started the on-screen keyboard in the rootfs |
+| `ui = buffyboard` (was `console`), `service_manager = systemd` | `rom.yml` | `ui = console` installs the `buffyboard` binary but not the service that starts it (that comes with `postmarketos-ui-buffyboard`). The UI package carries `pmb:default-openrc`, so without the pin selecting it would also switch the image from systemd to OpenRC |
 
 When the boot is stable, remove the debug options one at a time and re-test (cpuidle and cpufreq first,
 to find which one stalls), and re-enable the display driver (`initcall_blacklist=sprd_drm_init`).

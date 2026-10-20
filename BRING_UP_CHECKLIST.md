@@ -79,10 +79,13 @@ pgrep -a buffyboard
 | a `buffyboard` process | the keyboard is live and touch is not reaching it | restart it with verbose logging (the initramfs instance logs errors only) and read what it does with the input device |
 
 If nothing is listed, the process was killed at switch_root and no service restarted it. An image
-built with `ui = console` has no `buffyboard.service` - the unit is shipped by
-`postmarketos-ui-buffyboard` - while `rom.yml` now selects `ui = buffyboard`, whose unit
-`postmarketos-base`'s `90-base.preset` enables. Until that image is flashed, start it by hand over
-SSH as `user`; it draws on the console and injects keys there, so an SSH session is enough:
+built with `ui = console` has no buffyboard service - it is shipped by `postmarketos-ui-buffyboard` -
+while `rom.yml` now selects `ui = buffyboard`, which installs it and enables it (the systemd unit via
+`postmarketos-base`'s preset; on an OpenRC image the UI's openrc subpackage adds the script to the
+default runlevel). `rom.yml` also pins `service_manager = systemd`, because the UI package defaults
+to OpenRC and the init system would otherwise change with the UI. Until that image is flashed, start
+it by hand over SSH as `user`; it draws on the console and injects keys there, so an SSH session is
+enough:
 
 ```sh
 sudo sh -c 'r=$(cat /sys/class/graphics/fbcon/rotate 2>/dev/null || echo 0); \
