@@ -164,6 +164,7 @@ pgrep -a buffyboard
 
 ```sh
 pkill -f buffyboard
+sleep 1; pgrep -a buffyboard        # should print nothing
 buffyboard -v >/tmp/bb.log 2>&1 &
 sleep 2
 grep -iE 'input|fb0|libinput|error|can.t' /tmp/bb.log

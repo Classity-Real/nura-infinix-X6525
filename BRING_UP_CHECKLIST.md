@@ -170,27 +170,29 @@ If no line mentions the touch device, it never reached udev: use `/proc/bus/inpu
 
 ### 1.6 Copy-paste: the remaining measurements
 
-These two reads decide between the driver and buffyboard. Run them in the debug shell.
-
-```sh
-node=$(grep -A4 -i omnivision /proc/bus/input/devices | sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
-echo "node=$node"
-timeout 10 cat "/dev/input/$node" | od -An -tx1 -v   # touch and drag during these 10 s
-```
+These reads decide between the driver and buffyboard. One block, in the debug shell; touch and drag
+during the 10-second `cat`.
 
 ```sh
 pkill -f buffyboard
+sleep 1; pgrep -a buffyboard        # should print nothing
 buffyboard -v >/tmp/bb.log 2>&1 &
-sleep 3
-grep -iE 'New input device|not an input|libinput|fb0|error|can.t' /tmp/bb.log
+sleep 2
+
+node=$(grep -A4 -i omnivision /proc/bus/input/devices | sed -n 's/.*Handlers=\(event[0-9]*\).*/\1/p')
+echo "node=$node"                                       # must be event<number>, not empty
+timeout 10 cat "/dev/input/$node" | od -An -tx1 -v      # touch and drag during these 10 s
+grep -iE "ovt-tcm|eic" /proc/interrupts                 # count, for comparison
+
 # tap the screen, then:
+grep -iE 'New input device|not an input|libinput|fb0|error|can.t' /tmp/bb.log
 tail -20 /tmp/bb.log
 pgrep -a buffyboard
 ```
 
-`od` bytes + `New input device: omnivision_tcm_touch` = buffyboard's hit-testing. No `od` bytes while
-the `ovt-tcm` IRQ count still rises = the driver's report path. An empty `pgrep` = buffyboard exited;
-the tail of the log says why.
+`cat | od` bytes + `New input device: omnivision_tcm_touch` = buffyboard's hit-testing. No bytes
+while the `ovt-tcm` count still rises = the driver's report path. An empty `pgrep` at the end =
+buffyboard exited; the tail of the log says why.
 
 ## 2. Wi-Fi
 
