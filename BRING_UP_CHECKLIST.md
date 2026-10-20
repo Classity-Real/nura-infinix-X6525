@@ -162,6 +162,22 @@ the expected long step; if it is the one that hangs, let it run and note how lon
 succeed quickly, the stop is after the mount (systemd or `switch_root`), and the UART on `ttyS1`
 is the next place to look.
 
+#### Boot straight through (no debug shell)
+
+Removing the ACM function and re-binding the UDC happens only in the debug-shell continue path.
+Booting without `pmos.debug-shell` skips it entirely: the NCM link is set up once and never torn
+down, so there is no `ttyGS0` to disable and no gadget swap. Patch the boot filesystem with the
+same image you are flashing, then flash it:
+
+```sh
+sh tools/patch-cmdline.sh --remove pmos-boot-fs.img pmos.debug-shell
+fastboot flash cache pmos-boot-fs.img
+```
+
+The tool keeps the unpatched copy as `pmos-boot-fs.img.orig`; add the option back with
+`sh tools/patch-cmdline.sh pmos-boot-fs.img pmos.debug-shell` when the boot works. With no debug
+shell, hold **volume-down** during boot to get one (the initramfs `check_keys` path) if it fails.
+
 ### 1.5 The keyboard appears but does not respond
 
 "The keyboard is on screen" and "the keyboard is running" are different things. Check first:
