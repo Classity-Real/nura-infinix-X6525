@@ -162,6 +162,12 @@ sleep 2
 grep -iE 'input|fb0|libinput|error|can.t' /tmp/bb.log
 ```
 
+Two things seen in the initramfs are expected and are not the fault:
+`Ignoring invalid config file /usr/share/buffyboard/buffyboard.conf` (and the same for
+`/etc/buffyboard.conf`) - neither file is shipped in the initramfs, so buffyboard uses its built-in
+defaults - and a `[1]- Done buffyboard` line, which only means the process exited. To see why it
+exited, run it in the foreground with `-v`; the log then stays on the terminal.
+
 `New input device: omnivision_tcm_touch` means buffyboard accepted the node; if that line is absent,
 the problem is between the driver and udev - the table in BRING_UP_CHECKLIST.md 1.5 says which log
 line means what.

@@ -9,6 +9,18 @@ the phone (see FIRST_BOOT.md, "Recovery").
 
 ## 1. Touch
 
+Status on 2026-10-20: the controller answers. The driver downloads the firmware, the SPI path works,
+and it registers the input device:
+
+```
+input: omnivision_tcm_touch as .../spi0.0/input/input2
+omnivision_tcm_spi spi0.0: touch ready: 5759x12895, 5 objects, config id
+```
+
+That boot had it as `event2`. What is still unknown is whether the interrupt fires and whether the
+event node produces anything - that is exactly what 1.1 measures. The first attempt at 1.1 measured
+neither (it grepped `omnivision` in `/proc/interrupts` and read the literal `/dev/input/eventN`).
+
 ### 1.1 The test
 
 In the debug shell:
