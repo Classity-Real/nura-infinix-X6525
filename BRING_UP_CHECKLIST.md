@@ -133,16 +133,18 @@ fastboot flash userdata pmos-root-fs.img   # same run as the cache you flashed
 The same applies in reverse: a new userdata with an old cache has a UUID the old extlinux does not
 name. Both files come out of one ROM artifact; flash them together.
 
-Check it in the debug shell before continuing:
+Check it in the debug shell before continuing. The boot filesystem is not mounted there, but the
+UUIDs U-Boot got from extlinux are in the kernel command line:
 
 ```sh
-grep -o 'pmos_root_uuid=[^ ]*' /boot/extlinux/extlinux.conf
+tr ' ' '\n' < /proc/cmdline | grep -E 'pmos_(root|boot)_uuid'
 blkid
 ```
 
-The UUID printed by the first command must appear in `blkid`'s output (on `mmcblk0p73`, the
-`userdata` partition). If it does not, the rootfs on the phone is from a different build, and
-`pmos_continue_boot` has nothing to mount.
+The `pmos_root_uuid` value must appear in `blkid`'s output (on `mmcblk0p73`, the `userdata`
+partition). If it does not, the rootfs on the phone is from a different build, and
+`pmos_continue_boot` has nothing to mount. To read extlinux itself, mount the boot filesystem by
+its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt; cat /mnt/extlinux/extlinux.conf`.
 
 ### 1.5 The keyboard appears but does not respond
 
