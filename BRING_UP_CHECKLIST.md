@@ -223,10 +223,22 @@ ever reach a key.
 
 The fix: positions are now 16-bit, `4+4+16+16+12+12+16` bits/object, the TouchComm normal-report
 layout (12-bit widths). The total per object is still 80 bits, so the report payload size is
-unchanged. After flashing the rebuilt kernel, a space-bar tap should report
-`ABS_MT_POSITION_X` ~2760 and `ABS_MT_POSITION_Y` ~12000. If Y still comes back small, the firmware
-did not accept 16-bit fields, and the configuration it returns (`CMD_GET_TOUCH_REPORT_CONFIG`) is
-what to look at next.
+unchanged.
+
+Why 16 and not the vendor's 12: the value after each field code is a **bit width** - both the
+in-tree Synaptics TCM driver and the OmniVision vendor parser read it as `bits` and advance the
+offset by it. The OmniVision reference driver used by other projects does send 12-bit positions,
+but that firmware reports a coordinate space that fits in 12 bits. This one advertises
+5759 x 12895, which needs 13 and 14 bits; the host chooses the widths for exactly that reason, and
+the payload size does not change.
+
+After flashing the rebuilt kernel, a space-bar tap should report
+`ABS_MT_POSITION_X` ~2760 and `ABS_MT_POSITION_Y` ~12000. What other results would mean:
+
+- Y ~600..900 (12895 minus the expected value) - the panel also reports Y inverted; the driver then
+  needs a Y flip (or a `touchscreen-inverted-y` property plus the standard helper);
+- Y still ~337 - the firmware ignored the wider fields; the next step is to read its own default
+  report config (`CMD_GET_TOUCH_REPORT_CONFIG` before setting ours) and parse what it returns.
 
 ## 2. Wi-Fi
 
