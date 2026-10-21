@@ -540,10 +540,16 @@ on `simpledrm` without reflashing. Install it over Wi-Fi, then start a phoc+phos
 the compositor the DRM device):
 
 ```sh
+sudo apk update            # the image ships the indexes from build time
 sudo apk add phoc phosh
 # one line, so stopping buffyboard cannot cut the command off:
 sudo systemctl stop buffyboard; WLR_RENDERER=pixman phoc -S -E phosh
 ```
+
+`phoc` and `phosh` are both in Alpine edge `community` for aarch64 (the image's
+`/etc/apk/repositories` already lists it). If `apk` says `phosh` is not found, the index is stale:
+run `sudo apk update`, then `apk policy phosh` to see which repository it resolves from;
+`postmarketos-ui-phosh` in pmaports depends on the same package.
 
 `WLR_RENDERER=pixman` is deliberate: there is no working GPU driver yet. `panfrost` is in the kernel
 (`CONFIG_DRM_PANFROST=m`), but no `mali_csffw.bin` is packaged, so rendering has to be software.
