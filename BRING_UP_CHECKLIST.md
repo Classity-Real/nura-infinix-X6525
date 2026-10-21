@@ -513,11 +513,16 @@ for a rebuild:
 
 ```sh
 sudo apk add bluez
+sudo systemctl enable --now bluetooth   # Alpine does not enable it for you
 sudo modprobe btsprdsipc
 sudo dmesg | grep -iE 'btsprd|bluetooth|hci|sprd'
+systemctl status bluetooth --no-pager
 rfkill list
 bluetoothctl list
 ```
+
+`systemctl status` saying `inactive (dead)` only means it was never started; start it as above. If
+it starts but exits, `journalctl -u bluetooth -b --no-pager | tail -30` says why.
 
 - `hci0` in `bluetoothctl list` (or an HCI line in `dmesg`) means the controller came up over the
   same WCN block that runs Wi-Fi. Then `systemctl status bluetooth` (enable it if the package did not
