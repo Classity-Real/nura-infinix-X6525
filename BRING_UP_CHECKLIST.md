@@ -231,6 +231,14 @@ be applied for the current boot with:
 echo "write through" | sudo tee /sys/block/mmcblk0/queue/write_cache
 ```
 
+How to read the evidence:
+
+- `mmc0: error`, `I/O error`, or `sdhci` timeouts in `dmesg` - that is a driver/DTS problem. The
+  first suspects are the link speed/tuning and the eMMC IO supply; send the lines and the `speed`
+  value.
+- a clean `dmesg` and a `write_cache` of `write back` - the damage is lost write-back cache on a
+  power cut. The write-through rule plus clean reboots is the fix; no kernel change is indicated.
+
 There is no ACM console on this boot by construction, so success looks different: the NCM interface
 appears on the host and SSH answers `172.16.42.1` (commands in 1.4). A phone that stays on the
 splash for a minute with no new USB interface is a failed boot - use volume-down.
