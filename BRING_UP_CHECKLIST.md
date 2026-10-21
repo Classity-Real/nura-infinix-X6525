@@ -199,9 +199,12 @@ Filesystem needs manual repair (fsck) (/dev/mmcblk0p73)
 ```
 
 Press **Volume-Up** or **Left-Shift** at that screen for the debug shell (the message says so), then
-repair the filesystem:
+repair the filesystem. **Make sure it is not mounted first** - a failed boot can leave `/sysroot`
+mounted, and `e2fsck` on a mounted filesystem damages it further (a "clean" run can then leave the
+system unable to complete a login):
 
 ```sh
+mountpoint -q /sysroot && umount /sysroot
 e2fsck -fy /dev/mmcblk0p73
 sync
 reboot -f
@@ -212,6 +215,15 @@ it finish. The usual trigger is a hard power-cycle: the first boot after a flash
 filesystem from the image's 907 MB to the partition size, and cutting power during that (or during
 any write) loses metadata the journal cannot fully replay. While bringing up, reboot with
 `sudo reboot` / `sudo poweroff` and let the first boot reach the login prompt before power-cycling.
+
+If the console login accepts the password and then returns to the prompt (or the boot drops into
+recovery mode), the on-disk system was damaged - either by the corruption itself or by an fsck run
+on a mounted filesystem. The clean recovery is to reflash `userdata` from the same artifact and let
+the first boot finish:
+
+```sh
+fastboot flash userdata pmos-root-fs.img   # same run as the cache
+```
 
 If it keeps happening without power cuts, collect the storage-side evidence:
 
@@ -408,8 +420,10 @@ Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It 
 `firmware-infinix-x6525`; the config is converted from the stock `.ini` by `tools/wifi-ini2bin.py`).
 
 **Verified on hardware 2026-10-21**: `wlan0` came up, associated, `ping google.com` replied, and
-`apk update` / `apk upgrade` plus a package install (`fastfetch`) ran over Wi-Fi. The reconstructed
-`wifi_board_config.bin` was accepted by the firmware.
+`apk update` / `apk upgrade` plus a package install (`fastfetch`) ran. The reconstructed
+`wifi_board_config.bin` was accepted by the firmware. Re-verify with the USB link unconfigured and
+check `ip route` first (see *Associated but no internet* below): if the USB link carried the default
+route, that traffic did not test the WLAN data path.
 
 The firmware and the modules live in the **rootfs**, not the initramfs: run this in the rootfs, on
 the screen or over SSH. `dmesg` needs root. The modules are `sprd_wcn`, `sc23xx_wlan`,
@@ -445,6 +459,27 @@ nmcli device wifi connect "SSID" password "PASS"
 The firmware layout of `wifi_board_config.bin` was reconstructed from the stock `sprd_wlan_combo.ko`
 and accepted on the hardware on 2026-10-21, so the conversion in `tools/wifi-ini2bin.py` is
 validated; keep that script and the test alongside any future firmware rebuild.
+
+#### Associated but no internet
+
+Association alone does not prove the WLAN data path: if the USB link still carries the default
+route, pings and `apk` go over USB, not Wi-Fi. Check which route is used and where traffic stops:
+
+```sh
+ip -4 addr show wlan0
+ip route
+nmcli -f GENERAL.STATE,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS dev show wlan0
+ping -c2 "$(ip route | awk '/default/{print $3; exit}')"   # the gateway
+iw dev wlan0 link
+sudo dmesg | grep -iE 'sc23xx|wcn|sipc' | tail -40
+```
+
+| What you see | Meaning | Next |
+|---|---|---|
+| the default route is via `usb0` | traffic is not using Wi-Fi | delete that route (`sudo ip route del default dev usb0`) or give the Wi-Fi connection a lower metric, then retest |
+| no IPv4 address/gateway on wlan0 | DHCP from the hotspot did not complete | check the host's hotspot, or set the address manually |
+| the gateway pings, `1.1.1.1` does not | the hotspot is not sharing/NATing its upstream | fix the host side; Android tethering can need its own NAT rules, the same way USB forwarding did on the A01 Core |
+| not even the gateway pings | the WLAN data path itself | send the `dmesg` lines; association without frames is a firmware/SIPC issue |
 
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 
