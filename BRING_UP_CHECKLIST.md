@@ -583,6 +583,14 @@ Build, flash `cache` and `userdata` from the same run, and boot. On a working `s
 shell comes up on greetd; if phoc fails instead, SSH still works and its log says why - then go to
 3.2 (enable `sprd_drm`).
 
+What the image gives, and what it will not: greetd-phrog is itself Phosh-based, so the first screen
+is a Phosh-style login asking for `user` / `x6525pmos` with the on-screen keyboard. After that:
+status bar, notifications, home screen/app grid, quick-settings toggles, app windows and the Phosh
+OSK (`phosh-osk-stub`). Expect **slow rendering** (`simpledrm` + `pixman`, no GPU firmware), **no
+cellular** (no modem stack), and unverified brightness/audio/Bluetooth (their drivers exist but
+nothing has exercised them). Internet inside the GUI is still whatever the connected hotspot
+provides.
+
 ### 3.4 Remove the debug cmdline options
 
 Once the GUI is stable, remove them one at a time, re-testing each: first `cpuidle.off=1` and
