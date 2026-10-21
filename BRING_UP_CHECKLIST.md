@@ -419,11 +419,10 @@ Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It 
 `/lib/firmware/sprd/wcnmodem.bin` and `/lib/firmware/sprd/wifi_board_config.bin` (the package
 `firmware-infinix-x6525`; the config is converted from the stock `.ini` by `tools/wifi-ini2bin.py`).
 
-**Verified on hardware 2026-10-21**: `wlan0` came up, associated, `ping google.com` replied, and
-`apk update` / `apk upgrade` plus a package install (`fastfetch`) ran. The reconstructed
-`wifi_board_config.bin` was accepted by the firmware. Re-verify with the USB link unconfigured and
-check `ip route` first (see *Associated but no internet* below): if the USB link carried the default
-route, that traffic did not test the WLAN data path.
+**Verified on hardware 2026-10-21, with no USB link connected**: `wlan0` came up, associated,
+`ping google.com` replied, and `apk update` / `apk upgrade` plus a package install (`fastfetch`)
+ran. The reconstructed `wifi_board_config.bin` was accepted by the firmware, and the WLAN data path
+is real.
 
 The firmware and the modules live in the **rootfs**, not the initramfs: run this in the rootfs, on
 the screen or over SSH. `dmesg` needs root. The modules are `sprd_wcn`, `sc23xx_wlan`,
@@ -478,8 +477,32 @@ sudo dmesg | grep -iE 'sc23xx|wcn|sipc' | tail -40
 |---|---|---|
 | the default route is via `usb0` | traffic is not using Wi-Fi | delete that route (`sudo ip route del default dev usb0`) or give the Wi-Fi connection a lower metric, then retest |
 | no IPv4 address/gateway on wlan0 | DHCP from the hotspot did not complete | check the host's hotspot, or set the address manually |
-| the gateway pings, `1.1.1.1` does not | the hotspot is not sharing/NATing its upstream | fix the host side; Android tethering can need its own NAT rules, the same way USB forwarding did on the A01 Core |
+| the gateway pings, `1.1.1.1` does not | the hotspot is not sharing/NATing its upstream | fix the host side (below); Android tethering can need its own NAT rules, the same way USB forwarding did on the A01 Core |
 | not even the gateway pings | the WLAN data path itself | send the `dmesg` lines; association without frames is a firmware/SIPC issue |
+
+When the AP is the host phone's hotspot, check the host's sharing before the WLAN path - the
+association and DHCP can be perfect while the hotspot forwards nothing:
+
+```sh
+# on the hotspot host (A01 Core), as root
+ip -br link                    # the AP interface: ap0, wlan1, swlan0, ...
+ip route                       # the interface carrying the default (upstream)
+cat /proc/sys/net/ipv4/ip_forward
+iptables -t nat -L POSTROUTING -n -v
+iptables -L FORWARD -n -v | head
+```
+
+If `ip_forward` is 0, or there is no MASQUERADE rule for the upstream and no ACCEPT for the AP
+interface, add them at the top (`-I`, not `-A`, because netd's DROP rules sit in FORWARD):
+
+```sh
+AP=ap0                          # from ip -br link
+DEF=$(ip route | awk '/^default/{print $5; exit}')
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -I POSTROUTING 1 -o "$DEF" -j MASQUERADE
+iptables -I FORWARD 1 -i "$AP" -o "$DEF" -j ACCEPT
+iptables -I FORWARD 2 -i "$DEF" -o "$AP" -m state --state RELATED,ESTABLISHED -j ACCEPT
+```
 
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 
