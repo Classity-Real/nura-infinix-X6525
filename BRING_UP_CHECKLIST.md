@@ -187,6 +187,40 @@ The tool keeps the unpatched copy as `pmos-boot-fs.img.orig`; add the option bac
 `sh tools/patch-cmdline.sh pmos-boot-fs.img pmos.debug-shell` when the boot works. With no debug
 shell, hold **volume-down** during boot to get one (the initramfs `check_keys` path) if it fails.
 
+#### `Filesystem needs manual repair (fsck)` at boot
+
+The initramfs runs `e2fsck -p` (preen) on the root filesystem every boot. If preen finds an
+inconsistency it cannot fix, the boot stops with:
+
+```
+root: Inode NNNN seems to contain a garbage ...
+ERROR: UNEXPECTED INCONSISTENCY: RUN fsck MANUALLY
+Filesystem needs manual repair (fsck) (/dev/mmcblk0p73)
+```
+
+Press **Volume-Up** or **Left-Shift** at that screen for the debug shell (the message says so), then
+repair the filesystem:
+
+```sh
+e2fsck -fy /dev/mmcblk0p73
+sync
+reboot -f
+```
+
+`-y` answers yes to every fix; on the 110 GiB `userdata` filesystem it can take several minutes - let
+it finish. The usual trigger is a hard power-cycle: the first boot after a flash grows the
+filesystem from the image's 907 MB to the partition size, and cutting power during that (or during
+any write) loses metadata the journal cannot fully replay. While bringing up, reboot with
+`sudo reboot` / `sudo poweroff` and let the first boot reach the login prompt before power-cycling.
+
+If it keeps happening without power cuts, collect the storage-side evidence:
+
+```sh
+sudo dmesg | grep -iE 'mmc|sdhci|I/O error|ext4'
+cat /sys/block/mmcblk0/queue/write_cache
+cat /sys/class/mmc_host/mmc0/mmc0:*/speed 2>/dev/null
+```
+
 There is no ACM console on this boot by construction, so success looks different: the NCM interface
 appears on the host and SSH answers `172.16.42.1` (commands in 1.4). A phone that stays on the
 splash for a minute with no new USB interface is a failed boot - use volume-down.
