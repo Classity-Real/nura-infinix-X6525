@@ -221,6 +221,16 @@ cat /sys/block/mmcblk0/queue/write_cache
 cat /sys/class/mmc_host/mmc0/mmc0:*/speed 2>/dev/null
 ```
 
+The device package now ships a udev rule that sets the eMMC queue to `write through`
+(`90-x6525-emmc-write-cache.rules`), so a power cut after udev has started cannot lose cached
+metadata. It cannot protect the initramfs's own fsck/resize window, which runs before udev - that is
+why the first boot after a flash must not be cut short. On an image without the rule, the same can
+be applied for the current boot with:
+
+```sh
+echo "write through" | sudo tee /sys/block/mmcblk0/queue/write_cache
+```
+
 There is no ACM console on this boot by construction, so success looks different: the NCM interface
 appears on the host and SSH answers `172.16.42.1` (commands in 1.4). A phone that stays on the
 splash for a minute with no new USB interface is a failed boot - use volume-down.

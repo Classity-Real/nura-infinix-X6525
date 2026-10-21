@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=12
+pkgrel=13
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -112,6 +112,17 @@ ip link set dev "$1" address "$(cat "$f")"
 EOF
 	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-wlan-mac.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/bin/x6525-wlan-mac %k"
+EOF
+
+	# The eMMC keeps a write-back cache. During bring-up the phone is often
+	# power-cycled, and unflushed cache content then leaves ext4 metadata the
+	# journal cannot replay - "Inode N seems to contain garbage", and the
+	# initramfs stops for a manual fsck. Write through trades some write
+	# throughput for that not happening. It applies once udev has run, i.e.
+	# after the initramfs's own fsck/resize, which a power cut can still
+	# interrupt; the first boot after a flash must not be cut short.
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-emmc-write-cache.rules <<'EOF'
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="mmcblk0", ATTR{queue/write_cache}="write through"
 EOF
 }
 
