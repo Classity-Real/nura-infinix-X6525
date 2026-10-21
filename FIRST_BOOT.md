@@ -4,9 +4,10 @@ This is the checklist for the **mainline route** (U-Boot chainloaded from `boot_
 `linux-postmarketos-unisoc-ums9230` kernel with `dts/ums9230-infinix-x6525.dts`; the boot filesystem
 goes in the eMMC's `cache` partition and the root filesystem in `userdata`, or both on a microSD card
 instead). The 5.4 route has its own steps at the end of `NOTES.md`. **Where the bring-up is:** the
-boot chain, the rootfs and SSH over the USB link work; the touchscreen is still being brought up.
-Stages below that have not been exercised describe what the sources say should happen, so a deviation
-there is information, not necessarily a bug in this list.
+boot chain, the rootfs, SSH over the USB link, the touchscreen and Wi-Fi all work (Wi-Fi verified
+2026-10-21 by pinging, running `apk update`/`upgrade` and installing a package); Bluetooth and the
+GUI are next. Stages below that have not been exercised describe what the sources say should happen,
+so a deviation there is information, not necessarily a bug in this list.
 
 The order matters. Each stage is only worth looking at once the one before it passes, and every stage
 ends with where to look if it fails.

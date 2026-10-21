@@ -407,6 +407,10 @@ Built in (a Unisoc WCN with a mainline `sc23xx` driver); nothing to plug in. It 
 `/lib/firmware/sprd/wcnmodem.bin` and `/lib/firmware/sprd/wifi_board_config.bin` (the package
 `firmware-infinix-x6525`; the config is converted from the stock `.ini` by `tools/wifi-ini2bin.py`).
 
+**Verified on hardware 2026-10-21**: `wlan0` came up, associated, `ping google.com` replied, and
+`apk update` / `apk upgrade` plus a package install (`fastfetch`) ran over Wi-Fi. The reconstructed
+`wifi_board_config.bin` was accepted by the firmware.
+
 The firmware and the modules live in the **rootfs**, not the initramfs: run this in the rootfs, on
 the screen or over SSH. `dmesg` needs root. The modules are `sprd_wcn`, `sc23xx_wlan`,
 `sc23xx_wlan_sipc` (the built tree also has `btsprdsipc` for Bluetooth).
@@ -439,7 +443,8 @@ nmcli device wifi connect "SSID" password "PASS"
 | modules not loaded | autoload failed | `modprobe sprd_wcn; modprobe sc23xx_wlan; modprobe sc23xx_wlan_sipc`, then repeat, and send the output. |
 
 The firmware layout of `wifi_board_config.bin` was reconstructed from the stock `sprd_wlan_combo.ko`
-and has not been run on the hardware yet; a failure here is expected to be informative, not final.
+and accepted on the hardware on 2026-10-21, so the conversion in `tools/wifi-ini2bin.py` is
+validated; keep that script and the test alongside any future firmware rebuild.
 
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 

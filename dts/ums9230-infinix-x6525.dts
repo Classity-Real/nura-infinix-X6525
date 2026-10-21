@@ -674,10 +674,11 @@
 	 * "merlion-chip-en" (ap_gpio 118) and "merlion-rst" (ap_gpio 117) - the
 	 * same lines the reeder uses.
 	 *
-	 * The stock WiFi/Bluetooth is Unisoc's own sprd_wlan_combo/wcn_bsp stack
-	 * (87000000.cpwcn-btwf) and there is no mainline stack for it, so
-	 * enabling this only satisfies the remoteproc driver above; the firmware
-	 * it would load is "sprd/wcnmodem.bin", named in the dtsi's btwf child.
+	 * Wi-Fi and Bluetooth use the mainline Unisoc stack in this kernel, not
+	 * the stock sprd_wlan_combo/wcn_bsp one: sprd_wcn.c brings the block up
+	 * and loads "sprd/wcnmodem.bin" (named in the dtsi's btwf child), and
+	 * sc23xx_wlan / sc23xx_wlan_sipc drive WLAN over SIPC, with btsprdsipc
+	 * for Bluetooth. Wi-Fi was verified on this board on 2026-10-21.
 	 */
 	enable-gpios = <&ap_gpio 118 GPIO_ACTIVE_HIGH>;
 	reset-gpios = <&ap_gpio 117 GPIO_ACTIVE_LOW>;

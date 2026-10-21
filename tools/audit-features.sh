@@ -160,6 +160,18 @@ need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
 finish
 
+feature "Wi-Fi (Unisoc WCN, mainline sc23xx)"
+need "CONFIG_WLAN_VENDOR_UNISOC=y"               cfg WLAN_VENDOR_UNISOC "$CFG"
+need "CONFIG_SC23XX_CORE=m"                      cfg SC23XX_CORE "$CFG"
+need "CONFIG_SC23XX_SIPC=m"                      cfg SC23XX_SIPC "$CFG"
+need "CONFIG_SPRD_WCN_REMOTEPROC=m"              cfg SPRD_WCN_REMOTEPROC "$CFG"
+need "the wcn node is enabled in the DTS"        grep -q '&wcn {' "$DTS"
+need "the firmware package is a dependency"      sh -c ". '$DPKG/APKBUILD'; printf '%s\n' \"\$depends\" | grep -q firmware-infinix-x6525"
+need "wcnmodem.bin is packaged"                  grep -q 'sprd/wcnmodem.bin' "$FWPKG/APKBUILD"
+need "wifi_board_config.bin is packaged"         grep -q 'sprd/wifi_board_config.bin' "$FWPKG/APKBUILD"
+need "the modules are loaded at boot"            grep -q 'sc23xx_wlan_sipc' "$DPKG/APKBUILD"
+finish
+
 feature "USB networking (the login path)"
 need "CONFIG_USB_MUSB_SPRD=y"                    cfg USB_MUSB_SPRD "$CFG"
 need "CONFIG_TYPEC_SC27XX_PD=y (role switch)"    cfg TYPEC_SC27XX_PD "$CFG"
@@ -200,8 +212,8 @@ finish
 
 echo
 echo "== missing by design (documented, not defects) =="
-printf '  known-missing  WiFi/Bluetooth: the wcn node powers the block, but no mainline stack or\n'
-printf '                 firmware package exists (firmware-infinix-x6525-wcn does not exist)\n'
+printf '  known-missing  Bluetooth: btsprdsipc and the WCN firmware are in the image, but nothing\n'
+printf '                 has exercised the Bluetooth stack on this hardware yet\n'
 printf '  known-missing  cameras: no mainline driver work started\n'
 printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
@@ -348,6 +360,17 @@ if [ -n "$IMAGE" ]; then
 		*)
 			bad "cannot tell the root filesystem's init system" ;;
 		esac
+	fi
+
+	# Wi-Fi: the firmware and the module autoload live in the rootfs
+	if [ -s "$TMP/root.img" ]; then
+		for f in /lib/firmware/sprd/wcnmodem.bin \
+			 /lib/firmware/sprd/wifi_board_config.bin \
+			 /usr/lib/modules-load.d/x6525-wifi.conf; do
+			debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "the root filesystem has $f" ||
+				bad "the root filesystem has no $f"
+		done
 	fi
 
 	# every module the initramfs is supposed to carry is in it

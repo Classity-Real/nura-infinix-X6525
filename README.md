@@ -3,8 +3,10 @@
 Draft postmarketOS port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
 (`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
 
-**Status: it boots.** U-Boot loads the kernel from the eMMC, the root filesystem comes up, and SSH
-over the USB link works (Quick start below). The touchscreen is the next thing being brought up.
+**Status: it boots and it is usable.** U-Boot loads the kernel from the eMMC, the root filesystem
+comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, and Wi-Fi is
+functional (verified 2026-10-21 with `ping google.com`, `apk update`/`upgrade` and a package
+install). Bluetooth and the GUI are the next milestones.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
 how to build the image either here or on GitHub. `pmbootstrap install` builds a whole MBR+GPT disk
