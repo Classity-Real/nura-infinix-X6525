@@ -448,6 +448,27 @@ validated; keep that script and the test alongside any future firmware rebuild.
 
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 
+### 2.1 Bluetooth (untested)
+
+BlueZ is not in the image; with Wi-Fi working it can be installed on the device instead of waiting
+for a rebuild:
+
+```sh
+sudo apk add bluez
+sudo modprobe btsprdsipc
+sudo dmesg | grep -iE 'btsprd|bluetooth|hci|sprd'
+rfkill list
+bluetoothctl list
+```
+
+- `hci0` in `bluetoothctl list` (or an HCI line in `dmesg`) means the controller came up over the
+  same WCN block that runs Wi-Fi. Then `systemctl status bluetooth` (enable it if the package did not
+  start it) and `bluetoothctl power on`, `scan on`.
+- no controller: send the `dmesg` lines. The Bluetooth side may need its own firmware, or the dtsi's
+  `btwf` child needs a change; nothing has exercised it yet.
+
+Once it works, add `bluez` to the device package's `depends` so the image ships it.
+
 ## 3. GUI
 
 Order: Wi-Fi (2) before the GUI. It is already packaged and testable in a few commands, it does not
