@@ -471,20 +471,58 @@ Once it works, add `bluez` to the device package's `depends` so the image ships 
 
 ## 3. GUI
 
-Order: Wi-Fi (2) before the GUI. It is already packaged and testable in a few commands, it does not
-touch the display stack, and it gives the device its own internet for installing and debugging a UI.
-Cellular (SIM) is a much larger job - modem firmware, ModemManager and the Sipc/AT stacks - and is
-not on this path. Bluetooth shares the WCN bring-up, so it follows Wi-Fi.
+Touch (1) and Wi-Fi (2) are done. What is left for a Phosh image:
 
-Needs 1 (touch) and a stable boot. In order:
+### 3.1 Test the compositor live, before a build
 
-1. Touch works (section 1) and the boot is stable with the debug options as they are.
-2. Remove debug options one at a time, re-testing each: first `cpuidle.off=1` and `cpufreq.off=1` (find
-   which one stalls the CPUs; see FIRST_BOOT.md), then `initcall_debug`/`ignore_loglevel`.
-3. Re-enable the real display driver (drop `initcall_blacklist=sprd_drm_init`). Risky: if it fails the
-   screen goes black. Do it in its own build with the recovery route at hand.
-4. Switch `ui = console` to `ui = phosh` in `.github/workflows/rom.yml` and build. No GPU driver is known to
-   work yet, so expect software rendering (`LIBGL_ALWAYS_SOFTWARE=1`).
+The image has a working DRM device from `simpledrm` (the framebuffer the bootloader leaves scanning
+out), while the real `sprd_drm` stack is still blacklisted. Phosh's compositor (`phoc`) can be tried
+on `simpledrm` without reflashing. Install it over Wi-Fi, then start a phoc+phosh session from the
+**tty1 login** (the on-screen keyboard is the input; a logind session on the active VT is what gives
+the compositor the DRM device):
+
+```sh
+sudo apk add phoc phosh
+# one line, so stopping buffyboard cannot cut the command off:
+sudo systemctl stop buffyboard; WLR_RENDERER=pixman phoc -S -E phosh
+```
+
+`WLR_RENDERER=pixman` is deliberate: there is no working GPU driver yet. `panfrost` is in the kernel
+(`CONFIG_DRM_PANFROST=m`), but no `mali_csffw.bin` is packaged, so rendering has to be software.
+
+| Result | Meaning | Next |
+|---|---|---|
+| Phosh shell appears | `simpledrm` plus software rendering is enough | go to 3.3 |
+| phoc exits with an error | the compositor cannot drive `simpledrm` (or has no seat) | photograph the text and go to 3.2 |
+
+To get the console back afterwards: reboot, or `sudo systemctl start buffyboard`.
+
+### 3.2 If simpledrm fails, enable the real display driver
+
+Drop `initcall_blacklist=sprd_drm_init` from `kernel-cmdline.conf` and rebuild. Risky: if the DPU/DSI
+stack fails, the screen goes black. Do it in its own build; SSH over USB or Wi-Fi is the recovery
+route.
+
+### 3.3 Switch the UI and build
+
+Change `.github/workflows/rom.yml` from `ui = buffyboard` to `ui = phosh`, keeping the
+`service_manager = systemd` pin (the Phosh UI also defaults to systemd and uses greetd with the
+`greetd-phrog` greeter). When software rendering is what works, set `WLR_RENDERER=pixman` for the
+greetd session with a systemd drop-in in the device package:
+
+```ini
+# /etc/systemd/system/greetd.service.d/10-x6525-software.conf
+[Service]
+Environment=WLR_RENDERER=pixman
+```
+
+Then build, flash `cache` and `userdata` from the same run, and boot.
+
+### 3.4 Remove the debug cmdline options
+
+Once the GUI is stable, remove them one at a time, re-testing each: first `cpuidle.off=1` and
+`cpufreq.off=1` (find which one stalls the CPUs; see FIRST_BOOT.md), then
+`initcall_debug`/`ignore_loglevel`.
 
 ## What to send when asking for help
 
