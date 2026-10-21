@@ -569,10 +569,9 @@ route.
 
 ### 3.3 Switch the UI and build
 
-Change `.github/workflows/rom.yml` from `ui = buffyboard` to `ui = phosh`, keeping the
-`service_manager = systemd` pin (the Phosh UI also defaults to systemd and uses greetd with the
-`greetd-phrog` greeter). When software rendering is what works, set `WLR_RENDERER=pixman` for the
-greetd session with a systemd drop-in in the device package:
+`rom.yml` now selects `ui = phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
+defaults to systemd and uses greetd with the `greetd-phrog` greeter). Because there is no GPU
+firmware, the device package installs the software-renderer drop-in:
 
 ```ini
 # /etc/systemd/system/greetd.service.d/10-x6525-software.conf
@@ -580,7 +579,9 @@ greetd session with a systemd drop-in in the device package:
 Environment=WLR_RENDERER=pixman
 ```
 
-Then build, flash `cache` and `userdata` from the same run, and boot.
+Build, flash `cache` and `userdata` from the same run, and boot. On a working `simpledrm` the Phosh
+shell comes up on greetd; if phoc fails instead, SSH still works and its log says why - then go to
+3.2 (enable `sprd_drm`).
 
 ### 3.4 Remove the debug cmdline options
 

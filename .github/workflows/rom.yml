@@ -97,17 +97,15 @@ jobs:
           [pmbootstrap]
           device = infinix-x6525
           kernel = stable
-          # buffyboard, not console: the service that starts the on-screen
-          # keyboard is shipped by postmarketos-ui-buffyboard. With ui = console
-          # the buffyboard binary is installed (the initramfs depends on it) but
-          # nothing starts it in the rootfs, so the screen accepts nothing.
-          ui = buffyboard
-          # Keep systemd. postmarketos-ui-buffyboard's APKBUILD carries
-          # pmb:default-openrc, so selecting the UI would otherwise switch the
-          # whole image from systemd to OpenRC as a side effect. Both are
-          # supported (it carries pmb:support-systemd too); systemd is what this
-          # port has been tested with, and postmarketos-base's 90-base.preset
-          # enables buffyboard.service on it.
+          # phosh: the GUI milestone. postmarketos-ui-phosh brings phosh and
+          # phoc, greetd with the greetd-phrog greeter, and the on-screen
+          # keyboard (phosh-osk-stub). It starts on the simpledrm DRM device;
+          # the device package installs a greetd drop-in with
+          # WLR_RENDERER=pixman because there is no GPU firmware packaged yet.
+          ui = phosh
+          # Pin the init system: it must not change as a side effect of the UI
+          # package's APKBUILD options. phosh defaults to systemd, and systemd
+          # is what this port has been tested with.
           service_manager = systemd
           user = user
           hostname = x6525

@@ -148,12 +148,12 @@ need "HDL firmware in firmware/"                 test -f "$ROOT/firmware/hdl_fir
 need "the firmware package is a dependency"      sh -c ". '$DPKG/APKBUILD'; printf '%s\n' \"\$depends\" | grep -q firmware-infinix-x6525"
 finish
 
-feature "framebuffer keyboard (buffyboard)"
-# postmarketos-ui-buffyboard ships the service (systemd unit or OpenRC script)
-# and enables it; ui = console installs only the binary. Its APKBUILD has
-# pmb:default-openrc, so rom.yml must pin service_manager or the UI choice
-# would also change the image's init system.
-need "rom.yml selects the buffyboard UI"         grep -q '^ *ui = buffyboard' "$ROOT/.github/workflows/rom.yml"
+feature "on-screen keyboard / UI service"
+# buffyboard: postmarketos-ui-buffyboard ships the service and enables it.
+# phosh: postmarketos-ui-phosh brings phosh, phoc and the OSK
+# (phosh-osk-stub), started by greetd. Both UI APKBUILDs have their own
+# service-manager defaults, so rom.yml pins it explicitly.
+need "rom.yml selects buffyboard or phosh"       grep -Eq '^ *ui = (buffyboard|phosh)' "$ROOT/.github/workflows/rom.yml"
 need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
@@ -324,12 +324,13 @@ if [ -n "$IMAGE" ]; then
 		fi
 	fi
 
-	# the on-screen keyboard: its service must be installed (ui = buffyboard)
-	# and enabled. Which service depends on the image's init system: systemd
-	# (the unit, enabled by postmarketos-base's 90-base.preset at build time)
-	# or OpenRC (the init script, added to the default runlevel by the UI's
-	# openrc subpackage post-install).
+	# the UI: buffyboard's service must be installed and enabled, or phosh's
+	# stack with greetd and the software-renderer drop-in. Which buffyboard
+	# service depends on the init system: systemd (unit + preset) or OpenRC
+	# (init script added to the default runlevel by the UI's openrc subpackage).
 	if [ -s "$TMP/root.img" ]; then
+		ui=$(grep -E '^ *ui = ' "$ROOT/.github/workflows/rom.yml" | head -1 |
+			awk '{print $3}')
 		if debugfs -R "stat /usr/lib/systemd/systemd" "$TMP/root.img" 2>/dev/null | grep -q .; then
 			init=systemd
 		elif debugfs -R "stat /sbin/openrc" "$TMP/root.img" 2>/dev/null | grep -q .; then
@@ -337,28 +338,40 @@ if [ -n "$IMAGE" ]; then
 		else
 			init=unknown
 		fi
-		debugfs -R "stat /usr/bin/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
-			ok "the buffyboard binary is installed" ||
-			bad "the buffyboard binary is not installed"
-		case $init in
-		systemd)
-			debugfs -R "stat /usr/lib/systemd/system/buffyboard.service" \
-				"$TMP/root.img" 2>/dev/null | grep -q . &&
-				ok "the systemd image installs buffyboard.service" ||
-				bad "no buffyboard.service in the systemd root filesystem (ui is not buffyboard)"
-			debugfs -R "stat /etc/systemd/system/multi-user.target.wants/buffyboard.service" \
-				"$TMP/root.img" 2>/dev/null | grep -q . &&
-				ok "buffyboard.service is enabled at boot" ||
-				bad "buffyboard.service is not enabled at boot" ;;
-		openrc)
-			debugfs -R "stat /etc/init.d/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
-				ok "the OpenRC image installs the buffyboard init script" ||
-				bad "no /etc/init.d/buffyboard in the OpenRC root filesystem (ui is not buffyboard)"
-			debugfs -R "stat /etc/runlevels/default/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
-				ok "buffyboard is in the default runlevel" ||
-				bad "buffyboard is not in the default runlevel" ;;
+		case $ui in
+		buffyboard)
+			debugfs -R "stat /usr/bin/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "the buffyboard binary is installed" ||
+				bad "the buffyboard binary is not installed"
+			case $init in
+			systemd)
+				debugfs -R "stat /usr/lib/systemd/system/buffyboard.service" \
+					"$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "the systemd image installs buffyboard.service" ||
+					bad "no buffyboard.service in the systemd root filesystem (ui is not buffyboard)"
+				debugfs -R "stat /etc/systemd/system/multi-user.target.wants/buffyboard.service" \
+					"$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "buffyboard.service is enabled at boot" ||
+					bad "buffyboard.service is not enabled at boot" ;;
+			openrc)
+				debugfs -R "stat /etc/init.d/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "the OpenRC image installs the buffyboard init script" ||
+					bad "no /etc/init.d/buffyboard in the OpenRC root filesystem (ui is not buffyboard)"
+				debugfs -R "stat /etc/runlevels/default/buffyboard" "$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "buffyboard is in the default runlevel" ||
+					bad "buffyboard is not in the default runlevel" ;;
+			*)
+				bad "cannot tell the root filesystem's init system" ;;
+			esac ;;
+		phosh)
+			for f in /usr/bin/phosh /usr/bin/phoc /usr/bin/greetd \
+				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf; do
+				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "the phosh image has $f" ||
+					bad "the phosh image has no $f"
+			done ;;
 		*)
-			bad "cannot tell the root filesystem's init system" ;;
+			bad "rom.yml selects no known UI (ui = ${ui:-none})" ;;
 		esac
 	fi
 
