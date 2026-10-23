@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=14
+pkgrel=15
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -13,6 +13,7 @@ depends="
 	firmware-infinix-x6525
 	iw
 	linux-postmarketos-unisoc-ums9230
+	mmc-utils
 	networkmanager-wifi
 	postmarketos-base
 	soc-unisoc-ums9230
@@ -114,16 +115,35 @@ EOF
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/bin/x6525-wlan-mac %k"
 EOF
 
-	# The eMMC keeps a write-back cache. During bring-up the phone is often
-	# power-cycled, and unflushed cache content then leaves ext4 metadata the
-	# journal cannot replay - "Inode N seems to contain garbage", and the
-	# initramfs stops for a manual fsck. Write through trades some write
-	# throughput for that not happening. It applies once udev has run, i.e.
-	# after the initramfs's own fsck/resize, which a power cut can still
-	# interrupt; the first boot after a flash must not be cut short.
-	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-emmc-write-cache.rules <<'EOF'
-ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="mmcblk0", ATTR{queue/write_cache}="write through"
+	# The eMMC's write-back cache is what turns a forced power-off into ext4
+	# metadata the journal cannot replay ("Inode N seems to contain garbage",
+	# then a manual fsck at boot). Disable the card's cache at the EXT_CSD
+	# level instead of only changing the block queue's write_cache flag: the
+	# latter also stops the kernel from sending flush barriers, while the
+	# card would still cache writes. This trades write throughput for forced
+	# power-offs staying journal-recoverable. CACHE_CTRL is not persistent,
+	# so the service runs every boot, early, before much has been written.
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-emmc-cacheoff.service <<'EOF'
+[Unit]
+Description=Disable the eMMC write cache (power-loss safety)
+DefaultDependencies=no
+After=systemd-udevd.service
+Before=sysinit.target
+ConditionPathExists=/dev/mmcblk0
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/bin/mmc cache flush /dev/mmcblk0
+ExecStart=-/usr/bin/mmc cache disable /dev/mmcblk0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
 EOF
+	mkdir -p "$pkgdir"/etc/systemd/system/sysinit.target.wants
+	ln -s /usr/lib/systemd/system/x6525-emmc-cacheoff.service \
+		"$pkgdir"/etc/systemd/system/sysinit.target.wants/x6525-emmc-cacheoff.service
 
 	# Phosh's compositor has no GPU driver to use yet: panfrost is in the
 	# kernel (CONFIG_DRM_PANFROST=m), but no mali_csffw.bin is packaged, and

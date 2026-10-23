@@ -236,15 +236,27 @@ mount | grep ' / '
 journalctl -b -p err --no-pager | tail -40
 ```
 
-The device package now ships a udev rule that sets the eMMC queue to `write through`
-(`90-x6525-emmc-write-cache.rules`), so a power cut after udev has started cannot lose cached
-metadata. It cannot protect the initramfs's own fsck/resize window, which runs before udev - that is
-why the first boot after a flash must not be cut short. On an image without the rule, the same can
-be applied for the current boot with:
+The device package disables the **eMMC's own write-back cache** at the EXT_CSD level
+(`x6525-emmc-cacheoff.service`, `mmc cache disable /dev/mmcblk0`, run every boot because
+`CACHE_CTRL` is not persistent). This is deliberately not the block queue's `write_cache` flag:
+setting that to `write through` also stops the kernel from sending flush barriers while the card
+still caches writes. With the card cache off, a forced power-off loses at most the writes in
+flight, and the ext4 journal can replay; write throughput is the price. The service runs before
+`sysinit.target`, i.e. after the initramfs's own fsck/resize - the first boot after a flash must
+still not be cut short.
+
+On an image built before this service, apply the same for the current and the next boots:
 
 ```sh
-echo "write through" | sudo tee /sys/block/mmcblk0/queue/write_cache
+sudo apk add mmc-utils
+sudo mmc extcsd read /dev/mmcblk0 | grep -iE 'CACHE|Cache'   # CACHE_CTRL, CACHE_SIZE
+sudo mmc cache flush /dev/mmcblk0
+sudo mmc cache disable /dev/mmcblk0
+echo "write back" | sudo tee /sys/block/mmcblk0/queue/write_cache   # restore barriers
 ```
+
+The test is then: repair the filesystem, boot cleanly, force a power-off, boot again. If the fsck
+stop no longer appears, the cache was the cause.
 
 How to read the evidence:
 
