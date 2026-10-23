@@ -255,8 +255,13 @@ sudo mmc cache disable /dev/mmcblk0
 echo "write back" | sudo tee /sys/block/mmcblk0/queue/write_cache   # restore barriers
 ```
 
-The test is then: repair the filesystem, boot cleanly, force a power-off, boot again. If the fsck
-stop no longer appears, the cache was the cause.
+The test is then: repair the filesystem, boot cleanly, power off, boot again. If the fsck stop no
+longer appears, the cache was the cause.
+
+The observed split points straight at it: a **reboot keeps the eMMC powered**, so its cache
+survives and the next boot is clean; a **power-off cuts the eMMC supply**, so whatever the cache
+still held is gone. That is why "power off from the menu, then turn on" corrupted while a hard
+reboot did not - and why the fix has to reach the card's cache, not the block queue's flag.
 
 How to read the evidence:
 
