@@ -228,9 +228,12 @@ fastboot flash userdata pmos-root-fs.img   # same run as the cache
 If it keeps happening without power cuts, collect the storage-side evidence:
 
 ```sh
-sudo dmesg | grep -iE 'mmc|sdhci|I/O error|ext4'
-cat /sys/block/mmcblk0/queue/write_cache
+sudo dmesg | grep -iE 'mmc0|sdhci|I/O error|ext4|jbd2' | tail -60
+cat /sys/block/mmcblk0/queue/write_cache      # 'write through' = the udev rule took
 cat /sys/class/mmc_host/mmc0/mmc0:*/speed 2>/dev/null
+cat /sys/class/mmc_host/mmc0/mmc0:*/name 2>/dev/null
+mount | grep ' / '
+journalctl -b -p err --no-pager | tail -40
 ```
 
 The device package now ships a udev rule that sets the eMMC queue to `write through`
