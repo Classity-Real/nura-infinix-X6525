@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=15
+pkgrel=16
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -144,6 +144,32 @@ EOF
 	mkdir -p "$pkgdir"/etc/systemd/system/sysinit.target.wants
 	ln -s /usr/lib/systemd/system/x6525-emmc-cacheoff.service \
 		"$pkgdir"/etc/systemd/system/sysinit.target.wants/x6525-emmc-cacheoff.service
+
+	# Belt and braces for the case where the card refuses cache disable: flush
+	# the card's cache after the usual services have stopped but while the
+	# root is still writable, before systemd unmounts or cuts power. This is
+	# the layer that covers a *clean* Power Off, the path that lost the cache.
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-emmc-flush.service <<'EOF'
+[Unit]
+Description=Flush the eMMC cache on shutdown
+DefaultDependencies=no
+After=local-fs.target
+Before=shutdown.target reboot.target halt.target kexec.target
+ConditionPathExists=/dev/mmcblk0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=-/usr/bin/mmc cache flush /dev/mmcblk0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
+	ln -s /usr/lib/systemd/system/x6525-emmc-flush.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-emmc-flush.service
 
 	# Phosh's compositor has no GPU driver to use yet: panfrost is in the
 	# kernel (CONFIG_DRM_PANFROST=m), but no mali_csffw.bin is packaged, and

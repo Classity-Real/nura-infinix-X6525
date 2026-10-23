@@ -238,7 +238,10 @@ journalctl -b -p err --no-pager | tail -40
 
 The device package disables the **eMMC's own write-back cache** at the EXT_CSD level
 (`x6525-emmc-cacheoff.service`, `mmc cache disable /dev/mmcblk0`, run every boot because
-`CACHE_CTRL` is not persistent). This is deliberately not the block queue's `write_cache` flag:
+`CACHE_CTRL` is not persistent). A second unit, `x6525-emmc-flush.service`, runs
+`mmc cache flush` as an `ExecStop` during shutdown, after the normal services have stopped and
+while the root is still writable - so a clean Power Off also flushes even if the card refused the
+disable, or if something wrote through the cache after boot. This is deliberately not the block queue's `write_cache` flag:
 setting that to `write through` also stops the kernel from sending flush barriers while the card
 still caches writes. With the card cache off, a forced power-off loses at most the writes in
 flight, and the ext4 journal can replay; write throughput is the price. The service runs before
