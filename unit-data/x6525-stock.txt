@@ -233,14 +233,20 @@ Run (root):
 ## camera and modem partitions (binary, optional)
 If the images can be copied to the host, put them in unit-data/bin/ (see
 README.md; the GitHub web editor only takes files up to 25 MB, so use git
-push for anything larger):
+push for anything larger, or split the archive). The full recipe:
 
-  for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a; do
-      dd if=/dev/block/by-name/$p of=/sdcard/$p.img bs=4M
+  cd /sdcard
+  for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a pm_sys_a; do
+      dd if=/dev/block/by-name/$p of=$p.img bs=4M
   done
+  gzip -1 *.img
+  tar czf modem-blobs.tar.gz *.img.gz
+  ls -l modem-blobs.tar.gz
+  # if it is over 25 MB for the web upload:
+  # split -b 20m modem-blobs.tar.gz modem-blobs.part.
 
-Partition sizes: <PASTE ls -l sizes>
-Copied to unit-data/bin/: no
+Partition sizes: <PASTE ls -l *.img>
+Copied to unit-data/bin/: <modem-blobs.tar.gz, yes/no; parts if split>
 
 ======================================================================
 ## notes
