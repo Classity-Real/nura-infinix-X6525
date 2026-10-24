@@ -640,6 +640,38 @@ Once the GUI is stable, remove them one at a time, re-testing each: first `cpuid
 `cpufreq.off=1` (find which one stalls the CPUs; see FIRST_BOOT.md), then
 `initcall_debug`/`ignore_loglevel`.
 
+## 4. Not on the fast path: camera and cellular
+
+Neither is a build-time fix; both need stock-side information first. The stock collector already
+dumps the device tree, V4L2 devices, loaded modules, sensors and dmesg:
+
+    sh tools/collect-live.sh            # run on the stock system
+
+Then collect what the device tree alone cannot tell us:
+
+```sh
+ls -l /vendor/lib/modules > modules.txt
+ls -l /vendor/firmware /vendor/firmware_mnt/image > firmware.txt 2>&1
+ls -l /vendor/etc/camera > camera-etc.txt 2>&1
+ls -l /dev/block/by-name > by-name.txt
+dmesg | grep -iE 'camera|sensor|camsys|isp|modem|sipc|rmb|wwan' > dmesg-radio-camera.txt
+getprop | grep -iE 'camera|modem|radio' > props.txt
+```
+
+Why each matters:
+
+- **camera**: the sensor compatible strings and the vendor camera nodes decide whether a mainline
+  sensor driver fits; then come the reg/clock/lane details and a userspace ISP path. The kernel
+  already builds `VIDEO_SPRD_CAMSYS` and `VIDEO_SPRD_ISP`; nothing has bound them.
+- **cellular**: the modem firmware and NV data, plus the modem/SIPC reserved-memory nodes, are what
+  the remoteproc needs. The kernel builds `SPRD_MODEM_REMOTEPROC`, `SPRD_PMSYS_REMOTEPROC`, SIPC and
+  `RPMSG_WWAN_CTRL`/`RPMSG_WWAN_NET`, but nothing loads a modem image or talks to it from userspace
+  yet.
+
+The single biggest shortcut for both is the vendor kernel source, if Infinix/Transsion published it
+(their opensource portal): it contains the camera sensor drivers and the modem/rmb stack as they
+were actually built.
+
 ## What to send when asking for help
 
 - Which step and which row of the tables above you are on.
