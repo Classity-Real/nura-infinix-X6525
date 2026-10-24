@@ -7,17 +7,17 @@ name: rom
 # and a kernel build under emulation takes hours rather than the ~45 minutes it
 # takes natively.
 #
-# It is also the one job that cannot run on the Namespace profile, which is why
-# it asks for GitHub's arm64 runner while everything else asks for
-# namespace-profile-1. Building the image means attaching the rootfs image to a
-# loop device, and that runner is a container whose device cgroup refuses it:
-# the nodes can be created (and losetup -f then answers), the char device
-# /dev/loop-control is usable, but opening the *block* device to attach a file
-# to it is Operation not permitted. That is the runner's decision, not the
-# image's, and 20 minutes of a working build is how it was found. Namespace
-# hands out real VMs (or allows the devices) and this line can go back to
-# namespace-profile-1 - the kernel builds in 10 minutes there against 43 here,
-# so it is worth asking them.
+# It also runs on the Namespace profile: the kernel builds there in about 10
+# minutes instead of 43. Building the image needs loop devices, and without
+# the privileged feature the container's device cgroup lets /dev/loop-control
+# work while refusing to open the *block* device ("Operation not permitted").
+# Namespace exposes that through the label itself:
+#   ;container.privileged=true;container.host-pid-namespace=true
+# The preflight step below still attaches and detaches a loop device before
+# the build, so a future runner change that loses the capability fails in
+# seconds with a clear message instead of 20 minutes into the build.
+# The profile itself must be an arm64 machine (an x86 profile would run the
+# whole build under qemu-user, which is what the note above is about).
 #
 # `pmbootstrap init` asks its questions on stdin and cannot run unattended, so
 # this writes the config file it would have written (the keys are the Config
@@ -29,7 +29,9 @@ on:
 
 jobs:
   rom:
-    runs-on: ubuntu-24.04-arm
+    # privileged + host PID namespace so losetup can open the loop block
+    # device; the profile must be an arm64 machine (see the header).
+    runs-on: "namespace-profile-1;container.privileged=true;container.host-pid-namespace=true"
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
