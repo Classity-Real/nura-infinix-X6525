@@ -205,10 +205,10 @@ branch that is the upstream base plus this port's commits and nothing else:
 
 | Tree | Fork and branch | Tip |
 |---|---|---|
-| kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `c27353303e23b35fcf47fe0cfb137eae3fb9bea6` |
+| kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `ace813f8f1f8c38f9b2b31e0b20148301bdee035` |
 | U-Boot | `github.com/Seuj09/ums9230-mainline-u-boot`, branch `x6525` | `6d247043391aa8ed7d55cfadfd60908077a01bad` |
 
-The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the twenty-two patches in `patches/upstream/`, one
+The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the twenty-three patches in `patches/upstream/`, one
 commit each (verified: the subjects match the patch files one for one and the tree's files are
 byte-identical to `dts/`, `drivers/` and `bindings/`). The U-Boot branch is the fork's `ums9230` plus
 the board commits (device tree, defconfig, environment, the pmicwdt command and the prodnv MAC

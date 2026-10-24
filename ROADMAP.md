@@ -55,9 +55,11 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
 - **Storage**: eMMC root and the microSD slot work; the eMMC write cache is disabled at boot
   (`x6525-emmc-cacheoff.service`) because the unit loses power uncleanly. UFS is not supported (see
   the top of this file). eMMC/SD PHY timing has not been tuned beyond what the bootloader leaves.
-- **Display**: the TD4160 HX panel driver exposes 60.03 Hz and 90.05 Hz modes (the 90 Hz mode is
-  patch 0019 and has not been selected on the phone yet). Brightness is DCS, not PWM. The panel
-  reset polarity is the first suspect if a future panel stays dark.
+- **Display**: the TD4160 HX panel driver exposes 60.03 Hz and 90.05 Hz modes. 60.03 Hz is the
+  board DT's `native-mode` and is preferred again (patch 0023); patch 0019's 90 Hz timing remains
+  selectable but is not the boot default. Making it preferred caused a black screen on hardware:
+  the bootloader logo stayed while the kernel ran, i.e. the 90 Hz modeset was not accepted. Brightness
+  is DCS, not PWM. The panel reset polarity is the first suspect if a future panel stays dark.
 - **Audio**: the SC2730 codec and the speaker amp (`ap_gpio 113`) are described; playback is the
   current path. Voice-call audio depends on the modem and is untested. Headset detection/mic routing
   is not described on mainline.

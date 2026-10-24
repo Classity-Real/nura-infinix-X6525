@@ -633,11 +633,11 @@ cat /sys/class/backlight/td4160/brightness
 The panel itself has two modes, both from the stock board tree and both at the same 153.6 MHz pixel
 clock, so switching between them is only a change of blanking:
 
-- 720x1612 at **90.05 Hz** (timing1: 933x1828 totals) - the driver marks this one preferred;
-- 720x1612 at 60.03 Hz (timing0: 959x2668 totals) - keeps working, for anything that asks for it.
+- 720x1612 at **60.03 Hz** (timing0: 959x2668 totals) - the board DT's `native-mode`, and the
+  driver's preferred mode, matching what the stock system boots;
+- 720x1612 at 90.05 Hz (timing1: 933x1828 totals) - listed as an option, not preferred.
 
-A compositor that takes the preferred mode (KWin does) should come up at 90 Hz. Check it, and pick
-the other mode if it does not:
+A compositor that takes the preferred mode (KWin does) comes up at 60 Hz. Check both modes:
 
 ```sh
 cat /sys/class/drm/card*-DSI-*/modes     # the second column is the refresh rate
@@ -645,8 +645,10 @@ kscreen-doctor -o                        # Plasma: current mode and refresh
 # or System Settings -> Display & Monitor -> Refresh Rate
 ```
 
-If it stays at 60 Hz, choose 90 Hz in the display settings; no other change is needed because the
-DSI bit clock is unchanged. The mode is 90.05 Hz, not exactly 90.
+90 Hz is selectable in the display settings; the DSI bit clock is unchanged, only the blanking
+differs. The mode is 90.05 Hz, not exactly 90. Do not make it the default again until it has been
+seen on hardware: with 90 Hz preferred, a rejected modeset leaves the bootloader logo on screen
+while the kernel runs.
 
 ### 3.1 Test the compositor live, before a build
 

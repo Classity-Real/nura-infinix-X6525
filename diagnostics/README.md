@@ -51,9 +51,9 @@ sh tools/patch-cmdline.sh test-bootfs-60hz.img "video=DSI-1:720x1612@60"
 fastboot flash cache test-bootfs-60hz.img
 ```
 
-If kernel messages appear, the 90 Hz timing is the cause; the fix is to make 60 Hz preferred and
-leave 90 Hz as an optional mode. If the connector is not called `DSI-1`, `dmesg | grep -i dsi` names
-it; the same option with that name does the same.
+If kernel messages appear, the 90 Hz timing is the cause; the fix (60 Hz preferred again, 90 Hz left
+as an optional mode) is in the rebuilt image. If the connector is not called `DSI-1`,
+`dmesg | grep -i dsi` names it; the same option with that name does the same.
 
 Then send me these:
 
