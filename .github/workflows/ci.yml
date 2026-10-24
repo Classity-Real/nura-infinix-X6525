@@ -1,0 +1,435 @@
+name: Build PMOS
+
+# Single workflow for the X6525 port: kernel/DTB/driver checks, U-Boot,
+# full postmarketOS image, and optional firmware release.
+#
+# ROM image build needs loop devices. Namespace runners run the job inside a
+# container whose device cgroup normally refuses block-device attach
+# (Operation not permitted). container.privileged=true lifts that so losetup
+# works; the early "Loop devices" step still verifies it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "firmware release tag (only used by the firmware job)"
+        required: false
+        default: "firmware-v1"
+      run_firmware:
+        description: "also run the firmware release job"
+        type: boolean
+        default: false
+  push:
+    paths:
+      - "dts/**"
+      - "drivers/**"
+      - "bindings/**"
+      - "patches/**"
+      - "uboot/**"
+      - "tools/**"
+      - "pmaports/**"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: write
+
+env:
+  KERNEL_REPO: https://codeberg.org/ums9230-mainline/linux
+  KERNEL_TAG: v7.2-rc6-ums9230-0
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: namespace-profile-main
+    timeout-minutes: 60
+    steps:
+      - name: Checkout the port
+        uses: actions/checkout@v4
+      - name: Checkout the kernel at ${{ env.KERNEL_TAG }}
+        run: git clone --depth 1 --branch "$KERNEL_TAG" "$KERNEL_REPO" kernel
+      - name: The kernel package carries the current patches and their checksums
+        run: |
+          K=pmaports/device/testing/linux-postmarketos-unisoc-ums9230
+          fail=0
+          for p in patches/upstream/0*.patch; do
+            b=$(basename "$p")
+            cmp -s "$p" "$K/$b" || { echo "STALE copy: $K/$b"; fail=1; }
+            grep -qE "^$(sha512sum "$p" | cut -d' ' -f1)  $b\$" "$K/APKBUILD" ||
+              { echo "BAD or missing sha512 in $K/APKBUILD: $b"; fail=1; }
+            grep -qE "^[[:space:]]+$b\$" "$K/APKBUILD" ||
+              { echo "not in source=: $b"; fail=1; }
+          done
+          [ "$fail" = 0 ] || exit 1
+          echo "kernel package matches patches/upstream"
+      - name: No package's variables carry a checksum line
+        run: |
+          var() { ( . "$1"; eval "printf '%s\n' \"\${$2}\"" ); }
+          fail=0
+          for P in pmaports/device/testing/*/APKBUILD; do
+            for v in depends makedepends options; do
+              bad=$(var "$P" "$v" | tr ' ' '\n' | grep -E '^[0-9a-f]{128}$|\.patch$' || true)
+              [ -z "$bad" ] || { echo "$P: $v carries: $(echo $bad)"; fail=1; }
+            done
+            bad=$(var "$P" source | tr ' ' '\n' | grep -E '^[0-9a-f]{128}$' || true)
+            [ -z "$bad" ] || { echo "$P: source carries a checksum line"; fail=1; }
+          done
+          [ "$fail" = 0 ] || exit 1
+          echo "no checksum lines among the packages' variables"
+      - name: Verify the submission patches
+        run: |
+          base=$(git -C kernel rev-parse HEAD)
+          git -C kernel -c user.name=ci -c user.email=ci@example.com \
+            am --keep-non-patch "$PWD"/patches/upstream/0*.patch
+          fail=0
+          check() { diff -q "$1" "$2" >/dev/null || { echo "MISMATCH: $1 vs $2"; fail=1; }; }
+          check kernel/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts dts/ums9230-infinix-x6525.dts
+          check kernel/drivers/gpu/drm/panel/panel-td4160-hx.c drivers/panel-td4160-hx.c
+          check kernel/drivers/input/touchscreen/ovt-tcm-spi.c drivers/ovt-tcm-spi.c
+          check "kernel/Documentation/devicetree/bindings/display/panel/infinix,td4160-hx-panel.yaml" \
+                "bindings/infinix,td4160-hx-panel.yaml"
+          check "kernel/Documentation/devicetree/bindings/input/touchscreen/omnivision,tcm-spi.yaml" \
+                "bindings/omnivision,tcm-spi.yaml"
+          check kernel/drivers/power/supply/extcon-charger-detect.c drivers/extcon-charger-detect.c
+          check "kernel/Documentation/devicetree/bindings/power/supply/linux,extcon-charger-detect.yaml" \
+                "bindings/linux,extcon-charger-detect.yaml"
+          for e in "drivers/gpu/drm/panel/Kconfig DRM_PANEL_TD4160_HX" \
+                   "drivers/input/touchscreen/Kconfig TOUCHSCREEN_OVT_TCM_SPI" \
+                   "drivers/input/touchscreen/Makefile TOUCHSCREEN_OVT_TCM_SPI" \
+                   "drivers/power/supply/Kconfig CHARGER_EXTCON_DETECT" \
+                   "drivers/power/supply/Makefile CHARGER_EXTCON_DETECT" \
+                   "arch/arm64/boot/dts/sprd/Makefile ums9230-infinix-x6525.dtb" \
+                   "Documentation/devicetree/bindings/arm/sprd/sprd.yaml infinix,x6525" \
+                   "Documentation/devicetree/bindings/vendor-prefixes.yaml infinix"; do
+            set -- $e
+            grep -q "$2" "kernel/$1" || { echo "MISSING: $2 in $1"; fail=1; }
+          done
+          git -C kernel reset --hard -q "$base"
+          git -C kernel clean -qfd
+          [ "$fail" = 0 ] || exit 1
+          echo "the submission series applies and matches the sources"
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential clang flex libelf-dev libssl-dev llvm lld python3-pip
+      - name: Apply the overlay
+        run: ./tools/apply-overlay.sh kernel
+      - name: Build the device tree
+        run: |
+          make -C kernel ARCH=arm64 defconfig
+          make -C kernel ARCH=arm64 -j"$(nproc)" sprd/ums9230-infinix-x6525.dtb ||
+          make -C kernel ARCH=arm64 -j"$(nproc)" dtbs
+          ls -l kernel/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dtb
+      - name: Validate the bindings and the board's own nodes
+        run: |
+          python3 -m pip install --quiet --break-system-packages dtschema || python3 -m pip install --quiet dtschema
+          export PATH="$HOME/.local/bin:$PATH"
+          dt-doc-validate --version
+          cd kernel
+          dt-doc-validate \
+            Documentation/devicetree/bindings/display/panel/infinix,td4160-hx-panel.yaml \
+            Documentation/devicetree/bindings/input/touchscreen/omnivision,tcm-spi.yaml \
+            Documentation/devicetree/bindings/power/supply/linux,extcon-charger-detect.yaml
+          dt-validate -s Documentation/devicetree/bindings \
+            arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dtb > /tmp/dt-validate.txt 2>&1 || true
+          BOARD="touchscreen@0|charger@6a|panel@0|speaker-amp|usb-charger-detect"
+          BOARD="$BOARD|charger-en-hog|board-thermal|pa-thermal|chg-thermal"
+          BOARD="$BOARD|fuel-gauge@c00|battery \(simple-battery\)"
+          BOARD="$BOARD|tboard-thermistor|pa-thermistor|chg-thermistor"
+          BOARD="$BOARD|proximity@29|vl53l0x"
+          BOARD="$BOARD|bq24158|td4160|omnivision,|infinix,"
+          if grep -qE "$BOARD" /tmp/dt-validate.txt; then
+            echo "the board's own nodes did not validate:"
+            grep -E "$BOARD" /tmp/dt-validate.txt
+            exit 1
+          fi
+          echo "board nodes clean; $(grep -c . /tmp/dt-validate.txt) line(s) are the tree's own dtsi"
+      - name: Enable the drivers, and check they survive olddefconfig
+        run: |
+          cd kernel
+          ./scripts/config --module DRM_SPRD
+          ./scripts/config --enable BACKLIGHT_CLASS_DEVICE
+          ./scripts/config --module DRM_PANEL_TD4160_HX
+          ./scripts/config --module TOUCHSCREEN_OVT_TCM_SPI
+          ./scripts/config --module CHARGER_BQ2415X
+          ./scripts/config --module CHARGER_EXTCON_DETECT
+          ./scripts/config --module VL53L0X_I2C
+          ./scripts/config --module SPI_SPRD_ADI
+          ./scripts/config --module MFD_SC27XX_PMIC
+          ./scripts/config --module REGULATOR_SC2730
+          ./scripts/config --module SC27XX_ADC
+          ./scripts/config --module GENERIC_ADC_THERMAL
+          make ARCH=arm64 olddefconfig
+          for sym in CONFIG_DRM_SPRD CONFIG_DRM_MIPI_DSI \
+                     CONFIG_BACKLIGHT_CLASS_DEVICE CONFIG_DRM_PANEL_TD4160_HX \
+                     CONFIG_TOUCHSCREEN_OVT_TCM_SPI CONFIG_CHARGER_BQ2415X \
+                     CONFIG_CHARGER_EXTCON_DETECT CONFIG_SPI_SPRD_ADI \
+                     CONFIG_MFD_SC27XX_PMIC CONFIG_REGULATOR_SC2730 \
+                     CONFIG_SC27XX_ADC CONFIG_GENERIC_ADC_THERMAL \
+                     CONFIG_VL53L0X_I2C; do
+            grep -qE "^${sym}=(y|m)$" .config || { echo "$sym did not survive olddefconfig"; exit 1; }
+          done
+      - name: Prepare and build the drivers
+        run: |
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" modules_prepare
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" drivers/gpu/drm/panel/panel-td4160-hx.o ||
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" M=drivers/gpu/drm/panel modules
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" drivers/input/touchscreen/ovt-tcm-spi.o ||
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" M=drivers/input/touchscreen modules
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" drivers/power/supply/extcon-charger-detect.o drivers/power/supply/bq2415x_charger.o ||
+          make -C kernel ARCH=arm64 LLVM=1 -j"$(nproc)" M=drivers/power/supply modules
+          ls -l kernel/drivers/gpu/drm/panel/panel-td4160-hx.o kernel/drivers/input/touchscreen/ovt-tcm-spi.o kernel/drivers/power/supply/extcon-charger-detect.o
+      - name: Verify the package sources that have URLs
+        run: |
+          var() { ( . "$1"; eval "printf '%s\n' \"\${$2}\"" ); }
+          sha() { sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' "$1" | sed -n "${2:-1}p"; }
+          source_url() { var "$1" source | sed -n "${2:-1}p" | sed 's/^[ \t]*//; s/^[^:]*::\(.*\)$/\1/'; }
+          fetch() { curl -sSLf -o /tmp/source.tar.gz "$1"; }
+          compare() {
+            got=$(sha512sum /tmp/source.tar.gz | cut -d' ' -f1)
+            echo "$1"; echo "  want $2"; echo "  got  $got"
+            [ "$got" = "$2" ] || { echo "  does not match the APKBUILD"; exit 1; }
+          }
+          check() { fetch "$1" && compare "$1" "$2"; }
+          P="$GITHUB_WORKSPACE/pmaports/device/testing/u-boot-infinix-x6525/APKBUILD"
+          check "$(var "$P" url)/archive/$(var "$P" _commit).tar.gz" "$(sha "$P")"
+          P="$GITHUB_WORKSPACE/pmaports/device/testing/firmware-infinix-x6525/APKBUILD"
+          url=$(source_url "$P")
+          [ -n "$url" ] || { echo "firmware: no source= URL in $P"; exit 1; }
+          if fetch "$url"; then compare "$url" "$(sha "$P")"; else echo "firmware: $url is not published yet"; fi
+          url=$(source_url "$P" 2)
+          [ -n "$url" ] || { echo "firmware: no second source= URL in $P"; exit 1; }
+          check "$url" "$(sha "$P" 2)"
+      - name: Check the ROM's own kernel config takes our symbols
+        run: |
+          cd kernel
+          cp "$GITHUB_WORKSPACE"/pmaports/device/testing/linux-postmarketos-unisoc-ums9230/config-postmarketos-unisoc-ums9230.aarch64 .config
+          make ARCH=arm64 olddefconfig
+          for sym in CONFIG_DRM_PANEL_TD4160_HX CONFIG_TOUCHSCREEN_OVT_TCM_SPI \
+                     CONFIG_CHARGER_EXTCON_DETECT CONFIG_CHARGER_BQ2415X \
+                     CONFIG_SERIAL_SPRD CONFIG_VL53L0X_I2C; do
+            grep -qE "^${sym}=(y|m)$" .config || { echo "$sym did not survive olddefconfig in the ROM's kernel config"; exit 1; }
+          done
+          echo "the ROM's kernel config takes all six"
+      - name: Upload what was built
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x6525-build
+          path: |
+            kernel/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dtb
+            kernel/drivers/gpu/drm/panel/panel-td4160-hx.o
+            kernel/drivers/input/touchscreen/ovt-tcm-spi.o
+            kernel/drivers/power/supply/extcon-charger-detect.o
+            kernel/.config
+          if-no-files-found: warn
+
+  uboot:
+    runs-on: namespace-profile-main
+    timeout-minutes: 30
+    env:
+      UBOOT_REPO: https://codeberg.org/ums9230-mainline/u-boot
+    steps:
+      - name: Checkout the port
+        uses: actions/checkout@v4
+      - name: Checkout the U-Boot fork
+        run: git clone --depth 1 --branch ums9230 "$UBOOT_REPO" uboot-src
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bc bison build-essential flex gcc-aarch64-linux-gnu libssl-dev
+      - name: Apply the board
+        run: ./tools/apply-uboot-overlay.sh uboot-src
+      - name: Build
+        run: |
+          make -C uboot-src ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- infinix-x6525_defconfig
+          make -C uboot-src ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+          ls -l uboot-src/u-boot.bin uboot-src/u-boot
+      - name: Upload u-boot.bin
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x6525-uboot
+          path: uboot-src/u-boot.bin
+          if-no-files-found: warn
+
+  rom:
+    runs-on: namespace-profile-main;container.privileged=true
+    timeout-minutes: 240
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends kpartx kmod util-linux procps parted e2fsprogs
+      - name: Loop devices
+        run: |
+          set -eux
+          sudo modprobe loop 2>&1 || echo "modprobe loop: not available (may already be built-in)"
+          [ -e /dev/loop-control ] || sudo mknod -m 660 /dev/loop-control c 10 237 2>/dev/null || true
+          for i in $(seq 0 15); do
+            [ -e "/dev/loop$i" ] || sudo mknod -m 660 "/dev/loop$i" b 7 "$i" 2>/dev/null || true
+          done
+          ls -l /dev/loop* || true
+
+          echo "IyEvYmluL3NoCiMgQ3JlYXRlIG1pc3NpbmcgL2Rldi9sb29wTnBNIG5vZGVzIGZvciBwbWJvb3RzdHJhcC4gRG8gTk9UIHBhcnR4IC11IG9yCiMga3BhcnR4IC1kdiBvbmNlIG5vZGVzIGV4aXN0OiB0aGF0IGludmFsaWRhdGVzIGJpbmQgbW91bnRzIChFTlhJTyBvbiBta2ZzKS4KIyBOZXZlciBkZWxldGUvcmVjcmVhdGUgZXhpc3Rpbmcgbm9kZXMuCndoaWxlIHRydWU7IGRvCiAgZm9yIGxvb3AgaW4gL3N5cy9ibG9jay9sb29wWzAtOV0qOyBkbwogICAgWyAtZCAiJGxvb3AiIF0gfHwgY29udGludWUKICAgIGJhc2U9JChiYXNlbmFtZSAiJGxvb3AiKQogICAgZGV2PSIvZGV2LyRiYXNlIgogICAgWyAtYiAiJGRldiIgXSB8fCBjb250aW51ZQoKICAgICMgQWxyZWFkeSBoYXZlIGJvdGggcGFydGl0aW9ucyAtIGxlYXZlIHRoZW0gYWxvbmUKICAgIGlmIFsgLWIgIi9kZXYvJHtiYXNlfXAxIiBdICYmIFsgLWIgIi9kZXYvJHtiYXNlfXAyIiBdOyB0aGVuCiAgICAgIGNvbnRpbnVlCiAgICBmaQoKICAgICMgT25lLXNob3Qgc2NhbiBpZiBrZXJuZWwgaGFzIG5vIHBhcnRpdGlvbiBjaGlsZHJlbiB5ZXQKICAgIGhhc19zeXM9MAogICAgZm9yIHBhcnQgaW4gIiRsb29wIi8iJGJhc2UicCo7IGRvCiAgICAgIFsgLWUgIiRwYXJ0IiBdICYmIGhhc19zeXM9MSAmJiBicmVhawogICAgZG9uZQogICAgaWYgWyAiJGhhc19zeXMiID0gMCBdOyB0aGVuCiAgICAgIHBhcnR4IC1hICIkZGV2IiAyPi9kZXYvbnVsbCB8fCB0cnVlCiAgICBmaQoKICAgICMgbWtub2Qgb25seSB3aGVuIG1pc3NpbmcKICAgIGZvciBwYXJ0IGluICIkbG9vcCIvIiRiYXNlInAqOyBkbwogICAgICBbIC1lICIkcGFydC9kZXYiIF0gfHwgY29udGludWUKICAgICAgbmFtZT0kKGJhc2VuYW1lICIkcGFydCIpCiAgICAgIFsgLWUgIi9kZXYvJG5hbWUiIF0gJiYgY29udGludWUKICAgICAgbWFqbWluPSQoY2F0ICIkcGFydC9kZXYiKQogICAgICBta25vZCAtbSA2NjAgIi9kZXYvJG5hbWUiIGIgIiR7bWFqbWluJToqfSIgIiR7bWFqbWluIyo6fSIgMj4vZGV2L251bGwgfHwgdHJ1ZQogICAgZG9uZQoKICAgICMgTWFwcGVyIGZhbGxiYWNrIG9ubHkgaWYgc3RpbGwgbWlzc2luZwogICAgaWYgWyAhIC1iICIvZGV2LyR7YmFzZX1wMSIgXSB8fCBbICEgLWIgIi9kZXYvJHtiYXNlfXAyIiBdOyB0aGVuCiAgICAgIGtwYXJ0eCAtYXYgIiRkZXYiIDI+L2Rldi9udWxsIHx8IHRydWUKICAgICAgZm9yIG1hcCBpbiAvZGV2L21hcHBlci8iJGJhc2UicCo7IGRvCiAgICAgICAgWyAtZSAiJG1hcCIgXSB8fCBjb250aW51ZQogICAgICAgIG5hbWU9JChiYXNlbmFtZSAiJG1hcCIpCiAgICAgICAgWyAtZSAiL2Rldi8kbmFtZSIgXSAmJiBjb250aW51ZQogICAgICAgIGxuIC1zZiAiJG1hcCIgIi9kZXYvJG5hbWUiIDI+L2Rldi9udWxsIHx8IHRydWUKICAgICAgZG9uZQogICAgZmkKICBkb25lCiAgc2xlZXAgMC4xCmRvbmUK" | base64 -d | sudo tee /usr/local/bin/ensure-loop-parts >/dev/null
+          sudo chmod +x /usr/local/bin/ensure-loop-parts
+          sudo /usr/local/bin/ensure-loop-parts &
+          echo $! | sudo tee /tmp/ensure-loop-parts.pid
+
+          truncate -s 16M /tmp/loop-test.img
+          LOOPDEV=$(sudo losetup --find --show --partscan /tmp/loop-test.img)
+          echo "attached $LOOPDEV"
+          sudo parted -s "$LOOPDEV" mktable gpt
+          sudo parted -s "$LOOPDEV" mkpart primary ext2 1MiB 8MiB
+          sudo parted -s "$LOOPDEV" mkpart primary 8MiB 100%
+          sudo partprobe "$LOOPDEV" 2>/dev/null || true
+          sudo partx -a "$LOOPDEV" 2>/dev/null || true
+          for n in $(seq 1 80); do
+            [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] && break
+            sleep 0.05
+          done
+          if [ ! -b "${LOOPDEV}p1" ] || [ ! -b "${LOOPDEV}p2" ]; then
+            sudo kpartx -av "$LOOPDEV" || true
+            base=$(basename "$LOOPDEV")
+            for map in /dev/mapper/"$base"p*; do
+              [ -e "$map" ] || continue
+              name=$(basename "$map")
+              [ -e "/dev/$name" ] || sudo ln -sf "$map" "/dev/$name"
+            done
+          fi
+          for n in $(seq 1 40); do
+            [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] && break
+            sleep 0.05
+          done
+          ls -l ${LOOPDEV}* /dev/mapper/$(basename "$LOOPDEV")* 2>/dev/null || true
+          [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] || {
+            echo "::error::need both ${LOOPDEV}p1 and ${LOOPDEV}p2"
+            ls -la /sys/block/$(basename "$LOOPDEV")/ || true
+            exit 1
+          }
+          sudo mkfs.ext2 -F -q "${LOOPDEV}p1"
+          sudo mkfs.ext4 -F -q "${LOOPDEV}p2"
+          echo "both partition nodes usable: ${LOOPDEV}p1 ${LOOPDEV}p2"
+          sudo kpartx -dv "$LOOPDEV" 2>/dev/null || true
+          sudo losetup -d "$LOOPDEV"
+          sudo losetup -D || true
+          echo "this runner can attach loop devices and format p1+p2"
+
+      - name: Get pmbootstrap and pmaports, and add this port's packages
+        run: |
+          git clone -q --depth 1 https://gitlab.postmarketos.org/postMarketOS/pmbootstrap.git /tmp/pmb
+          pip install --break-system-packages -q /tmp/pmb
+          pmbootstrap --version
+          git clone -q --depth 1 https://gitlab.postmarketos.org/postMarketOS/pmaports.git /tmp/pmaports
+          cp -r pmaports/device/testing/device-infinix-x6525 \
+                pmaports/device/testing/linux-postmarketos-unisoc-ums9230 \
+                pmaports/device/testing/u-boot-infinix-x6525 \
+                pmaports/device/testing/firmware-infinix-x6525 \
+                /tmp/pmaports/device/testing/
+          ls /tmp/pmaports/device/testing/ | grep -E "x6525|ums9230"
+
+      - name: Write the config init would have written
+        run: |
+          printf '%s\n' \
+            '[pmbootstrap]' \
+            'device = infinix-x6525' \
+            'kernel = stable' \
+            'ui = phosh' \
+            'service_manager = systemd' \
+            'user = user' \
+            'hostname = x6525' \
+            'timezone = GMT' \
+            'locale = en_US.UTF-8' \
+            'ssh_keys = false' \
+            'boot_size = 512' \
+            'jobs = 4' \
+            'work = /tmp/pmbwork' \
+            > /tmp/pmb.cfg
+          cat /tmp/pmb.cfg
+
+      - name: Build kernel, U-Boot, rootfs and image
+        run: |
+          mkdir -p /tmp/pmbwork
+          python3 -c "import pmb.config; open('/tmp/pmbwork/version', 'w').write(f'{pmb.config.work_version}\n')"
+          cat /tmp/pmbwork/version
+          for attempt in 1 2; do
+            echo "== attempt $attempt =="
+            sudo kpartx -dv /dev/loop0 2>/dev/null || true
+            sudo losetup -D 2>/dev/null || true
+            sudo rm -f /dev/loop0p1 /dev/loop0p2 /dev/installp1 /dev/installp2 2>/dev/null || true
+            if pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y --details-to-stdout \
+                 install --password x6525pmos; then
+              exit 0
+            fi
+            echo "attempt $attempt failed"
+            pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y zap -p 2>/dev/null || true
+          done
+          echo "::error::the build failed twice"
+          exit 1
+
+      - name: Export what to flash
+        run: |
+          pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports --details-to-stdout export
+          mkdir -p /tmp/rom-out
+          cp -rL /tmp/postmarketOS-export/. /tmp/rom-out/
+          python3 -I tools/check-boot-img.py /tmp/rom-out/boot.img 64 || echo "::warning::boot.img failed its sanity check"
+          python3 -I tools/split-disk-image.py /tmp/rom-out/infinix-x6525.img /tmp/rom-out/pmos-boot-fs.img /tmp/rom-out/pmos-root-fs.img
+          B=/tmp/rom-out/pmos-boot-fs.img
+          e2fsck -fy "$B" || [ $? -le 1 ]
+          resize2fs -M "$B"
+          bs=$(dumpe2fs -h "$B" 2>/dev/null | awk '/^Block size/{print $3}')
+          bc=$(dumpe2fs -h "$B" 2>/dev/null | awk '/^Block count/{print $3}')
+          bc=$((bc + 8 * 1048576 / bs))
+          resize2fs "$B" "$bc"
+          truncate -s $((bs * bc)) "$B"
+          e2fsck -fn "$B"
+          ls -l "$B"
+          python3 -I tools/check-boot-fs.py /tmp/rom-out/pmos-boot-fs.img || echo "::warning::boot fs check failed"
+          ls -la /tmp/rom-out/
+
+      - name: Upload it
+        uses: actions/upload-artifact@v4
+        with:
+          name: x6525-rom
+          path: /tmp/rom-out/
+          if-no-files-found: error
+
+  firmware:
+    runs-on: namespace-profile-main
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.run_firmware == 'true' || github.event.inputs.run_firmware == true)
+    steps:
+      - uses: actions/checkout@v4
+      - name: The GitHub CLI
+        run: |
+          command -v gh || { sudo apt-get update && sudo apt-get install -y gh; }
+          gh --version
+      - name: Check the tarball is the image the package expects
+        run: |
+          cd firmware
+          mkdir -p /tmp/fw-committed
+          tar -xzf firmware-infinix-x6525-1.tar.gz -C /tmp/fw-committed
+          cmp /tmp/fw-committed/hdl_firmware_01.img hdl_firmware_01.img
+          echo "committed tarball contains the same hdl_firmware_01.img as the tree"
+          want=$(sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' ../pmaports/device/testing/firmware-infinix-x6525/APKBUILD | head -1)
+          got=$(sha512sum firmware-infinix-x6525-1.tar.gz | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "tarball sha512 $got does not match the APKBUILD's $want"; exit 1; }
+          echo "and matches the firmware APKBUILD sha512"
+          python3 -I ../tools/check-hdl-image.py hdl_firmware_01.img | tail -1
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.event.inputs.tag || 'firmware-v1' }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists here, nothing to do"
+            exit 0
+          fi
+          gh release create "$tag" --target "$GITHUB_REF_NAME" \
+            --title "X6525 touch firmware (hdl_firmware_01.img)" \
+            --notes "OmniVision TCM HDL image for Infinix X6525 touch controller." \
+            firmware/firmware-infinix-x6525-1.tar.gz
