@@ -56,7 +56,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: namespace-profile-main
+    runs-on: namespace-profile-pmos-smart
     timeout-minutes: 60
     steps:
       - name: Checkout the port
@@ -241,7 +241,7 @@ jobs:
           if-no-files-found: warn
 
   uboot:
-    runs-on: namespace-profile-main
+    runs-on: namespace-profile-pmos-smart
     timeout-minutes: 30
     env:
       UBOOT_REPO: https://codeberg.org/ums9230-mainline/u-boot
@@ -270,7 +270,7 @@ jobs:
           if-no-files-found: warn
 
   rom:
-    runs-on: namespace-profile-main;container.privileged=true
+    runs-on: namespace-profile-pmos-smart;container.privileged=true
     timeout-minutes: 240
     if: github.event_name == 'workflow_dispatch'
     steps:
@@ -413,7 +413,7 @@ jobs:
           if-no-files-found: error
 
   firmware:
-    runs-on: namespace-profile-main
+    runs-on: namespace-profile-pmos-smart
     if: github.event_name == 'workflow_dispatch' && (github.event.inputs.run_firmware == 'true' || github.event.inputs.run_firmware == true)
     steps:
       - uses: actions/checkout@v4
