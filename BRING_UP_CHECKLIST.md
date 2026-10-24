@@ -816,6 +816,18 @@ dmesg | grep -iE 'sensor|ov8856|hi1336|s5k3l6|ov13b10|gc08a3'
 # afterwards, back in pmOS: reflash the U-Boot boot.img to boot_a (FIRST_BOOT.md)
 ```
 
+If the stock system is running (root) instead of booting it later, the identification is one
+property away. Open the Camera app once so the camera HAL has run, then:
+
+```sh
+getprop vendor.cam.sensor.slot.info
+getprop persist.vendor.cam.sensor.info
+getprop persist.vendor.cam.sensor.tuning.list
+ls -lR /mnt/vendor/productinfo/otpdata
+dmesg | grep -iE 'sensor|ov8856|gc08a3|hi1336|s5k3l6|ov13b10|camsys|isp'
+cat /proc/cmdline; ls -l /dev/block/by-name
+```
+
 ### 5.2 Cellular (modem)
 
 The mainline tree already has the modem stack, and the ROM config builds it:
@@ -843,6 +855,17 @@ Missing pieces, in order:
    ModemManager is already installed by the UI and can drive an AT port. Whether the Unisoc LTE
    modem initialises on mainline has never been tried - that is the open question, and it needs the
    images from (1) to answer.
+
+With the stock system running (root), the modem side is also readable directly:
+
+```sh
+dmesg | grep -iE 'modem|sipc|rmb|wwan|sim|imei'
+getprop | grep -iE 'modem|radio|imei'
+ls -l /dev/block/by-name
+find /vendor /odm /mnt/vendor -iname 'l_*.bin' -o -iname '*modem*.bin' 2>/dev/null | head -40
+# and the images themselves (adb pull /sdcard/modem.img from the host afterwards):
+dd if=/dev/block/by-name/modem of=/sdcard/modem.img bs=4M
+```
 
 To get both datasets to the host (from the host, over the USB link; the login is in README.md):
 
