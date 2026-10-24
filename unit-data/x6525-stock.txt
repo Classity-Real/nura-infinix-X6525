@@ -1,0 +1,60 @@
+X6525 stock-system data
+
+Fill in each section and commit this file. Partial is fine - one section is
+already useful. How to add it is in README.md next to this file.
+
+======================================================================
+## identity
+Run (root):
+  cat /proc/cmdline
+  getprop ro.product.device
+  getprop ro.build.fingerprint
+  getprop ro.boot.boot_devices
+
+<PASTE HERE>
+
+======================================================================
+## camera: identified sensors
+Open the Camera app once, then run (root):
+  getprop vendor.cam.sensor.slot.info
+  getprop persist.vendor.cam.sensor.info
+  getprop persist.vendor.cam.sensor.tuning.list
+  ls -lR /mnt/vendor/productinfo/otpdata
+  dmesg | grep -iE 'sensor|ov8856|gc08a3|hi1336|s5k3l6|ov13b10|camsys|isp'
+
+<PASTE HERE>
+
+======================================================================
+## partitions
+Run (root):
+  ls -l /dev/block/by-name
+
+<PASTE HERE>
+
+======================================================================
+## modem / cellular
+Run (root):
+  dmesg | grep -iE 'modem|sipc|rmb|wwan|sim|imei'
+  getprop | grep -iE 'modem|radio|imei'
+  ls -l /vendor/lib/modules | grep -iE 'modem|sipc|rmb'
+  find /vendor /odm /mnt/vendor -iname 'l_*.bin' -o -iname '*modem*.bin' 2>/dev/null
+
+<PASTE HERE>
+
+======================================================================
+## camera and modem partitions (binary, optional)
+If the images can be copied to the host, put them in unit-data/bin/ (see
+README.md; the GitHub web editor only takes files up to 25 MB, so use git
+push for anything larger):
+
+  dd if=/dev/block/by-name/modem of=/sdcard/modem.img bs=4M
+
+Modem partition size: <PASTE ls -l size>
+Copied to unit-data/bin/modem.img: <yes/no>
+
+======================================================================
+## notes
+Anything else that looks relevant: which Camera app, whether the cameras
+work on stock, whether a SIM is inserted, the carrier.
+
+<PASTE HERE>

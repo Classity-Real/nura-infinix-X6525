@@ -733,6 +733,11 @@ The DTS feeds the amplifier's right input from `HPR_OUT`; an earlier revision ha
 
 ## 5. Camera and cellular: the vendor data, and what is still missing
 
+The outputs collected below go into [`unit-data/x6525-stock.txt`](unit-data/x6525-stock.txt) (or a
+file next to it) in this repository, not into the chat - the phone cannot upload files here, and the
+repository is readable by whoever does the work. `unit-data/README.md` says how to add text (GitHub
+web editor works from the phone) and where binaries such as `modem.img` go.
+
 The vendor kernel source is public: `Bocchi-The-Dev/kernel_transsion_ums9230` (Transsion UMS9230,
 X6525/X6528/...). Its `ums9230-1h10_go-overlay.dts` is the board this port runs (dtbo entry 18), and
 the stock OTA's `/odm/etc/sensor_config.xml` is the camera HAL's slot list. Together they say what
