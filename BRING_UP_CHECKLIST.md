@@ -731,37 +731,120 @@ pactl list short sinks
 The DTS feeds the amplifier's right input from `HPR_OUT`; an earlier revision had both inputs on
 `HPL_OUT` (mono), fixed on 2026-10-24 while chasing this.
 
-## 5. Not on the fast path: camera and cellular
+## 5. Camera and cellular: the vendor data, and what is still missing
 
-Neither is a build-time fix; both need stock-side information first. The stock collector already
-dumps the device tree, V4L2 devices, loaded modules, sensors and dmesg:
+The vendor kernel source is public: `Bocchi-The-Dev/kernel_transsion_ums9230` (Transsion UMS9230,
+X6525/X6528/...). Its `ums9230-1h10_go-overlay.dts` is the board this port runs (dtbo entry 18), and
+the stock OTA's `/odm/etc/sensor_config.xml` is the camera HAL's slot list. Together they say what
+the hardware is; the two things that are per unit rather than per project are noted below.
 
-    sh tools/collect-live.sh            # run on the stock system
+### 5.1 Camera
 
-Then collect what the device tree alone cannot tell us:
+Sockets from the vendor board overlay (`arch/arm64/boot/dts/sprd/ums9230-1h10_go-overlay.dts`):
+
+| vendor node | bus | reg | CSI / phyid | supplies | reset | power-down | other |
+|---|---|---|---|---|---|---|---|
+| `sensor-main` | i2c0 | 0x20 | csi0, phyid 0 | vddcamio, vddcama0, vddcammot | ap_gpio 45 | ap_gpio 47 | `dvdd-gpios` ap_gpio 11 |
+| `sensor-sub` | i2c0 | 0x5a | csi0, phyid 2 | vddcamio, vddcama0, vddcammot | ap_gpio 44 | ap_gpio 46 | `dvdd-gpios` ap_gpio 11 |
+| `sensor-main2` | i2c1 | 0x20 | csi1, phyid 4 | vddcamio, vddcama1, vddcamd0, vddcammot | ap_gpio 41 | ap_gpio 40 | `avdd-gpios` 33, `mot-gpios` 88 |
+| `sensor-sub2` | i2c6 | 0x6e | csi2, phyid 3 | vddcamio, vddcamd1, vddcammot | ap_gpio 114 | - | `avdd-gpios` 130, `mot-gpios` 112 |
+
+There is also a flash controller: `sprd,flash-ocp8137` on i2c5 at 0x63, with torch/preflash/highlight
+on ap_gpio 32/138/139 and sync on 121. The vendor `reg` values are what the vendor kernel's
+`sprd_sensor` I2C driver uses; the sensor models' addresses in the stock HAL differ (see below), so
+treat the table as bus/socket/GPIO wiring, not as the sensor's I2C address.
+
+The stock OTA's `/odm/etc/sensor_config.xml` lists what the HAL expects per camera slot:
+
+- slot 0, rear, 90 deg: `hi1336` (tuning hi1336_1835), `s5k3l6` (1836), `hi1336` (1876), `ov13b10` (1893)
+- slot 1, front, 270 deg: `gc08a3_4lane` (1829), `ov8856_4lane` (1831)
+- slot 2, rear: `fakeserial` (the second rear lens of the SMART 8 is decorative)
+
+So the 13 MP main camera is one of hi1336 / s5k3l6 / ov13b10, and the 8 MP front one of gc08a3 /
+ov8856. **Which one is soldered is per unit**, and nothing in the OTA, the vendor kernel source or the
+mainline tree says which. The stock HAL identifies it at boot by reading chip IDs
+(`vendor.cam.sensor.slot.info`), which is the data we need for the DT.
+
+Mainline support, from the ROM's kernel config:
+
+| sensor | mainline driver | ROM config |
+|---|---|---|
+| ov13b10 | `drivers/media/i2c/ov13b10.c` | `CONFIG_VIDEO_OV13B10=m` (enabled 2026-10-24) |
+| gc08a3 | `drivers/media/i2c/gc08a3.c` | `CONFIG_VIDEO_GC08A3=m` (enabled 2026-10-24) |
+| ov8856 | `drivers/media/i2c/ov8856.c` | `CONFIG_VIDEO_OV8856=m` (already) |
+| hi1336 | none | - (the vendor's userspace HAL driver `sensor_drv/classic/Hynix/hi1336_*` has the register/mode tables if it has to be ported) |
+| s5k3l6 | none | - (same, `sensor_drv/classic/Samsung/s5k3l6*`) |
+
+The SoC side is done: `&camsys` (CSI/DCAM, `sprd,ums9230-camsys`) and the ISP node exist in the
+mainline dtsi, and the mainline reeder board DTS shows the binding pattern - `&camsys` ports with
+`data-lanes` and sensor endpoints, sensors as I2C subdevs with `dovdd`/`avdd`/`dvdd`, reset-gpios,
+`xvclk` at 24 MHz from `CLK_SENSOR0`/`CLK_SENSOR1`, and `rotation`/`orientation`. The camera rails
+(`vddcamio`, `vddcama0/1`, `vddcamd0/1`, `vddcammot`) are already defined in the mainline
+`sc2730.dtsi`.
+
+What is left is the board DT with the fitted sensors. To finish it, identify them on the phone. Try
+the per-unit partitions first (they may name the modules; they also hold the modem NV for 5.2):
 
 ```sh
-ls -l /vendor/lib/modules > modules.txt
-ls -l /vendor/firmware /vendor/firmware_mnt/image > firmware.txt 2>&1
-ls -l /vendor/etc/camera > camera-etc.txt 2>&1
-ls -l /dev/block/by-name > by-name.txt
-dmesg | grep -iE 'camera|sensor|camsys|isp|modem|sipc|rmb|wwan' > dmesg-radio-camera.txt
-getprop | grep -iE 'camera|modem|radio' > props.txt
+ls -l /dev/disk/by-partlabel/ > /tmp/partitions.txt
+sudo mkdir -p /mnt/persist /mnt/productinfo
+sudo mount -o ro /dev/disk/by-partlabel/persist /mnt/persist
+sudo mount -o ro /dev/disk/by-partlabel/productinfo /mnt/productinfo
+sudo find /mnt/persist /mnt/productinfo -maxdepth 4 > /tmp/unit-data.txt 2>&1
+sudo grep -rila -E 'ov8856|gc08a3|hi1336|s5k3l6|ov13b10' /mnt/persist /mnt/productinfo \
+    >> /tmp/unit-data.txt 2>&1
 ```
 
-Why each matters:
+If that does not name a sensor, the stock system's camera HAL log does. The stock kernel is still in
+`boot_b` (the port only wrote `boot_a`); copying it back and booting it once shows the sensors the
+HAL identified. Treat pmOS' userdata as lost: Android cannot read that filesystem and will fail to mount it (or
+offer to format it). The pmOS image is flashed again afterwards, so do this only if the partition
+route failed, and keep the UART or fastboot within reach for the way back:
 
-- **camera**: the sensor compatible strings and the vendor camera nodes decide whether a mainline
-  sensor driver fits; then come the reg/clock/lane details and a userspace ISP path. The kernel
-  already builds `VIDEO_SPRD_CAMSYS` and `VIDEO_SPRD_ISP`; nothing has bound them.
-- **cellular**: the modem firmware and NV data, plus the modem/SIPC reserved-memory nodes, are what
-  the remoteproc needs. The kernel builds `SPRD_MODEM_REMOTEPROC`, `SPRD_PMSYS_REMOTEPROC`, SIPC and
-  `RPMSG_WWAN_CTRL`/`RPMSG_WWAN_NET`, but nothing loads a modem image or talks to it from userspace
-  yet.
+```sh
+# on pmOS, root; both images are the stock boot images
+sudo dd if=/dev/disk/by-partlabel/boot_b of=/tmp/boot-stock.img bs=4M
+sudo dd if=/tmp/boot-stock.img of=/dev/disk/by-partlabel/boot_a bs=4M conv=fsync
+reboot
+# on stock Android (root shell / adb):
+getprop vendor.cam.sensor.slot.info
+dmesg | grep -iE 'sensor|ov8856|hi1336|s5k3l6|ov13b10|gc08a3'
+# afterwards, back in pmOS: reflash the U-Boot boot.img to boot_a (FIRST_BOOT.md)
+```
 
-The single biggest shortcut for both is the vendor kernel source, if Infinix/Transsion published it
-(their opensource portal): it contains the camera sensor drivers and the modem/rmb stack as they
-were actually built.
+### 5.2 Cellular (modem)
+
+The mainline tree already has the modem stack, and the ROM config builds it:
+`CONFIG_SPRD_MODEM_REMOTEPROC=m`, `CONFIG_SPRD_PMSYS_REMOTEPROC=m`, `CONFIG_RPMSG=m`,
+`CONFIG_RPMSG_WWAN_CTRL=m`, `CONFIG_RPMSG_WWAN_NET=m`, `CONFIG_WWAN=m`.
+`drivers/remoteproc/sprd_modem.c` requests six images: `sprd/l_modem.bin`, `sprd/l_deltanv.bin`,
+`sprd/l_fixnv.bin`, `sprd/l_runtimenv.bin`, `sprd/l_gdsp.bin`, `sprd/l_ldsp.bin`. The mainline
+`ums9230.dtsi` has the `modem@65003400` and `pmsys` nodes (disabled) with the SIPC mailbox, reserved
+memory regions and power domains; the reeder board DTS enables `&modem` and `&modem_dai`.
+
+Missing pieces, in order:
+
+1. **The images and the unit's NV.** They are not in the OTA; they are the phone's `modem` (and
+   `nvdata`/`prodnv`) partitions, and `l_fixnv.bin` carries the IMEI. Nothing can register without
+   them. Dump them from pmOS:
+   ```sh
+   sudo dd if=/dev/disk/by-partlabel/modem of=/tmp/modem.img bs=4M
+   gzip -1 /tmp/modem.img
+   ls -l /tmp/modem.img.gz
+   ```
+   (Check `/tmp/partitions.txt` first - the label may differ; `nvdata`/`prodnv` are worth dumping too.)
+2. **The DT**: enable `&modem` and `&pmsys` in the board DTS (the SoC nodes and regions are already
+   there), and package the images under `/lib/firmware/sprd/`.
+3. **Userspace**: `rpmsg_wwan_ctrl` exposes the AT/control port and `rpmsg_wwan_net` the data port;
+   ModemManager is already installed by the UI and can drive an AT port. Whether the Unisoc LTE
+   modem initialises on mainline has never been tried - that is the open question, and it needs the
+   images from (1) to answer.
+
+To get both datasets to the host (from the host, over the USB link; the login is in README.md):
+
+```sh
+scp user@172.16.42.1:/tmp/partitions.txt /tmp/unit-data.txt /tmp/modem.img.gz .
+```
 
 ## 6. Waydroid (Android container)
 
