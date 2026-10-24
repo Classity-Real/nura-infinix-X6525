@@ -74,5 +74,56 @@ https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/186e3e0f21e12ffa194c
 `.github/workflows/firmware-release.yml` can also put a versioned copy on this repository's releases,
 for a stable link to quote; nothing depends on it.
 
-The image is `proprietary` vendor firmware, which is why the device package only *recommends* this
-package: a ROM built without it boots and simply has no touchscreen.
+The image is `proprietary` vendor firmware, which is why the device package depends on it: without
+the touch firmware the controller cannot run at all.
+
+# Wi-Fi, Bluetooth and GNSS firmware
+
+`firmware-infinix-x6525-wcn-3.tar.gz` holds everything the WCN block needs. The three binaries that
+are not generated here come off the stock ROM's ODM partition:
+
+```
+/odm/firmware/wcnmodem.bin          1258536 bytes  sprd/wcnmodem.bin
+/odm/firmware/wifi_board_config.ini                -> sprd/wifi_board_config.bin
+/odm/firmware/bt_configure_pskey.ini               -> sprd/bt_config_pskey.bin
+/odm/firmware/bt_configure_rf.ini                  -> sprd/bt_config_rf.bin
+```
+
+- `wcnmodem.bin` is the WCN subsystem image: `sprd_wcn` (remoteproc) loads it, and its BT and GNSS
+  cores run from it. It is also the one name the device tree's `btwf` child names.
+- `wifi_board_config.bin` is `tools/wifi-ini2bin.py`'s output: `sc23xx_wlan` requests it and sends
+  it to the chip as four CRC-framed sections. The converter reproduces the stock
+  `sprd_wlan_combo.ko`'s `g_config_table` layout, so the bytes are the ones the stock driver would
+  have sent.
+- `bt_config_pskey.bin` (160 bytes) and `bt_config_rf.bin` (252 bytes) are `tools/bt-ini2bin.py`'s
+  output. `btsprdsipc` sends them as the payloads of HCI 0xfca0 and 0xfca2 after downloading the
+  BD address into the pskey struct at offset 20. This is not optional: `btsprdsipc_probe()` requests
+  both files and **fails the probe** if either is missing, so without them there is no HCI device
+  and Bluetooth never appears. The sizes are what the stock INI headers announce
+  (`Total Length=160` / `=252`), and the field tables were cross-checked against the marlin3 tables
+  in `device-bsp-s19mps`'s `convert_ini.py` (Jolla C2, the same WCN block); both converters produce
+  identical bytes for these INIs.
+
+The tarball rebuilds byte for byte from a staging directory `sprd/` holding exactly those four files:
+
+```sh
+cd firmware
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' -cf - sprd \
+    | gzip -n -9 > firmware-infinix-x6525-wcn-3.tar.gz
+```
+
+The package installs them as `/lib/firmware/sprd/...`, which is the path the drivers request
+(`sprd/wcnmodem.bin`, `sprd/wifi_board_config.bin`, `sprd/bt_config_pskey.bin`,
+`sprd/bt_config_rf.bin`). The touch image is separate because its driver asks for
+`postmarketos/sprd/hdl_firmware_01.img` by device-tree `firmware-name`.
+
+## The Bluetooth address
+
+The dtsi's `bluetooth@10` node has `local-bd-address = [00 00 00 00 00 00]` with the comment
+"filled in by bootloader". This port chainloads U-Boot from `boot_a`, and that U-Boot does not patch
+the property, so the HCI core would skip `set_bdaddr()` - the function that sends the two config
+blobs - and the controller would register but never be initialised. Patch 0013 in
+`patches/upstream/` makes the driver fall back to a random, locally administered address in that
+case, so Bluetooth works, but the address (and with it pairing records) changes on every boot. A
+stable address needs the bootloader (or a per-device DTS) to supply one; until then this is a known
+limitation, not a configuration error.
