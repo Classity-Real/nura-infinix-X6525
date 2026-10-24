@@ -143,7 +143,7 @@ need "fbdev console (DRM_FBDEV_EMULATION)"       cfg DRM_FBDEV_EMULATION "$CFG"
 need "fbdev console (FRAMEBUFFER_CONSOLE)"       cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "panel node in the DTS"                     dt 'infinix,td4160-hx-panel'
 need "drivers/panel-td4160-hx.c"                 test -f "$ROOT/drivers/panel-td4160-hx.c"
-need "the sprd-drm udev rule matches the driver"  grep -q 'DRIVERS=="sprd-drm\*"' "$DPKG/APKBUILD"
+need "the sprd-drm udev rule finds the card"      grep -q 'DEVPATH=="\*/display-subsystem/drm/card\[0-9\]\*"' "$DPKG/APKBUILD"
 need "60 Hz is the preferred panel mode"          grep -q 'Keep it preferred' "$ROOT/drivers/panel-td4160-hx.c"
 finish
 
