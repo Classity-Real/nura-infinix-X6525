@@ -732,9 +732,10 @@ Once the GUI is stable, remove them one at a time, re-testing each: first `cpuid
 
 ### 3.5 Black screen after U-Boot: the panel is not being driven
 
-Symptom: the U-Boot logo stays on screen, no kernel console and no UI, but SSH over USB works. The
-kernel is running; the panel simply keeps the bootloader's last frame because no kernel client ever
-enables it. The kernel console is on `simpledrm` then, and the panel is not scanning that memory.
+Symptom: after U-Boot the screen either keeps the logo or goes black; no kernel console and no UI,
+but SSH over USB works and the backlight is on. The kernel is running and the sprd DRM stack probes;
+the trouble is that no client drives the panel (or the client that does is rejected). The kernel
+console stays on `simpledrm`, which the panel is not scanning, so it is invisible.
 
 Two things have caused this on this port. Check the first before rebuilding:
 
@@ -786,11 +787,35 @@ journalctl -u plasma-mobile -b --no-pager | tail -60
 ```
 
 If the panel lights up, the udev rule is the bug; the port matches the card's
-`DEVPATH=*/display-subsystem/drm/card*` now. If it still stays on the logo, send the journal and
-the `/sys/class/drm` listing. The by-path link
-`/dev/dri/by-path/platform-display-subsystem-card` exists whether or not the custom one does, so it
-can stand in for the test (point `KWIN_DRM_DEVICES`/`WLR_DRM_DEVICES` at it and restart the
-session).
+`DEVPATH=*/display-subsystem/drm/card*` now. If the screen is still black, the symlink is not the
+remaining problem. The by-path link `/dev/dri/by-path/platform-display-subsystem-card` exists
+whether or not the custom one does, so it can stand in for the test (point
+`KWIN_DRM_DEVICES`/`WLR_DRM_DEVICES` at it and restart the session).
+
+On an image built before the fix, the DEVPATH rule can also be tried without flashing:
+
+```sh
+echo 'ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DEVPATH=="*/display-subsystem/drm/card[0-9]*", SYMLINK+="dri/x6525-primary"' |
+    sudo tee /etc/udev/rules.d/99-x6525-test.rules
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=drm --action=add
+ls -l /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+```
+
+KWin runs in the user session, not in `plasma-mobile.service`'s cgroup, so the system unit's journal
+can look healthy while the compositor has already failed. Look there too:
+
+```sh
+systemctl show plasma-mobile -p Environment
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager | grep -iE 'kwin|plasma|drm|no drm|primary' | tail -80
+journalctl -b --no-pager _UID=10000 | tail -80
+```
+
+If KWin exits with a mode/modeset error, the image still has 90 Hz preferred; use a build with
+patch 0023 (60 Hz preferred) before chasing the compositor further. The manual symlink alone cannot
+fix a rejected 90 Hz mode on the old image.
 
 The 60 Hz test on an older image, for the second cause:
 

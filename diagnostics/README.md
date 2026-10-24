@@ -60,13 +60,31 @@ sudo systemctl restart plasma-mobile
 ```
 
 If the panel lights up, the udev rule is the bug (the next build matches the card's `DEVPATH`).
-If it stays on the logo, continue with the mode test below. The by-path link
+If the screen stays black, the symlink is not the remaining problem. The by-path link
 `/dev/dri/by-path/platform-display-subsystem-card` exists even without the custom one, so it can be
 used for the same test.
 
+KWin runs in the user session, not in `plasma-mobile.service`'s cgroup, so the system unit's journal
+can look healthy while the compositor has already failed. On an old image the DEVPATH rule can also
+be tried without flashing:
+
+```sh
+echo 'ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DEVPATH=="*/display-subsystem/drm/card[0-9]*", SYMLINK+="dri/x6525-primary"' |
+    sudo tee /etc/udev/rules.d/99-x6525-test.rules
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=drm --action=add
+ls -l /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager | grep -iE 'kwin|plasma|drm|no drm|primary' | tail -80
+journalctl -b --no-pager _UID=10000 | tail -80
+```
+
 The other display change is the 90 Hz mode, which the panel driver marked as preferred. If that
-timing is not accepted by this DSI/DPU path, DRM picks it, the modeset fails, and the bootloader logo
-stays while the kernel runs. Force the 60 Hz mode for one boot:
+timing is not accepted by this DSI/DPU path, DRM picks it and the modeset fails; once sprd_drm has
+taken the panel over, that means a black screen (the bootloader logo may stay on some builds).
+Force the 60 Hz mode for one boot:
 
 ```sh
 cp pmos-boot-fs.img test-bootfs-60hz.img
