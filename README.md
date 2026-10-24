@@ -1,6 +1,6 @@
-# pmos-infinix-x6525
+# Nura (PostMarketOS) for Infinix Smart 8
 
-Draft postmarketOS port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
+Configured Nura port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
 (`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
 
 **Status: it boots and it is usable.** U-Boot loads the kernel from the eMMC, the root filesystem
