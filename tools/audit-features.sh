@@ -252,8 +252,10 @@ printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regul
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
 printf '  known-missing  cellular: no modem firmware or userspace stack is packaged; the WCN modem\n'
 printf '                 blob is the Wi-Fi/Bluetooth one, not the cellular modem\n'
-printf '  known-missing  GNSS: CONFIG_GNSS_SPRD=m exists, but gnssmodem.bin is not packaged, the board\n'
-printf '                 DTS has no gnss node, and no userspace stack (gpsd/geoclue) is installed\n'
+printf '  known-missing  GNSS: gnssmodem.bin is packaged and the WCN GNSS child and NMEA driver are\n'
+printf '                 in the tree, but the GNSS SIPC channel rides the pmsys link, whose firmware\n'
+printf '                 (pm_bootcode.bin/pm_sys.bin) is not packaged yet; no gpsd/geoclue is installed\n'
+printf '                 (BRING_UP_CHECKLIST 5.3)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then

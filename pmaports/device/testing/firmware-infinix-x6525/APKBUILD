@@ -2,7 +2,7 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=firmware-infinix-x6525
 pkgver=1
-pkgrel=4
+pkgrel=5
 pkgdesc="Firmware for the Infinix X6525"
 url="https://github.com/Seuj09/pmos-infinix-x6525"
 arch="aarch64"
@@ -30,8 +30,13 @@ _tarball="firmware-infinix-x6525-$pkgver.tar.gz"
 # without them, so no HCI device appears at all. Those two are the stock
 # /odm/firmware/bt_configure_{pskey,rf}.ini laid out by tools/bt-ini2bin.py.
 _wcn="firmware-infinix-x6525-wcn-3.tar.gz"
+# GNSS: drivers/remoteproc/sprd_wcn.c copies this into wcn_gnss_region and
+# drivers/gnss/sprd.c exposes NMEA on /dev/gnss0. It is the stock
+# /odm/firmware/gnssmodem.bin (public vendor_X6525 tree, proprietary/odm).
+_gnss="firmware-infinix-x6525-gnss-1.tar.gz"
 source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_tarball
-	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_wcn"
+	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_wcn
+	$_gnss::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/305bddf68a9017550a5dbd08be22d4848e7e4201/firmware/$_gnss"
 
 package() {
 	install -Dm644 "$srcdir"/hdl_firmware_01.img \
@@ -44,9 +49,12 @@ package() {
 		"$pkgdir"/lib/firmware/sprd/bt_config_pskey.bin
 	install -Dm644 "$srcdir"/sprd/bt_config_rf.bin \
 		"$pkgdir"/lib/firmware/sprd/bt_config_rf.bin
+	install -Dm644 "$srcdir"/sprd/gnssmodem.bin \
+		"$pkgdir"/lib/firmware/sprd/gnssmodem.bin
 }
 
 sha512sums="
 a8ae389d7479ad8b3226cfb3a0d153f5306cdbe6a9b85e31584c5e6c7c34232a06562134ac9b3669fb4a0919e3335a830bd2b7b08a87e132c500d22fe70fa176  $_tarball
 a04ff31bda1efbaed13d4f18dde3a3054549d07ce83dda90af543acf1daed03c815490b6028c1fa2bf0c860db0a5db1ed60fa4d0c82caa6378f3676b527c00e7  $_wcn
+016cd42c7f9911f684f5a4242d0f4d6c4fcc0b73b71d2acd93da418c9677c000fdbe1ea7ac2345793f8ec58d97744e74d498b678faf54a3a14401798bf06cbd8  $_gnss
 "

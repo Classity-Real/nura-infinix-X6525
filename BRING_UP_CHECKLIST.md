@@ -1010,6 +1010,39 @@ To get both datasets to the host (from the host, over the USB link; the login is
 scp user@172.16.42.1:/tmp/partitions.txt /tmp/unit-data.txt /tmp/modem.img.gz .
 ```
 
+### 5.3 GNSS
+
+The GNSS core belongs to the WCN chip, not to a separate device:
+
+- `drivers/remoteproc/sprd_wcn.c` registers the `gnss` child of the WCN node and copies its firmware
+  into `wcn_gnss_region` (0x87600000, 0x1fdc00) when the GNSS remoteproc is booted;
+- `drivers/gnss/sprd.c` binds the `gnss_pipe0` SIPC channel and exposes the NMEA stream as
+  `/dev/gnss0` (`CONFIG_GNSS_SPRD=m`, built);
+- the firmware is `sprd/gnssmodem.bin`, taken from the stock `/odm/firmware/gnssmodem.bin` (the public
+  `vendor_X6525` tree); `firmware-infinix-x6525` installs it since pkgrel 5.
+
+Test, with the phone outdoors or near a window:
+
+```sh
+dmesg | grep -iE 'gnss|wcn'
+ls -l /dev/gnss0
+apk add gpsd gpsd-clients
+gpsd -n /dev/gnss0
+cgps -s        # or gpsmon
+```
+
+The first fix is slow (cold start, almanac and ephemeris from scratch); the NMEA stream appearing at
+all is the milestone.
+
+If `/dev/gnss0` never appears: the `pm_gnss` -> `gnss_pipe0` channel is modelled under the **pmsys**
+SIPC link in the mainline dtsi, and pmsys needs `pm_bootcode.bin` and `pm_sys.bin`. Neither is
+packaged; both come from `pm_sys_a` (p30), but how that partition splits into the two files is not
+known yet. The SIPC framework may create the channel device without the pmsys remote running - if it
+does not, that split is the next step.
+
+Nothing GNSS-related is installed by default; Plasma's location stack uses geoclue, which can read
+from gpsd.
+
 ## 6. Waydroid (Android container)
 
 The kernel prerequisites are mostly in place: `ANDROID_BINDER_IPC=y` with
