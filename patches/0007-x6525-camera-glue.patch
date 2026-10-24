@@ -1,0 +1,33 @@
+diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
+index 51c891d1a..6281dda20 100644
+--- a/drivers/media/i2c/Kconfig
++++ b/drivers/media/i2c/Kconfig
+@@ -800,6 +800,16 @@ config VIDEO_S5K3M5
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called s5k3m5.
+ 
++config VIDEO_S5K3L6
++	tristate "Samsung S5K3L6 sensor support"
++	select V4L2_CCI_I2C
++	help
++	  This is a V4L2 sensor driver for Samsung S5K3L6 13MP raw
++	  camera sensor.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called s5k3l6.
++
+ config VIDEO_S5K3P3
+ 	tristate "Samsung S5K3P3 sensor support"
+ 	depends on I2C
+diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
+index 9c8876e28..b06ca98a9 100644
+--- a/drivers/media/i2c/Makefile
++++ b/drivers/media/i2c/Makefile
+@@ -130,6 +130,7 @@ obj-$(CONFIG_VIDEO_RDACM21) += rdacm21.o
+ obj-$(CONFIG_VIDEO_RJ54N1) += rj54n1cb0c.o
+ obj-$(CONFIG_VIDEO_S5C73M3) += s5c73m3/
+ obj-$(CONFIG_VIDEO_S5K3M5) += s5k3m5.o
++obj-$(CONFIG_VIDEO_S5K3L6) += s5k3l6.o
+ obj-$(CONFIG_VIDEO_S5K3P3) += s5k3p3.o
+ obj-$(CONFIG_VIDEO_S5K5BAF) += s5k5baf.o
+ obj-$(CONFIG_VIDEO_S5K6A3) += s5k6a3.o

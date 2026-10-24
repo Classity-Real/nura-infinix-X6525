@@ -1,13 +1,14 @@
-# Staging for the Infinix X6525: the eleven patches below add this board (device
-# tree, panel, touch and charger drivers, the bindings they need, two binding
-# fixes and a watchdog fix) and are cut against the same tag this package builds from. They
-# come back out once the series is merged upstream - see the port repository's
+# Staging for the Infinix X6525: the fifteen patches below add this board
+# (device tree, panel, touch, charger and camera sensor drivers, the bindings
+# they need, two binding fixes, a watchdog fix and a Bluetooth fallback) and
+# are cut against the same tag this package builds from. They come back out
+# once the series is merged upstream - see the port repository's
 # pmaports/README.md and patches/upstream/. Everything else is unchanged.
 maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=13
+pkgrel=14
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -53,6 +54,8 @@ source="
 	0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 	0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 	0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
+	0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
+	0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 "
 builddir="$srcdir/linux"
 
@@ -83,7 +86,7 @@ package() {
 
 sha512sums="
 3fa24b0720994802fee53b0b343de722a3a4a9db547dff597411e7eb5cb15d63ec62120705b279edc559a78f6c67e1d1ec52adad4d72ffb4a611767e8ccb86f2  linux-v7.2-rc6-ums9230-0.tar.gz
-e680f75ed7165573ebeb8ea306a6e65f26d350964acf7f1a0b764a88c53aca55e2773bef1d10aae6772c929c964f0f588390358d8b9388782f8d8953792339b4  config-postmarketos-unisoc-ums9230.aarch64
+0cac0e1322e5afca78aea568c117d6655aa4eafa2d9d8376441815ca8f6dd19810713b618cd8f6f4ab198276fe7c931184cccaf4a7782bfc074b72bb7ecb2d09  config-postmarketos-unisoc-ums9230.aarch64
 7eaff147db4d2dbaadb287ce72f11d4bbfb0abb70af36aff3001331777627a40e573d680d31079946be0234d3af0be9e7db8fabf4d87e5ce4a03ae4d106b23f3  0001-dt-bindings-vendor-prefixes-add-Infinix-Mobility.patch
 3f035560c3dcf79104266c382fe55bdf0a6ae434eb27f5e44b19430573fc6bff1f99248c6d48d04d6c0834722ddf690efed6f8c6791fd8e704f72708dd86f574  0002-dt-bindings-arm-sprd-add-Infinix-X6525-board.patch
 6cffa0dd1408d8652136fa6d77c63304b54c90e96a10cbf314a40e01bdc41e063fd16852d054f9bda1346a6402c6093f3232a751e40827a2e947f8007e2127e0  0003-arm64-dts-sprd-add-device-tree-for-Infinix-X6525.patch
@@ -97,4 +100,6 @@ c8d4c9191516a0bff476855d8e63dec3fb284142ee27f766d3440c0cc8d4703530dd43680a3d9114
 debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d40677c8992e35bc875acdce9d0afb363f09886830d9925ae5888  0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 775bdfac6606e64ac178376a3e056f53a75e8bb95dcbe2cf0cb1c72164e9a3c007b795185961a3cc871c6a6e713ec785c74a6d2c5d76017f8b3cd1207ed369d4  0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 2ade1accb8ed2725ed05bcc45eef32c34e7b57f456bd0b53c9ed86bfc9b613b2c24175009f12e981bcfa3b9f6a6b3972ff3cb916055e1ed30255ae33c7e92bae  0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
+b427730f2afd756392999209ae7cc0b376971b442b67ecb9cba59739deb41fa245179c91811e1ce24e5dbc573851f84a1864f1e0602bf7608bb6f37f14e2309b  0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
+6e44016f6c756e841b77cd900dcb99948d924c98a330e39db8e659a2df51f68bb49b5c96a20ad86792befeb1ffec5080e047c5fe01bc7a44695bbcc8a9901bb0  0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 "
