@@ -13,11 +13,21 @@ name: rom
 # work while refusing to open the *block* device ("Operation not permitted").
 # Namespace exposes that through the label itself:
 #   ;container.privileged=true;container.host-pid-namespace=true
-# The preflight step below still attaches and detaches a loop device before
-# the build, so a future runner change that loses the capability fails in
-# seconds with a clear message instead of 20 minutes into the build.
+# The preflight step below still attaches, formats and detaches a loop device
+# before the build, so a future runner change that loses the capability fails
+# in seconds with a clear message instead of 20 minutes into the build.
 # The profile itself must be an arm64 machine (an x86 profile would run the
 # whole build under qemu-user, which is what the note above is about).
+#
+# The install is a split one (`pmbootstrap install --split`): pmbootstrap
+# attaches the boot and root filesystem images whole, as two separate loop
+# devices, instead of making a GPT disk image and formatting partitions of a
+# loop device. That is what this device flashes anyway - `cache` and
+# `userdata` each hold a filesystem, not a partition table - and it avoids
+# the partition nodes a container without udev does not get. On the previous,
+# unsplit build the node appeared (the preflight's own watcher made it from
+# sysfs) but `mkfs.ext4 /dev/installp2` still failed with "No such device or
+# address", i.e. the kernel had no live block device at that node's number.
 #
 # `pmbootstrap init` asks its questions on stdin and cannot run unattended, so
 # this writes the config file it would have written (the keys are the Config
@@ -43,20 +53,22 @@ jobs:
           # on, on an image that carries git and python3 and little else.
           # modprobe and losetup (kmod, util-linux) are the loop-device work
           # install does, and ps (procps) is on pmbootstrap's own list.
+          # e2fsprogs is for the preflight below, which formats a loop device
+          # the way the install will.
           #
           # GitHub's ubuntu images have all of this preinstalled, which is why
           # this step did not exist until the runners changed.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            fdisk kpartx kmod util-linux procps
+            e2fsprogs kpartx kmod util-linux procps
 
       - name: Loop devices
         run: |
-          # Building the image means attaching the rootfs .img to a loop device,
-          # which pmbootstrap does from inside its chroot with the host's
-          # /dev/loop* bind-mounted in. So the capability this checks is the
-          # *runner's*, and it is worth ten seconds here instead of twenty
-          # minutes into the build.
+          # Building the image means attaching the boot and root filesystem
+          # images to loop devices, which pmbootstrap does from inside its
+          # chroot with the host's /dev/loop* bind-mounted in. So the
+          # capability this checks is the *runner's*, and it is worth ten
+          # seconds here instead of twenty minutes into the build.
           #
           # losetup -f is not enough of a check. A container can be given the
           # nodes and answer that - it only needs the char device
@@ -65,51 +77,32 @@ jobs:
           # and detach it again, which is the thing that has to work.
           #
           # There is a second failure mode on the Namespace runner even with
-          # the privileged feature: the container has no udev, so after
-          # losetup --partscan the kernel exposes loopXpY in sysfs but nobody
-          # creates /dev/loopXpY. pmbootstrap waits for /dev/loop0p2 and gives
-          # up with "File did not appear". This watcher creates those nodes
-          # from sysfs; it is installed once and restarted with the build.
+          # the privileged feature: the container has no udev, so device nodes
+          # for loop devices are never created. pmbootstrap bind-mounts
+          # whatever /dev/loop* it finds into its chroots and `losetup` opens
+          # those nodes itself, so they have to exist up front.
+          #
+          # Then format the attached device, which is what `install --split`
+          # does to each of its two images (see the header for why the split
+          # install: the partition node of a partitioned loop device was the
+          # thing that could not be opened here).
           sudo modprobe loop 2>&1 || echo "modprobe loop: not available"
           [ -e /dev/loop-control ] || sudo mknod -m 660 /dev/loop-control c 10 237 2>/dev/null || true
           for i in $(seq 0 7); do
             [ -e "/dev/loop$i" ] || sudo mknod -m 660 "/dev/loop$i" b 7 "$i" 2>/dev/null || true
           done
-          sudo tee /usr/local/sbin/loop-part-nodes >/dev/null <<'WATCHER'
-          #!/bin/sh
-          while :; do
-            for sys in /sys/class/block/loop*; do
-              [ -d "$sys" ] || continue
-              base=${sys##*/}
-              for p in "$sys/$base"p*; do
-                [ -e "$p" ] || continue
-                name=${p##*/}
-                [ -e "/dev/$name" ] && continue
-                dev=$(cat "$p/dev" 2>/dev/null) || continue
-                mknod "/dev/$name" b "${dev%%:*}" "${dev##*:}" 2>/dev/null || true
-              done
-            done
-            sleep 0.2
-          done
-          WATCHER
-          sudo chmod +x /usr/local/sbin/loop-part-nodes
-          sudo setsid /usr/local/sbin/loop-part-nodes >/dev/null 2>&1 &
-          # A partition node is the thing the image build actually waits for.
-          truncate -s 8M /tmp/loop-test.img
-          printf 'label: dos\n,4M,L\n' | sudo sfdisk /tmp/loop-test.img >/dev/null
+          truncate -s 16M /tmp/loop-test.img
           dev=$(sudo losetup --find --show --partscan /tmp/loop-test.img) || {
             echo "::error::this runner cannot attach loop devices, which building the image needs"
             exit 1
           }
-          part="${dev}p1"
-          for i in $(seq 1 100); do [ -e "$part" ] && break; sleep 0.1; done
-          if [ ! -e "$part" ]; then
-            echo "::error::loop device attached but $part never appeared (container without udev?)"
-            sudo losetup -D
+          if ! sudo mkfs.ext4 -F -q -L loop-test "$dev"; then
+            echo "::error::loop device attached but formatting it failed (see above)"
+            sudo losetup -d "$dev" || true
             exit 1
           fi
-          sudo losetup -D
-          echo "this runner can attach loop devices and their partition nodes"
+          sudo losetup -d "$dev"
+          echo "this runner can attach loop devices and format them"
 
       - name: Get pmbootstrap and pmaports, and add this port's packages
         run: |
@@ -136,9 +129,10 @@ jobs:
           kernel = stable
           # phosh: the GUI milestone. postmarketos-ui-phosh brings phosh and
           # phoc, greetd with the greetd-phrog greeter, and the on-screen
-          # keyboard (phosh-osk-stub). It starts on the simpledrm DRM device;
-          # the device package installs a greetd drop-in with
-          # WLR_RENDERER=pixman because there is no GPU firmware packaged yet.
+          # keyboard (phosh-osk-stub). The device package points the session
+          # at the sprd-drm card (panel backlight and 2x scale); phoc picks
+          # its renderer itself (GLES2 through panfrost when it works, else
+          # pixman), so nothing pins WLR_RENDERER here.
           ui = phosh
           # Pin the init system: it must not change as a side effect of the UI
           # package's APKBUILD options. phosh defaults to systemd, and systemd
@@ -165,11 +159,12 @@ jobs:
           python3 -c "import pmb.config; open('/tmp/pmbwork/version', 'w').write(f'{pmb.config.work_version}\n')"
           cat /tmp/pmbwork/version
 
-          # Restart the loop-partition node watcher installed by the preflight:
-          # steps do not share processes, and pmbootstrap needs /dev/loopXpY to
-          # appear after its losetup --partscan (the container has no udev).
-          sudo setsid /usr/local/sbin/loop-part-nodes >/dev/null 2>&1 &
-
+          # --split: two filesystem images, infinix-x6525-boot.img and
+          # -root.img, each on its own whole loop device, rather than one
+          # GPT disk image whose partitions have to be formatted. It is also
+          # the shape of the artifact this device flashes (cache and userdata
+          # each hold a filesystem). See the header.
+          #
           # Two attempts. The fetch of the kernel tarball from codeberg failed
           # once with "ssl_client: SSL_read" / "wget: error getting response:
           # Network unreachable" four minutes in, which cost the whole job - and
@@ -179,7 +174,7 @@ jobs:
           for attempt in 1 2; do
             echo "== attempt $attempt =="
             if pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y --details-to-stdout \
-                 install --password x6525pmos; then
+                 install --split --password x6525pmos; then
               exit 0
             fi
             echo "attempt $attempt failed"
@@ -198,10 +193,16 @@ jobs:
           mkdir -p /tmp/rom-out
           cp -rL /tmp/postmarketOS-export/. /tmp/rom-out/
 
-          # The disk image is for a microSD card. U-Boot cannot read a table nested
-          # inside an eMMC partition, so also cut it into its two filesystems, which
-          # can each be flashed into an eMMC partition (FIRST_BOOT.md, "Flashing to
-          # the eMMC"). Byte-for-byte copies: the UUIDs extlinux names survive.
+          # The split install's two images are the filesystems themselves:
+          # pmOS_boot (extlinux.conf, kernel, initramfs, DTB) and pmOS_root.
+          # They are exactly what goes into the eMMC's cache and userdata
+          # partitions (FIRST_BOOT.md, "Flashing to the eMMC"), so give them
+          # the names the docs use. Rename rather than copy: the root image is
+          # gigabytes, and two names for the same bytes would double both the
+          # artifact and the time spent uploading it.
+          mv /tmp/rom-out/infinix-x6525-boot.img /tmp/rom-out/pmos-boot-fs.img
+          mv /tmp/rom-out/infinix-x6525-root.img /tmp/rom-out/pmos-root-fs.img
+
           # boot_a gets U-Boot: the image must be a v4 Android boot image that fits
           # the 64 MiB partition. A warning rather than a failure, like the boot
           # filesystem check: it has not been run against a real pmbootstrap image yet,
@@ -209,8 +210,11 @@ jobs:
           python3 -I tools/check-boot-img.py /tmp/rom-out/boot.img 64 \
             || echo "::warning::boot.img failed its sanity check (see above)"
 
-          python3 -I tools/split-disk-image.py /tmp/rom-out/infinix-x6525.img \
-            /tmp/rom-out/pmos-boot-fs.img /tmp/rom-out/pmos-root-fs.img
+          # A root filesystem that came out of the image build corrupted would
+          # survive the upload unnoticed, and show as the "Inode N seems to
+          # contain garbage" boot this port has already had once. Warn only.
+          e2fsck -fn /tmp/rom-out/pmos-root-fs.img \
+            || echo "::warning::pmos-root-fs.img does not pass a read-only fsck (see above)"
 
           # The boot filesystem comes out of the image at boot_size (512 MiB, the floor
           # pmbootstrap enforces) but holds ~50 MiB. Shrink it, with 8 MiB of slack, so it

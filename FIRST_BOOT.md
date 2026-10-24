@@ -98,9 +98,10 @@ pmbootstrap install --sdcard=/dev/sdX    # /dev/sdX = the card, not a partition
 pmbootstrap flasher flash_kernel         # with the phone in fastboot mode
 ```
 
-Building locally and doing the two writes by hand is equivalent. `<out>` is the extracted `x6525-rom`
-artifact, or `/tmp/postmarketOS-export/` after `pmbootstrap export`; with the phone in fastboot mode
-(`fastboot devices` lists it):
+This route needs a local, *unsplit* install, and does the two writes by hand. The `rom` workflow
+builds a split install instead (two filesystem images for the eMMC partitions, see below), so its
+artifact holds no whole-disk image to copy. Here `<out>` is `/tmp/postmarketOS-export/` after a local
+`pmbootstrap export`; with the phone in fastboot mode (`fastboot devices` lists it):
 
 ```sh
 fastboot flash boot_a <out>/boot.img
@@ -137,9 +138,11 @@ supplies). In the stock dump both rails are *disabled* while no card is in use, 
 bootloader leaves them on, the slot is unpowered when U-Boot looks and the boot ends at the prompt. The
 eMMC has no such problem: its rail is on from power-up, and it is what U-Boot already reads.
 
-U-Boot cannot read a partition table nested inside an eMMC partition, so the whole-disk image cannot go
-there. The `rom` workflow therefore also cuts it into its two filesystems (`tools/split-disk-image.py`),
-which are flashed into two eMMC partitions of their own:
+U-Boot cannot read a partition table nested inside an eMMC partition, so a whole-disk image cannot go
+there. The `rom` workflow therefore builds a *split* install (`pmbootstrap install --split`): the boot
+and root filesystems are formatted as images of their own, with no partition table, and those are
+flashed into two eMMC partitions. That is also why the build needs no loop partition devices, only
+whole ones:
 
 ```sh
 fastboot getvar partition-size:cache          # this phone: p47, 64 MiB (65536 KiB); pmos-boot-fs.img must be no bigger
