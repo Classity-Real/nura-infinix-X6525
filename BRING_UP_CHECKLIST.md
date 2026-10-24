@@ -541,12 +541,15 @@ and `btsprdsipc` loaded and still showed no controller; two separate causes were
    `tools/bt-ini2bin.py` from the stock `/odm/firmware/bt_configure_{pskey,rf}.ini`; pkgrel 2 and
    older shipped only the Wi-Fi/remoteproc blobs.
 2. **The BD address was never set.** The dtsi's `bluetooth@10` node has
-   `local-bd-address = [00 00 00 00 00 00]` with the comment "filled in by bootloader". This port
-   chainloads U-Boot from `boot_a` and that U-Boot does not patch the property, so the HCI core
-   skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the driver sends the two config
-   blobs and enables the controller. Patch 0013 falls back to a random, locally administered
-   address in that case, so the adapter works but its address - and with it the pairings - changes
-   on every boot until the bootloader or a per-device DTS provides a stable one.
+   `local-bd-address = [00 00 00 00 00 00]` with the comment "filled in by bootloader". U-Boot's
+   `ft_board_setup()` does fill it in, from its `bdaddr` environment variable - but that variable is
+   unset in this board's default environment (the common `ums9230.env` reads it from a UFS `prodnv`
+   partition, which this eMMC board does not have), so the property is written all-zero. The HCI
+   core rejects that: it skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the
+   driver sends the two config blobs and enables the controller. Patch 0013 falls back to a random,
+   locally administered address in that case, so the adapter works but its address - and with it the
+   pairings - changes on every boot until the bootloader reads a real one (the `prodnv` partition is
+   the likely place) or a per-device DTS provides it.
 
 On an image built from this tree, check:
 

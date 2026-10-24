@@ -7,8 +7,9 @@ instead). The 5.4 route has its own steps at the end of `NOTES.md`. **Where the 
 boot chain, the rootfs, SSH over the USB link, the touchscreen, Wi-Fi and the Phosh GUI all work
 (Wi-Fi verified 2026-10-21 by pinging, running `apk update`/`upgrade` and installing a package;
 the GUI image booted on 2026-10-24). Bluetooth is fixed in the tree - the transport's two
-configuration blobs are now packaged and kernel patch 0013 supplies a BD address the bootloader does
-not - but has not been exercised on the phone yet; BRING_UP_CHECKLIST.md 2.1 has the checks. Stages
+configuration blobs are now packaged, and kernel patch 0013 supplies a BD address where U-Boot's
+`bdaddr` environment variable is unset and it writes zeros - but has not been exercised on the phone
+yet; BRING_UP_CHECKLIST.md 2.1 has the checks. Stages
 below that have not been exercised describe what the sources say should happen, so a deviation there
 is information, not necessarily a bug in this list.
 

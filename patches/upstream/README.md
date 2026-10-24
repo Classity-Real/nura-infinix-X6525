@@ -18,7 +18,7 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 10 | `dt-bindings: power: supply: sc27xx-fg: allow power-supplies` | bindings/mainline; independent of this board |
 | 11 | `watchdog: sprd_wdt: keep a watchdog the bootloader started fed` | watchdog; independent of this board |
 | 12 | `spi: sprd: fix full-duplex PIO/DMA RX length and interrupt status clear` | the ums9230 tree; needed by the touch driver's reads |
-| 13 | `Bluetooth: btsprdsipc: fall back to a random BD address` | the ums9230 tree; this port's U-Boot does not fill `local-bd-address` |
+| 13 | `Bluetooth: btsprdsipc: fall back to a random BD address` | the ums9230 tree; this board's `bdaddr` env is unset, so U-Boot writes zeros |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
 the series is only consistent once all thirteen are applied, which is what the verification below checks.

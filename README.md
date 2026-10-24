@@ -7,8 +7,9 @@ Draft postmarketOS port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mai
 comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, Wi-Fi is
 functional (verified 2026-10-21 with `ping google.com`, `apk update`/`upgrade` and a package
 install), and the Phosh image boots. Bluetooth was never reaching a controller: the transport was
-missing its two configuration blobs and the bootloader does not fill in the BD address; both are
-fixed in the tree (firmware pkgrel 3 and kernel patch 0013) but not yet exercised on the phone -
+missing its two configuration blobs, and the BD address U-Boot writes is all zeros because its
+`bdaddr` environment variable is unset; both are fixed in the tree (firmware pkgrel 3 and kernel
+patch 0013) but not yet exercised on the phone -
 BRING_UP_CHECKLIST.md 2.1 has the checks.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and

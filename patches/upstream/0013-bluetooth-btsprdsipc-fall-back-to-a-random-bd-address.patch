@@ -3,24 +3,29 @@ From: Seuj09 <jeus110310@gmail.com>
 Date: Sat, 24 Oct 2026 08:33:00 +0000
 Subject: [PATCH] Bluetooth: btsprdsipc: fall back to a random BD address
 
-The ums9230 dtsi leaves local-bd-address all-zero, with a comment that the
-bootloader fills it in. The HCI core rejects an all-zero (or missing)
-property: hci_dev_get_bd_addr_from_property() returns without setting
-public_addr, and because public_addr stays BDADDR_ANY, hci_dev_setup_sync()
-skips set_bdaddr() altogether.
+The ums9230 dtsi leaves local-bd-address for the bootloader to fill in.
+U-Boot's ft_board_setup() does fill it in, from the "bdaddr" environment
+variable - but this board's default environment has no bdaddr (the common
+ums9230 env reads it from a UFS prodnv partition, which this eMMC board
+does not have), and string_to_enetaddr(NULL) zero-fills, so the property
+ends up all-zero after all.
 
-In this driver set_bdaddr() is not just the address setter: it is where the
-controller's pskey and RF configuration blobs are sent (HCI 0xfca0/0xfca2)
-and the controller is enabled, so with a zero property the transport probes,
-registers an HCI device and then never initialises the chip.
+The HCI core rejects an all-zero (or missing) property:
+hci_dev_get_bd_addr_from_property() returns without setting public_addr,
+and because public_addr stays BDADDR_ANY, hci_dev_setup_sync() skips
+set_bdaddr() altogether. In this driver set_bdaddr() is not just the
+address setter: it is where the pskey and RF configuration blobs are sent
+(HCI 0xfca0/0xfca2) and the controller is enabled, so the transport
+probes, registers an HCI device and then never initialises the chip.
 
-This port chainloads U-Boot from boot_a, and that U-Boot does not patch the
-property, so fall back to a random, locally administered address. It is not
-stable across boots - and with it the pairings - until the bootloader or the
-device tree supplies a real address, but Bluetooth works in the meantime.
+Fall back to a random, locally administered address. It is not stable
+across boots - and with it the pairings - until the bootloader reads a
+real address (for example from a btmac file in the device's prodnv
+partition, as the common env does over UFS) or the device tree supplies
+one, but Bluetooth works in the meantime.
 Signed-off-by: Seuj09 <jeus110310@gmail.com>
 ---
- 1 file changed, 23 insertions
+ 1 file changed, 25 insertions
 
 diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
 --- a/drivers/bluetooth/btsprdsipc.c
@@ -42,20 +47,22 @@ diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
  	int ret;
  
  	bts = devm_kzalloc(&rpdev->dev, sizeof(*bts), GFP_KERNEL);
-@@ -185,6 +188,26 @@
+@@ -185,6 +188,28 @@
  	bts->hu.hdev = hdev;
  	bts->ept = rpdev->ept;
  	SET_HCIDEV_DEV(hdev, &rpdev->dev);
 +
 +	/*
-+	 * The dtsi leaves local-bd-address zeroed for the bootloader to fill
-+	 * in. The HCI core rejects an all-zero (or missing) property, leaves
-+	 * public_addr zero and therefore never calls set_bdaddr(), which is
-+	 * where this driver sends the pskey and RF configuration - so without
-+	 * a bootloader that patches the device tree the controller is never
-+	 * initialised. Fall back to a random, locally administered address.
-+	 * It is not stable across boots (nor are the pairings) until the
-+	 * bootloader or the dtsi supplies one.
++	 * The dtsi leaves local-bd-address for the bootloader to fill in.
++	 * U-Boot's ft_board_setup() writes it from its "bdaddr" environment
++	 * variable, which is unset on this board, and string_to_enetaddr(NULL)
++	 * zero-fills - so the property ends up all-zero. The HCI core rejects
++	 * an all-zero (or missing) property, leaves public_addr zero and
++	 * therefore never calls set_bdaddr(), which is where this driver
++	 * sends the pskey and RF configuration - so the controller would
++	 * never be initialised. Fall back to a random, locally administered
++	 * address. It is not stable across boots (nor are the pairings)
++	 * until the bootloader or the dtsi supplies a real one.
 +	 */
 +	if (device_property_read_u8_array(&rpdev->dev, "local-bd-address",
 +					  (u8 *)&addr, sizeof(addr)) ||
