@@ -38,10 +38,16 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # gh release create may invoke git; without a checkout it fails with
+      # "fatal: not a git repository"
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Resolve Build PMOS run ID
         id: run
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           RUN_ID="${{ inputs.run_id }}"
@@ -49,11 +55,10 @@ jobs:
             echo "Using provided run_id=$RUN_ID"
           else
             echo "Looking up latest successful Build PMOS run with x6525-rom..."
-            # workflow file path for Build PMOS
             RUN_ID=$(gh api \
-              "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?status=completed&conclusion=success&per_page=20" \
+              "repos/${GH_REPO}/actions/workflows/ci.yml/runs?status=completed&conclusion=success&per_page=20" \
               --jq '.workflow_runs[].id' | while read -r id; do
-                if gh api "repos/${{ github.repository }}/actions/runs/$id/artifacts" \
+                if gh api "repos/${GH_REPO}/actions/runs/$id/artifacts" \
                      --jq '.artifacts[] | select(.name=="x6525-rom" and .expired==false) | .name' \
                      | grep -qx 'x6525-rom'; then
                   echo "$id"
@@ -68,7 +73,7 @@ jobs:
             echo "Selected run_id=$RUN_ID"
           fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID" \
+          gh api "repos/${GH_REPO}/actions/runs/$RUN_ID" \
             --jq '"run \(.id) \(.html_url) head_sha=\(.head_sha)"'
 
       - name: Download x6525-rom artifact
@@ -92,27 +97,29 @@ jobs:
       - name: Create tagged release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           TAG="${{ inputs.tag }}"
           PRE="${{ inputs.prerelease }}"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "::error::Release tag $TAG already exists"
             exit 1
           fi
 
-          # Flatten files for upload (gh release upload wants paths)
           mapfile -t FILES < <(find rom-out -type f | sort)
           echo "Uploading ${#FILES[@]} file(s) to tag $TAG"
 
           NOTES="postmarketOS image for Infinix X6525 (nura).
 
-          Built by **Build PMOS** (run ${{ steps.run.outputs.run_id }}).
-          Artifact: \`x6525-rom\`.
-          "
+Built by **Build PMOS** (run ${{ steps.run.outputs.run_id }}).
+Artifact: \`x6525-rom\`.
+"
 
-          ARGS=(release create "$TAG"
+          ARGS=(
+            release create "$TAG"
+            --repo "$GH_REPO"
             --title "ROM $TAG"
             --notes "$NOTES"
             --target "${{ github.sha }}"
@@ -122,4 +129,4 @@ jobs:
           fi
 
           gh "${ARGS[@]}" "${FILES[@]}"
-          echo "Release: https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          echo "Release: https://github.com/${GH_REPO}/releases/tag/$TAG"
