@@ -102,17 +102,20 @@ package() {
 	printf '%s\n' sprd_wcn sc23xx_wlan sc23xx_wlan_sipc btsprdsipc \
 		> "$pkgdir"/usr/lib/modules-load.d/x6525-wifi.conf
 
-	# Start BlueZ on boot: Alpine does not enable bluetooth.service, and the
-	# Phosh image would otherwise show "Bluetooth missing" even with a
-	# controller. The unit comes from the bluez dependency above.
+	# Start BlueZ on boot. The image's 90-base.preset enables bluetooth.service
+	# and so does 90-infinix-x6525.preset below; this symlink is belt and
+	# braces for a path where the preset trigger does not run. The unit comes
+	# from the bluez dependency above.
 	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
 	ln -s /usr/lib/systemd/system/bluetooth.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/bluetooth.service
 
-	# The device tree's local-mac-address for the WLAN channel is all zeroes ("filled
-	# in by the bootloader", which this U-Boot does not do), so the interface would
-	# come up with 00:00:00:00:00:00. Give it a random locally administered address,
-	# generated once and kept, as soon as the interface exists.
+	# The device tree's local-mac-address for the WLAN channel is all zeroes
+	# ("filled in by bootloader"); U-Boot fills it from its wifiaddr environment
+	# variable, which is unset on this board, so it stays zero and the interface
+	# would come up with 00:00:00:00:00:00. Give it a random locally
+	# administered address, generated once and kept, as soon as the interface
+	# exists.
 	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-wlan-mac <<'EOF'
 #!/bin/sh
 # usage: x6525-wlan-mac <ifname>
