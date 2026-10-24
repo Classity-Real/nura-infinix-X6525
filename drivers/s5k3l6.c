@@ -970,3 +970,8 @@ static struct i2c_driver s5k3l6_i2c_driver = {
 };
 
 module_i2c_driver(s5k3l6_i2c_driver);
+
+MODULE_AUTHOR("Purism SPC");
+MODULE_AUTHOR("Vincent Cloutier <vincent@cloutier.co>");
+MODULE_DESCRIPTION("Samsung S5K3L6 camera sensor driver");
+MODULE_LICENSE("GPL");
