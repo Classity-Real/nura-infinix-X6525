@@ -803,15 +803,17 @@ matches Valhall JM as `arm,mali-valhall-jm`. `mali_csffw.bin` belongs to Arm's n
 (G610 and up), not this one - an earlier revision of this note wrongly expected it.
 
 What is needed is already in the tree: `sprd_drm` probing (so the panel/drm device exists), the
-renderer no longer pinned to pixman (wlroots tries GLES2 through Panfrost, then Vulkan, then pixman),
-and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus `mesa-vulkan-panfrost`.
+renderer no longer pinned to pixman (phoc/wlroots and KWin both try GLES2 through Panfrost, then
+Vulkan, then software), and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus
+`mesa-vulkan-panfrost`.
 
 Checks after booting an image with the display switch:
 
 ```sh
 sudo dmesg | grep -iE 'panfrost|mali'
 ls -l /dev/dri/
-journalctl -u greetd -b --no-pager | tail -30
+journalctl -u plasma-mobile -b --no-pager | grep -iE 'opengl|egl|renderer' | tail -20
+journalctl -u greetd -b --no-pager | tail -30     # phosh builds
 ```
 
 ## What to send when asking for help
