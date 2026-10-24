@@ -130,6 +130,9 @@ finish
 
 feature "display (TD4160 HX panel)"
 need "CONFIG_DRM_SPRD=y"                         cfg DRM_SPRD "$CFG"
+# sprd_drm is what probes the panel driver, whose DCS backlight and 68x152 mm
+# physical size give brightness and the automatic 2x Phosh scale.
+need "sprd_drm is not blacklisted"               sh -c "! grep -q 'initcall_blacklist=sprd_drm_init' '$DPKG/kernel-cmdline.conf'"
 need "CONFIG_DRM_PANEL_TD4160_HX=y"              cfg DRM_PANEL_TD4160_HX "$CFG"
 need "fbdev console (DRM_FBDEV_EMULATION)"       cfg DRM_FBDEV_EMULATION "$CFG"
 need "fbdev console (FRAMEBUFFER_CONSOLE)"       cfg FRAMEBUFFER_CONSOLE "$CFG"
@@ -172,6 +175,13 @@ need "wifi_board_config.bin is packaged"         grep -q 'sprd/wifi_board_config
 need "the modules are loaded at boot"            grep -q 'sc23xx_wlan_sipc' "$DPKG/APKBUILD"
 finish
 
+feature "Bluetooth (btsprdsipc over the WCN SIPC link)"
+need "CONFIG_BT_SPRDSIPC=m"                      cfg BT_SPRDSIPC "$CFG"
+need "btsprdsipc is loaded at boot"              grep -q 'btsprdsipc' "$DPKG/APKBUILD"
+need "bluez is a dependency"                     sh -c ". '$DPKG/APKBUILD'; printf '%s\n' \"\$depends\" | grep -qE '(^|[[:space:]])bluez([[:space:]]|\$)'"
+need "bluetooth.service is enabled"              grep -q 'bluetooth.service' "$DPKG/APKBUILD"
+finish
+
 feature "USB networking (the login path)"
 need "CONFIG_USB_MUSB_SPRD=y"                    cfg USB_MUSB_SPRD "$CFG"
 need "CONFIG_TYPEC_SC27XX_PD=y (role switch)"    cfg TYPEC_SC27XX_PD "$CFG"
@@ -212,11 +222,11 @@ finish
 
 echo
 echo "== missing by design (documented, not defects) =="
-printf '  known-missing  Bluetooth: btsprdsipc and the WCN firmware are in the image, but nothing\n'
-printf '                 has exercised the Bluetooth stack on this hardware yet\n'
 printf '  known-missing  cameras: no mainline driver work started\n'
 printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
+printf '  known-missing  cellular: no modem firmware or userspace stack is packaged; the WCN modem\n'
+printf '                 blob is the Wi-Fi/Bluetooth one, not the cellular modem\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then

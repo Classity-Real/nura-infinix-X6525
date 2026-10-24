@@ -531,6 +531,9 @@ Internet over the USB link (docs in README.md) keeps working as before and is th
 
 ### 2.1 Bluetooth (untested)
 
+The device package (pkgrel 17) now loads `btsprdsipc` at boot and enables `bluetooth.service`, so
+an image built from this tree needs none of the manual steps below. On an image without that:
+
 BlueZ is not in the image; with Wi-Fi working it can be installed on the device instead of waiting
 for a rebuild:
 
@@ -614,10 +617,22 @@ shell comes up on greetd; if phoc fails instead, SSH still works and its log say
 What the image gives, and what it will not: greetd-phrog is itself Phosh-based, so the first screen
 is a Phosh-style login asking for `user` / `x6525pmos` with the on-screen keyboard. After that:
 status bar, notifications, home screen/app grid, quick-settings toggles, app windows and the Phosh
-OSK (`phosh-osk-stub`). Expect **slow rendering** (`simpledrm` + `pixman`, no GPU firmware), **no
-cellular** (no modem stack), and unverified brightness/audio/Bluetooth (their drivers exist but
-nothing has exercised them). Internet inside the GUI is still whatever the connected hotspot
-provides.
+OSK (`phosh-osk-stub`).
+
+The kernel command line now enables `sprd_drm` (`initcall_blacklist=sprd_drm_init` removed), which
+is what makes **brightness** work: the panel driver registers the DCS backlight as
+`/sys/class/backlight/td4160` (12-bit, default `0xa5a`). The same driver reports 68x152 mm for the
+720x1612 mode (~269 DPI), so Phosh's automatic output scale should pick 2 and the tiny first-boot
+DPI goes away.
+
+The GUI session is pointed at the real panel rather than the bootloader's simpledrm: a udev rule
+creates `/dev/dri/x6525-primary` for the `sprd-drm` card, and the greetd drop-in sets
+`WLR_DRM_DEVICES` to it. simpledrm stays as the console fallback. If `sprd_drm` fails to probe, no
+symlink appears and phoc cannot start - the console and SSH still work, and `dmesg | grep -iE
+'sprd|dsi|dpu|panel'` shows where it stopped; re-adding the blacklist is the fallback. Expect still
+**slow rendering** (`pixman`, no GPU firmware), **no camera**, and **no cellular** (no modem
+firmware or stack is packaged; the WCN blob is Wi-Fi/Bluetooth only). Internet inside the GUI is
+still whatever the connected hotspot provides.
 
 ### 3.4 Remove the debug cmdline options
 
