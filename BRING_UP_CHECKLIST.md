@@ -640,7 +640,32 @@ Once the GUI is stable, remove them one at a time, re-testing each: first `cpuid
 `cpufreq.off=1` (find which one stalls the CPUs; see FIRST_BOOT.md), then
 `initcall_debug`/`ignore_loglevel`.
 
-## 4. Not on the fast path: camera and cellular
+## 4. Audio
+
+The SC2730 codec, the SPRD platform/machine drivers and the simple amplifier are all modules; the
+sound card only exists once they have bound, so "volume at max, no output" starts with whether the
+card is there at all. `alsa-utils` may need installing (`sudo apk add alsa-utils`).
+
+```sh
+cat /proc/asound/cards
+aplay -l
+lsmod | grep -iE 'snd_soc|sc2730|sprd'
+sudo dmesg | grep -iE 'asoc|snd|sc2730|sprd.*sound|amp'
+wpctl status
+wpctl get-volume @DEFAULT_AUDIO_SINK@
+pactl list short sinks
+```
+
+| Result | Meaning | Next |
+|---|---|---|
+| no card in `/proc/asound/cards` | the machine/codec modules did not bind | send the `dmesg` lines; `sudo modprobe snd-soc-sprd-ums9230` and `sudo modprobe snd-soc-sc2730` to see the error |
+| card exists, and `wpctl` shows a sink at max volume | routing or mixer, not volume | `amixer -c 0 scontrols`, `amixer -c 0 contents \| grep -i -A2 -E 'speaker\|hp'`, then `speaker-test -c2 -t sine` |
+| card and sink, still silence | amplifier enable or codec output | check the amp GPIO (ap_gpio 113) and the DAPM state in `/sys/kernel/debug/gpio` |
+
+The DTS feeds the amplifier's right input from `HPR_OUT`; an earlier revision had both inputs on
+`HPL_OUT` (mono), fixed on 2026-10-24 while chasing this.
+
+## 5. Not on the fast path: camera and cellular
 
 Neither is a build-time fix; both need stock-side information first. The stock collector already
 dumps the device tree, V4L2 devices, loaded modules, sensors and dmesg:
@@ -671,6 +696,31 @@ Why each matters:
 The single biggest shortcut for both is the vendor kernel source, if Infinix/Transsion published it
 (their opensource portal): it contains the camera sensor drivers and the modem/rmb stack as they
 were actually built.
+
+## 6. Waydroid (Android container)
+
+The kernel prerequisites are mostly in place: `ANDROID_BINDER_IPC=y` with
+`binder,hwbinder,vndbinder`, PSI, memcg, user/net/pid namespaces, seccomp, memfd, the dma-buf system
+heap, and FUSE/overlayfs as modules. `ANDROID_BINDERFS=y` was the missing option and is enabled from
+2026-10-24 - Waydroid needs it to create its own binder devices.
+
+What the image does not carry yet: the Waydroid userspace (Alpine edge has `waydroid`,
+`waydroid-systemd`, `waydroid-nftrules`, and `lxc`) and the Android system image, which
+`waydroid init` downloads (needs internet). Graphics: with no GPU firmware, Waydroid falls back to
+software rendering (SwiftShader) - it can run, slowly. Phosh is a Wayland compositor, so Waydroid's
+session can run as a window.
+
+To try it on an image built after the binderfs change:
+
+```sh
+sudo apk add waydroid waydroid-systemd waydroid-nftrules
+sudo waydroid init            # downloads system.img/vendor.img; needs network
+sudo systemctl enable --now waydroid-container
+waydroid session start
+```
+
+If it fails: `sudo waydroid log | tail -50`, `ls /dev/binderfs` (Waydroid mounts it),
+`sudo dmesg | grep -i binder`, and `systemctl status waydroid-container`.
 
 ## What to send when asking for help
 
