@@ -41,7 +41,21 @@ fastboot flash boot_a diagnostics/boot-no-preboot.img
 
 ## If SSH works: the kernel runs, the display does not
 
-Send me these first:
+The newest display change is the 90 Hz mode, which the panel driver marks as preferred. If that
+timing is not accepted by this DSI/DPU path, DRM picks it, the modeset fails, and the bootloader logo
+stays while the kernel runs. Force the 60 Hz mode for one boot first:
+
+```sh
+cp pmos-boot-fs.img test-bootfs-60hz.img
+sh tools/patch-cmdline.sh test-bootfs-60hz.img "video=DSI-1:720x1612@60"
+fastboot flash cache test-bootfs-60hz.img
+```
+
+If kernel messages appear, the 90 Hz timing is the cause; the fix is to make 60 Hz preferred and
+leave 90 Hz as an optional mode. If the connector is not called `DSI-1`, `dmesg | grep -i dsi` names
+it; the same option with that name does the same.
+
+Then send me these:
 
 ```sh
 sudo dmesg | grep -iE 'gpio|hog|panel|td4160|dsi|dpu|drm|backlight|pmsys|sdhci'
