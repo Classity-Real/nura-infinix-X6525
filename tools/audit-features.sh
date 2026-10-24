@@ -242,20 +242,53 @@ need "deviceinfo builds the extlinux config"     grep -q 'generate_extlinux_conf
 need "the u-boot package installs u-boot.bin"    grep -q 'share/u-boot/infinix-x6525' "$UPKG/APKBUILD"
 finish
 
+feature "cameras (rear S5K3L6, front OV8856)"
+need "the S5K3L6 driver patch"                   test -f "$ROOT"/patches/upstream/0014-*.patch
+need "the rear camera DTS patch"                 test -f "$ROOT"/patches/upstream/0015-*.patch
+need "the front camera DTS patch"                test -f "$ROOT"/patches/upstream/0020-*.patch
+need "rear camera node (samsung,s5k3l6)"         dt 'samsung,s5k3l6'
+need "front camera node (ovti,ov8856)"           dt 'ovti,ov8856'
+need "front camera on the 2-lane M port"          dt 'CAMSYS_CSI_M'
+need "CONFIG_VIDEO_S5K3L6=m"                     cfg VIDEO_S5K3L6 "$CFG"
+need "CONFIG_VIDEO_OV8856=m"                     cfg VIDEO_OV8856 "$CFG"
+finish
+
+feature "GNSS, the sensor hub and the pmsys co-processor"
+need "CONFIG_SPRD_PMSYS_REMOTEPROC=m"            cfg SPRD_PMSYS_REMOTEPROC "$CFG"
+need "CONFIG_GNSS_SPRD=m"                        cfg GNSS_SPRD "$CFG"
+need "CONFIG_IIO_SPRD_SHUB=m"                    cfg IIO_SPRD_SHUB "$CFG"
+need "gnssmodem.bin packaged"                     grep -q 'gnssmodem.bin' "$FWPKG/APKBUILD"
+need "pm_bootcode.bin packaged"                  grep -q 'pm_bootcode.bin' "$FWPKG/APKBUILD"
+need "pm_sys copied from pm_sys_a at boot"       grep -q 'pm_sys_a' "$DPKG/APKBUILD"
+need "sprd_pmsys blacklisted until then"         grep -q 'blacklist sprd_pmsys' "$DPKG/APKBUILD"
+need "x6525-pmsys.service enabled"               grep -q 'x6525-pmsys.service' "$DPKG/APKBUILD"
+finish
+
+feature "cellular (the modem remoteproc)"
+need "CONFIG_SPRD_MODEM_REMOTEPROC=m"            cfg SPRD_MODEM_REMOTEPROC "$CFG"
+need "&modem enabled in the board DTS"           grep -q '&modem {' "$DTS"
+need "the six l_* images extracted at boot"      grep -q 'l_modem_a l_modem.bin' "$DPKG/APKBUILD"
+need "sprd_modem blacklisted until then"         grep -q 'blacklist sprd_modem' "$DPKG/APKBUILD"
+finish
+
 echo
 echo "== missing by design (documented, not defects) =="
-printf '  known-missing  cameras: the rear S5K3L6 is described and driven (s5k3l6 driver and\n'
-printf '                 board nodes, patches 14/15); the front OV8856 is not described yet,\n'
-printf '                 and there is no camera userspace (no libcamera sprd pipeline, no 3A)\n'
-printf '                 (BRING_UP_CHECKLIST 5.1)\n'
-printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
+printf '  known-missing  cameras: the rear S5K3L6 and front OV8856 are described and driven\n'
+printf '                 (patches 14/15 and 20); the flash controller (OCP8137/AW36515), the\n'
+printf '                 focus motor and all camera userspace (no libcamera sprd pipeline, no 3A)\n'
+printf '                 are absent (BRING_UP_CHECKLIST 5.1, ROADMAP.md)\n'
+printf '  known-missing  OTG host: the bq2415x boost is a vbus-supply now (patches 16/17), but a\n'
+printf '                 host device has not been tested (BRING_UP_CHECKLIST 4.5)\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
-printf '  known-missing  cellular: no modem firmware or userspace stack is packaged; the WCN modem\n'
-printf '                 blob is the Wi-Fi/Bluetooth one, not the cellular modem\n'
-printf '  known-missing  GNSS: gnssmodem.bin is packaged and the WCN GNSS child and NMEA driver are\n'
-printf '                 in the tree, but the GNSS SIPC channel rides the pmsys link, whose firmware\n'
-printf '                 (pm_bootcode.bin/pm_sys.bin) is not packaged yet; no gpsd/geoclue is installed\n'
-printf '                 (BRING_UP_CHECKLIST 5.3)\n'
+printf '  known-missing  cellular: the images are extracted from the unit at boot, but the Unisoc LTE\n'
+printf '                 stack has never initialised on mainline; SIM rails are not described\n'
+printf '                 (BRING_UP_CHECKLIST 5.2)\n'
+printf '  known-missing  GNSS and the sensor hub: both ride the pmsys SIPC link. The bootcode is\n'
+printf '                 packaged and pm_sys is extracted at boot, but neither has run on the phone;\n'
+printf '                 no gpsd/geoclue is installed (BRING_UP_CHECKLIST 5.3, ROADMAP.md)\n'
+printf '  known-missing  sensors: the VL53L0X node is unverified, the sensor-hub parts are not\n'
+printf '                 identified, and the fingerprint reader has no mainline driver\n'
+printf '                 (ROADMAP.md)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then
