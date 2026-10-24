@@ -22,10 +22,13 @@ Fall back to a random, locally administered address. It is not stable
 across boots - and with it the pairings - until the bootloader reads a
 real address (for example from a btmac file in the device's prodnv
 partition, as the common env does over UFS) or the device tree supplies
-one, but Bluetooth works in the meantime.
+one, but Bluetooth works in the meantime. The address is stored least
+significant byte first, as the binding specifies, so the locally
+administered bit is set on the last byte (the first octet of the printed
+address) and the multicast bit cleared there.
 Signed-off-by: Seuj09 <jeus110310@gmail.com>
 ---
- 1 file changed, 25 insertions
+ 1 file changed, 30 insertions
 
 diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
 --- a/drivers/bluetooth/btsprdsipc.c
@@ -47,7 +50,7 @@ diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
  	int ret;
  
  	bts = devm_kzalloc(&rpdev->dev, sizeof(*bts), GFP_KERNEL);
-@@ -185,6 +188,28 @@
+@@ -185,6 +188,33 @@
  	bts->hu.hdev = hdev;
  	bts->ept = rpdev->ept;
  	SET_HCIDEV_DEV(hdev, &rpdev->dev);
@@ -68,7 +71,12 @@ diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
 +					  (u8 *)&addr, sizeof(addr)) ||
 +	    !bacmp(&addr, BDADDR_ANY)) {
 +		get_random_bytes(&addr, sizeof(addr));
-+		((u8 *)&addr)[0] = (((u8 *)&addr)[0] & 0xfc) | 0x02;
++		/* The binding stores local-bd-address least significant byte
++		 * first, so the first octet of the printed address - where the
++		 * multicast and locally administered bits live - is the last
++		 * byte. Setting them on byte 0 would leave it a real multicast
++		 * address half the time. */
++		((u8 *)&addr)[5] = (((u8 *)&addr)[5] & 0xfc) | 0x02;
 +		dev_warn(&rpdev->dev, "no local-bd-address, using %pM\n",
 +			 &addr);
 +	}
