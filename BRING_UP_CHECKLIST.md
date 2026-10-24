@@ -740,6 +740,19 @@ dmesg | grep -iE 'mali|gpu|bifrost|valhall' > mali-dmesg.txt
 ls -l /vendor/lib/modules | grep -i mali > mali-modules.txt
 ```
 
+If Android still boots from `super` after restoring the stock `boot_a` backup, the blob can be
+pulled without downloading a multi-GB firmware package (`/vendor` files are normally readable by
+the `shell` user; `adb root` is not needed if they are):
+
+```sh
+adb shell ls -l /vendor/firmware | grep -i mali
+adb pull /vendor/firmware/mali_csffw.bin     # adjust the path to what the listing shows
+adb pull /vendor/firmware_mnt/image          # modem firmware, for the cellular work
+adb pull /vendor/etc/camera                  # camera configs, for the camera work
+```
+
+Then reflash the pmOS `boot_a` and continue.
+
 Once it is packaged under `/lib/firmware/mali_csffw.bin`, no session change is needed: the greetd
 drop-in no longer pins a renderer, and wlroots tries GLES2 (panfrost) first, then Vulkan, then falls
 back to pixman. Checks:
