@@ -178,16 +178,16 @@ branch that is the upstream base plus this port's commits and nothing else:
 
 | Tree | Fork and branch | Tip |
 |---|---|---|
-| kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `2f0f93b0cb27358ee3238eca1c8fd6a212b38a63` |
+| kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `485b4902b6b6c9b1504d588ff14f462111220720` |
 | U-Boot | `github.com/Seuj09/ums9230-mainline-u-boot`, branch `x6525` | `0b7433364843e89af4fdf80166f6e6729994b252` |
 
-The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the eleven patches in `patches/upstream/`, one
+The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the twenty patches in `patches/upstream/`, one
 commit each (verified: the subjects match the patch files one for one and the tree's files are
 byte-identical to `dts/`, `drivers/` and `bindings/`). The U-Boot branch is the fork's `ums9230` plus
 its two board patches. Both were made by `git am`-ing the series, so `git format-patch` from either
 branch regenerates the patches - the branches are the source of truth now, not the patch files.
 The kernel branch is force-updated whenever the series changes (it was, to pick up the renamed
-thermal zones and the ninth patch): patch 9 lets the sprd GPIO binding accept hog nodes, which
+thermal zones and the ninth patch, and again for the front camera): patch 9 lets the sprd GPIO binding accept hog nodes, which
 `charger-en-hog` in our DTS needs - the binding is `additionalProperties: false` without the
 `patternProperties` block that other GPIO bindings carry, so the board failed `dtbs_check` on a
 binding it could not satisfy. That fix is independent of this board and can go upstream on its own.
