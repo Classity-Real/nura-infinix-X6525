@@ -158,6 +158,9 @@ RemainAfterExit=yes
 [Install]
 WantedBy=sysinit.target
 EOF
+	mkdir -p "$pkgdir"/etc/systemd/system/sysinit.target.wants
+	ln -s /usr/lib/systemd/system/x6525-emmc-cacheoff.service \
+		"$pkgdir"/etc/systemd/system/sysinit.target.wants/x6525-emmc-cacheoff.service
 
 	# Belt and braces for the case where the card refuses cache disable: flush
 	# the card's cache after the usual services have stopped but while the
@@ -181,6 +184,9 @@ ExecStop=-/usr/bin/mmc cache flush /dev/mmcblk0
 [Install]
 WantedBy=multi-user.target
 EOF
+	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
+	ln -s /usr/lib/systemd/system/x6525-emmc-flush.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-emmc-flush.service
 
 	# Enabling a unit with a symlink created here does not survive the image
 	# build: pmOS's systemd-apk-trigger runs `systemctl preset` for every
@@ -191,6 +197,10 @@ EOF
 	# and the cache fix never ran on the phone. Preset files are read in name
 	# order and the first matching rule wins (which is why 90-base.preset's
 	# `enable` beats 99-default.preset's `disable *`), so 90-* is early enough.
+	# The symlinks above stay as well: the trigger skips a unit that is both
+	# added and removed in its diff (a modified file), so on an incremental
+	# build where the unit's content changed the preset is not applied and the
+	# package's own symlink is what enables it.
 	# bluetooth.service is here for the same reason: 90-base.preset enables it
 	# today, and this keeps that true if that policy changes.
 	install -Dm644 /dev/stdin \
