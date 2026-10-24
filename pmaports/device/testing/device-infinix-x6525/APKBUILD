@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=21
+pkgrel=22
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -252,11 +252,11 @@ EOF
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-pmsys.service
 
 	# The device tree's local-mac-address for the WLAN channel is all zeroes
-	# ("filled in by bootloader"); U-Boot fills it from its wifiaddr environment
-	# variable, which is unset on this board, so it stays zero and the interface
-	# would come up with 00:00:00:00:00:00. Give it a random locally
-	# administered address, generated once and kept, as soon as the interface
-	# exists.
+	# ("filled in by bootloader"). U-Boot now tries to read the real one from
+	# /wifimac.txt on the prodnv partition; if that file is absent the property
+	# stays zero and the interface would come up with 00:00:00:00:00:00. Give it
+	# a random locally administered address, generated once and kept, only when
+	# the kernel address is still all zero.
 	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-wlan-mac <<'EOF'
 #!/bin/sh
 # usage: x6525-wlan-mac <ifname>
