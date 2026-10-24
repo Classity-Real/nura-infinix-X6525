@@ -60,7 +60,7 @@ jobs:
           # this step did not exist until the runners changed.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            e2fsprogs kpartx kmod util-linux procps
+            cpio e2fsprogs kpartx kmod util-linux procps zstd
 
       - name: Loop devices
         run: |
@@ -240,6 +240,18 @@ jobs:
           python3 -I tools/check-boot-fs.py /tmp/rom-out/pmos-boot-fs.img \
             || echo "::warning::the boot filesystem does not hold what extlinux.conf names (see above)"
           ls -la /tmp/rom-out/
+
+      - name: Audit the artifact
+        run: |
+          # `tools/audit-features.sh --image` checks the built filesystems, not
+          # just the tree: the files the device needs, the extlinux command
+          # line, the password, and - since that is what broke once - whether
+          # the units it installs are actually enabled. pmOS's preset trigger
+          # had disabled the eMMC cache units in every image up to pkgrel 18,
+          # and the build was green each time. The script exits 1 when
+          # something is BROKEN, and the upload below does not run then: a
+          # red audit means there is no artifact worth flashing.
+          bash tools/audit-features.sh --image /tmp/rom-out
 
       # No `if: always()`: on a failed build there is nothing to flash, and a
       # green upload step on a red run is how an empty artifact goes unnoticed.
