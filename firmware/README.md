@@ -142,3 +142,23 @@ sizes it trims to are explained in BRING_UP_CHECKLIST.md 5.2).
 
 Nothing else in this directory depends on them; a build without the modem images boots exactly as
 before, the modem remoteproc just fails its firmware load.
+
+# GNSS firmware
+
+`firmware-infinix-x6525-gnss-1.tar.gz` carries `sprd/gnssmodem.bin`, the image the GNSS core of the
+WCN chip runs. The mainline `sprd_wcn` driver copies it into `wcn_gnss_region` (0x87600000,
+0x1fdc00) when the GNSS remoteproc is booted, and `drivers/gnss/sprd.c` exposes the NMEA stream on
+`/dev/gnss0`.
+
+It comes from the phone's own vendor tree: `proprietary/odm/firmware/gnssmodem.bin` in the public
+`Bocchi-The-Dev/vendor_X6525` repository (the stock `/odm/firmware` copy). 195500 bytes.
+
+The GNSS SIPC channel is modelled under the `pmsys` link in the mainline `ums9230.dtsi`
+(`pm_gnss` -> `gnss_pipe0`); whether the channel device appears without the pmsys remoteproc running
+is not known yet - if `/dev/gnss0` never appears, the pmsys firmware (`pm_bootcode.bin` and
+`pm_sys.bin`, from the `pm_sys_a` partition) is the next thing to look at.
+
+```
+144461 bytes
+sha512  016cd42c7f9911f684f5a4242d0f4d6c4fcc0b73b71d2acd93da418c9677c000fdbe1ea7ac2345793f8ec58d97744e74d498b678faf54a3a14401798bf06cbd8
+```
