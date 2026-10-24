@@ -10,10 +10,11 @@ install), and the GUI image boots. The `rom` workflow now builds **Plasma Mobile
 (`ui = plasma-mobile`, the KDE session the community asked for); Phosh is still supported by the
 device package's greetd drop-in if `ui` is set back. Bluetooth was never reaching a controller: the
 transport was
-missing its two configuration blobs, and the BD address U-Boot writes is all zeros because its
-`bdaddr` environment variable is unset; both are fixed in the tree (firmware pkgrel 3 and kernel
-patch 0013) but not yet exercised on the phone -
-BRING_UP_CHECKLIST.md 2.1 has the checks.
+missing its two configuration blobs, and the BD address U-Boot writes was all zeros because its
+`bdaddr` environment variable was unset. The blobs are packaged (firmware pkgrel 3), kernel patch
+0013 provides a random fallback, and the U-Boot environment now reads the unit's own `btmac.txt` and
+`wifimac.txt` from the eMMC `prodnv` partition (U-Boot commit `6d24704`). None of it has been
+exercised on the phone yet - BRING_UP_CHECKLIST.md 2.1 has the checks.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
 how to build the image either here or on GitHub. The `rom` workflow builds a *split* install (a boot
