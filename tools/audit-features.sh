@@ -286,9 +286,9 @@ printf '                 (BRING_UP_CHECKLIST 5.2)\n'
 printf '  known-missing  GNSS and the sensor hub: both ride the pmsys SIPC link. The bootcode is\n'
 printf '                 packaged and pm_sys is extracted at boot, but neither has run on the phone;\n'
 printf '                 no gpsd/geoclue is installed (BRING_UP_CHECKLIST 5.3, ROADMAP.md)\n'
-printf '  known-missing  sensors: the VL53L0X node is unverified, the sensor-hub parts are not\n'
-printf '                 identified, and the fingerprint reader has no mainline driver\n'
-printf '                 (ROADMAP.md)\n'
+printf '  known-missing  sensors: the VL53L0X node is unverified, and the hub parts named in the\n'
+printf '                 pmsys firmware (SC7A20E, MMC5603, LS9801) have not been seen on hardware;\n'
+printf '                 the fingerprint reader has no mainline driver (ROADMAP.md)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then

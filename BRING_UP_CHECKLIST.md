@@ -1135,8 +1135,11 @@ Reading the result:
   interesting failure.
 - `iio:device*` appear but no `in_*_raw` channels: the hub answered but this unit's sensor parts are
   not the ones the driver expects; send the names and `dmesg`.
-- which parts are fitted is not known yet - the vendor tree's sensor configuration is not the
-  board's own. Do not assume a magnetometer or a gyroscope exists until it shows up.
+- the parts are named in the pmsys image itself (the `pm_sys_a` copy): **SC7A20E** accelerometer,
+  **MMC5603** magnetometer, **LS9801** light/proximity. There is no physical gyroscope - the
+  firmware exposes a virtual one derived from the others, so a gyro may or may not register. The
+  stock system's calibration data lives in `persist` and is not wired up here; readings may be
+  uncalibrated until it is.
 
 The time-of-flight proximity sensor is separate and on the AP's I2C: the board DTS has
 `proximity@29` on `&i2c4`, `st,vl53l0x`, with XSHUT on ap_gpio 168 and the interrupt on 169. The

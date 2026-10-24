@@ -45,7 +45,7 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
 
 | Part | Status | Detail |
 |---|---|---|
-| Sensor hub (accelerometer, gyro, light, magnetometer/compass, proximity) | in tree, untested | Mainline `sprd_shub` and the five IIO drivers are `=m`. They bind to the `pm_shub` SIPC channel, which needs pmsys running - the same service as GNSS. Which of those sensors is actually fitted, and their calibration, is not known yet. |
+| Sensor hub (accelerometer, magnetometer, light and proximity, virtual gyro) | in tree, untested | Mainline `sprd_shub` and the five IIO drivers are `=m`. They bind to the `pm_shub` SIPC channel, which needs pmsys running - the same service as GNSS. The pmsys image's own strings name the parts it drives: **SC7A20E** accelerometer, **MMC5603** magnetometer and **LS9801** light/proximity, plus a **virtual gyro** (there is no physical gyro). Calibration data from the stock `persist` partition is not wired up. |
 | VL53L0X time-of-flight | in tree, unverified | Node on i2c4, `st,vl53l0x`, `reg = <0x29>`, XSHUT ap_gpio 168, interrupt 169. The stock node used reg 0x52 (its 8-bit form) and a vendor driver; if the part does not probe, the address and XSHUT sequencing are the first suspects. |
 | Fingerprint | missing | The stock system binds a Goodix sensor (`gf-keys`). There is no mainline driver for it, and none is planned here. |
 | Thermal zones | in tree | `board-thermal`, `pa-thermal`, `chg-thermal` with the stock NTC tables; no trips or polling, matching the stock zones. |
