@@ -1036,13 +1036,27 @@ renderer no longer pinned to pixman (phoc/wlroots and KWin both try GLES2 throug
 Vulkan, then software), and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus
 `mesa-vulkan-panfrost`.
 
+The GPU now also has a DVFS table, taken from the stock kernel's `operating-points` for this part:
+384 MHz at 0.70 V, 512 and 614.4 MHz at 0.75 V, 768 MHz at 0.80 V. Panfrost's devfreq scales through
+those; without it the GPU runs at whatever rate the bootloader left and never changes. The stock
+table's 850 MHz at 0.80 V is left out for now: the mainline GPU clock has fixed parents only up to
+768 MHz, and reaching 850 needs the GPU PLL programmed.
+
 Checks after booting an image with the display switch:
 
 ```sh
 sudo dmesg | grep -iE 'panfrost|mali'
 ls -l /dev/dri/
+# DVFS: the OPP table, the current clock rate and the governor
+cat /sys/class/devfreq/*/available_frequencies
+cat /sys/class/devfreq/*/cur_freq
+cat /sys/class/devfreq/*/governor
 journalctl -u plasma-mobile -b --no-pager | grep -iE 'opengl|egl|renderer' | tail -20
 journalctl -u greetd -b --no-pager | tail -30     # phosh builds
+# draw something and watch the rate move
+apk add glmark2 mesa-demos vulkan-tools
+glmark2-es2-wayland --benchmark
+vulkaninfo --summary
 ```
 
 ## What to send when asking for help

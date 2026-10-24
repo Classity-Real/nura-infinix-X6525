@@ -189,6 +189,7 @@ feature "GPU (Mali-G57, Panfrost job-manager path)"
 # newer CSF GPUs (G610+), not this one.
 need "CONFIG_DRM_PANFROST=m"                     cfg DRM_PANFROST "$CFG"
 need "CONFIG_PM_OPP=y (GPU operating points)"    cfg PM_OPP "$CFG"
+need "the GPU OPP table is in the DTS"           grep -q 'operating-points-v2 = <&gpu_opp_table>' "$DTS"
 need "the GPU node is enabled in the DTS"        grep -q '&gpu {' "$DTS"
 need "the GPU supply is set"                     grep -q 'mali-supply' "$DTS"
 need "Mesa panfrost Vulkan is a dependency"      grep -q 'mesa-vulkan-panfrost' "$DPKG/APKBUILD"
