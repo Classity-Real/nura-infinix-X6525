@@ -108,9 +108,9 @@ jobs:
 
           NOTES="postmarketOS image for Infinix X6525 (nura).
 
-Built by **Build PMOS** (run ${{ steps.run.outputs.run_id }}).
-Artifact: \`x6525-rom\`.
-"
+          Built by **Build PMOS** (run ${{ steps.run.outputs.run_id }}).
+          Artifact: \`x6525-rom\`.
+          "
 
           ARGS=(release create "$TAG"
             --title "ROM $TAG"
