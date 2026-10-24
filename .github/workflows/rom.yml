@@ -63,18 +63,53 @@ jobs:
           # /dev/loop-control - and still be refused the *block* device when it
           # comes to attaching, with Operation not permitted. So attach a file
           # and detach it again, which is the thing that has to work.
+          #
+          # There is a second failure mode on the Namespace runner even with
+          # the privileged feature: the container has no udev, so after
+          # losetup --partscan the kernel exposes loopXpY in sysfs but nobody
+          # creates /dev/loopXpY. pmbootstrap waits for /dev/loop0p2 and gives
+          # up with "File did not appear". This watcher creates those nodes
+          # from sysfs; it is installed once and restarted with the build.
           sudo modprobe loop 2>&1 || echo "modprobe loop: not available"
           [ -e /dev/loop-control ] || sudo mknod -m 660 /dev/loop-control c 10 237 2>/dev/null || true
           for i in $(seq 0 7); do
             [ -e "/dev/loop$i" ] || sudo mknod -m 660 "/dev/loop$i" b 7 "$i" 2>/dev/null || true
           done
-          truncate -s 1M /tmp/loop-test.img
-          if ! sudo losetup --find --show --partscan /tmp/loop-test.img; then
+          sudo tee /usr/local/sbin/loop-part-nodes >/dev/null <<'WATCHER'
+          #!/bin/sh
+          while :; do
+            for sys in /sys/class/block/loop*; do
+              [ -d "$sys" ] || continue
+              base=${sys##*/}
+              for p in "$sys/$base"p*; do
+                [ -e "$p" ] || continue
+                name=${p##*/}
+                [ -e "/dev/$name" ] && continue
+                dev=$(cat "$p/dev" 2>/dev/null) || continue
+                mknod "/dev/$name" b "${dev%%:*}" "${dev##*:}" 2>/dev/null || true
+              done
+            done
+            sleep 0.2
+          done
+          WATCHER
+          sudo chmod +x /usr/local/sbin/loop-part-nodes
+          sudo setsid /usr/local/sbin/loop-part-nodes >/dev/null 2>&1 &
+          # A partition node is the thing the image build actually waits for.
+          truncate -s 8M /tmp/loop-test.img
+          printf 'label: dos\n,4M,L\n' | sudo sfdisk /tmp/loop-test.img >/dev/null
+          dev=$(sudo losetup --find --show --partscan /tmp/loop-test.img) || {
             echo "::error::this runner cannot attach loop devices, which building the image needs"
+            exit 1
+          }
+          part="${dev}p1"
+          for i in $(seq 1 100); do [ -e "$part" ] && break; sleep 0.1; done
+          if [ ! -e "$part" ]; then
+            echo "::error::loop device attached but $part never appeared (container without udev?)"
+            sudo losetup -D
             exit 1
           fi
           sudo losetup -D
-          echo "this runner can attach loop devices"
+          echo "this runner can attach loop devices and their partition nodes"
 
       - name: Get pmbootstrap and pmaports, and add this port's packages
         run: |
@@ -129,6 +164,11 @@ jobs:
           mkdir -p /tmp/pmbwork
           python3 -c "import pmb.config; open('/tmp/pmbwork/version', 'w').write(f'{pmb.config.work_version}\n')"
           cat /tmp/pmbwork/version
+
+          # Restart the loop-partition node watcher installed by the preflight:
+          # steps do not share processes, and pmbootstrap needs /dev/loopXpY to
+          # appear after its losetup --partscan (the container has no udev).
+          sudo setsid /usr/local/sbin/loop-part-nodes >/dev/null 2>&1 &
 
           # Two attempts. The fetch of the kernel tarball from codeberg failed
           # once with "ssl_client: SSL_read" / "wget: error getting response:
