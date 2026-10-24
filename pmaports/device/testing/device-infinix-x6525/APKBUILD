@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=20
+pkgrel=21
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -182,15 +182,74 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+	# The power-management co-processor (pmsys) runs the sensor hub and owns the
+	# SIPC channel GNSS uses, so it gates both. The bootcode half of its firmware
+	# is packaged (sprd/pm_bootcode.bin, generated from the vendor's
+	# vendor/etc/modem_sp_info.xml); the 1 MB sys image is this phone's pm_sys
+	# partition and is not shipped. Like the modem's, the driver must not probe
+	# before that copy exists, so it is blacklisted and loaded by this unit.
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-pmsys-fw <<'EOF'
+#!/bin/sh
+# Copy this phone's pmsys image out of its pm_sys partition.
+#
+# The sys image is loaded verbatim at 0x88040000 by sprd_pmsys, which is why
+# this is a straight copy rather than a header-parsed extraction. The bootcode
+# is installed by firmware-infinix-x6525. The driver's reserved region is
+# 0x2c0000, so cap the copy there; dd stops early if the partition is smaller.
+set -u
+
+dst=/lib/firmware/sprd
+part=/dev/disk/by-partlabel/pm_sys_a
+mkdir -p "$dst"
+
+if [ ! -e "$part" ]; then
+	echo "x6525-pmsys-fw: no pm_sys_a partition" >&2
+	exit 1
+fi
+if ! dd if="$part" of="$dst/.pm_sys.bin.tmp" bs=4096 count=704 status=none; then
+	echo "x6525-pmsys-fw: could not read pm_sys_a" >&2
+	rm -f "$dst/.pm_sys.bin.tmp"
+	exit 1
+fi
+mv "$dst/.pm_sys.bin.tmp" "$dst/pm_sys.bin"
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-pmsys.service <<'EOF'
+[Unit]
+Description=Extract this phone's pmsys image from its own partition
+After=local-fs.target
+Before=network-pre.target
+ConditionPathExists=/dev/disk/by-partlabel/pm_sys_a
+
+[Service]
+Type=oneshot
+# - : no pmsys image must not stop the boot; the driver then fails its firmware
+# request instead, and only the sensor hub and GNSS are lost.
+ExecStart=-/usr/bin/x6525-pmsys-fw
+# sprd_pmsys is blacklisted, so this is the only place it probes. Its SIPC
+# channels (pm_shub, pm_gnss) appear with it.
+ExecStart=/sbin/modprobe sprd_pmsys
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 	install -Dm644 /dev/stdin "$pkgdir"/etc/modprobe.d/x6525-modem.conf <<'EOF'
-# The modem's firmware is extracted from this unit's partitions by
-# x6525-modem-nv.service. Until that has run, the driver must not probe.
+# The modem's and pmsys's firmware is extracted from this unit's partitions by
+# x6525-modem-nv.service and x6525-pmsys.service. Until those have run, the
+# drivers must not probe: they request their firmware during probe and do not
+# retry.
 blacklist sprd_modem
+blacklist sprd_pmsys
 EOF
 
 	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
 	ln -s /usr/lib/systemd/system/x6525-modem-nv.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-modem-nv.service
+	ln -s /usr/lib/systemd/system/x6525-pmsys.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-pmsys.service
 
 	# The device tree's local-mac-address for the WLAN channel is all zeroes
 	# ("filled in by bootloader"); U-Boot fills it from its wifiaddr environment
@@ -291,6 +350,7 @@ enable x6525-emmc-cacheoff.service
 enable x6525-emmc-flush.service
 enable bluetooth.service
 enable x6525-modem-nv.service
+enable x6525-pmsys.service
 EOF
 
 	# For the phosh build (the device package serves both UIs): point the

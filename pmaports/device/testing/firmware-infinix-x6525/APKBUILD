@@ -2,7 +2,7 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=firmware-infinix-x6525
 pkgver=1
-pkgrel=5
+pkgrel=6
 pkgdesc="Firmware for the Infinix X6525"
 url="https://github.com/Seuj09/pmos-infinix-x6525"
 arch="aarch64"
@@ -34,9 +34,18 @@ _wcn="firmware-infinix-x6525-wcn-3.tar.gz"
 # drivers/gnss/sprd.c exposes NMEA on /dev/gnss0. It is the stock
 # /odm/firmware/gnssmodem.bin (public vendor_X6525 tree, proprietary/odm).
 _gnss="firmware-infinix-x6525-gnss-1.tar.gz"
+# pmsys: the power-management co-processor, which runs the sensor hub and owns
+# the SIPC channel GNSS rides. Only its bootcode is here - 31 words that the
+# driver writes into the 4 KB window at 0x62010000. It is the bootcode
+# attribute in the vendor tree's vendor/etc/modem_sp_info.xml, converted to
+# little-endian words the way the Jolla C2 BSP's convert_bootcode.py does. The
+# 1 MB sys image is this phone's pm_sys partition and is copied out at boot by
+# x6525-pmsys.service; nothing from it is published.
+_pmsys="firmware-infinix-x6525-pmsys-1.tar.gz"
 source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_tarball
 	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_wcn
-	$_gnss::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/305bddf68a9017550a5dbd08be22d4848e7e4201/firmware/$_gnss"
+	$_gnss::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/305bddf68a9017550a5dbd08be22d4848e7e4201/firmware/$_gnss
+	$_pmsys::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/b6b60ec32b195c9e2ad35b0fa3b2ef58d88b6528/firmware/$_pmsys"
 
 package() {
 	install -Dm644 "$srcdir"/hdl_firmware_01.img \
@@ -51,10 +60,13 @@ package() {
 		"$pkgdir"/lib/firmware/sprd/bt_config_rf.bin
 	install -Dm644 "$srcdir"/sprd/gnssmodem.bin \
 		"$pkgdir"/lib/firmware/sprd/gnssmodem.bin
+	install -Dm644 "$srcdir"/sprd/pm_bootcode.bin \
+		"$pkgdir"/lib/firmware/sprd/pm_bootcode.bin
 }
 
 sha512sums="
 a8ae389d7479ad8b3226cfb3a0d153f5306cdbe6a9b85e31584c5e6c7c34232a06562134ac9b3669fb4a0919e3335a830bd2b7b08a87e132c500d22fe70fa176  $_tarball
 a04ff31bda1efbaed13d4f18dde3a3054549d07ce83dda90af543acf1daed03c815490b6028c1fa2bf0c860db0a5db1ed60fa4d0c82caa6378f3676b527c00e7  $_wcn
 016cd42c7f9911f684f5a4242d0f4d6c4fcc0b73b71d2acd93da418c9677c000fdbe1ea7ac2345793f8ec58d97744e74d498b678faf54a3a14401798bf06cbd8  $_gnss
+57066459b87cec02df11bf8c2f0fa73a67fd71887f680b2d5e0d1527e4f813fde0db784338a7eede9af97c406ee9829afdb03bf32f86079337c2bb32e75a815c  $_pmsys
 "
