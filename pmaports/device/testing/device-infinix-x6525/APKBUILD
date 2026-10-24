@@ -210,11 +210,13 @@ enable x6525-emmc-flush.service
 enable bluetooth.service
 EOF
 
-	# Phosh's compositor has no GPU driver to use yet: panfrost is in the
-	# kernel (CONFIG_DRM_PANFROST=m), but no mali_csffw.bin is packaged, and
-	# the display is simpledrm. Force the wlroots software renderer for the
-	# greetd session (greetd passes its environment on to the greeter and the
-	# session it starts).
+	# Point the Phosh session at the real panel (sprd-drm) instead of the
+	# bootloader's simpledrm: only the panel driver registers the DCS
+	# backlight and reports the 68x152 mm size that gives the 2x output scale.
+	# simpledrm stays as the console fallback; the symlink the drop-in names is
+	# created by a udev rule only when a sprd-drm card exists. The renderer is
+	# deliberately not pinned: wlroots tries GLES2 (panfrost, which needs no
+	# firmware on this Valhall job-manager GPU), then Vulkan, then pixman.
 	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/10-x6525-software.conf <<'EOF'
 [Service]
 # Drive the real panel (sprd-drm), not the bootloader's simpledrm: only the
