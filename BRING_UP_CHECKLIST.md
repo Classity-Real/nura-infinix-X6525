@@ -666,8 +666,10 @@ sudo systemctl stop buffyboard; WLR_RENDERER=pixman phoc -S -E phosh
 run `sudo apk update`, then `apk policy phosh` to see which repository it resolves from;
 `postmarketos-ui-phosh` in pmaports depends on the same package.
 
-`WLR_RENDERER=pixman` is deliberate: there is no working GPU driver yet. `panfrost` is in the kernel
-(`CONFIG_DRM_PANFROST=m`), but no `mali_csffw.bin` is packaged, so rendering has to be software.
+`WLR_RENDERER=pixman` here is only for this bare-simpledrm console test - it asks wlroots to render
+in software, so the compositor itself is what is being tested. Panfrost is available and needs no
+firmware (section 7); drop the variable to try GLES on simpledrm too. The image's Plasma and Phosh
+sessions do not pin the renderer.
 
 | Result | Meaning | Next |
 |---|---|---|
