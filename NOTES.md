@@ -285,7 +285,7 @@ The ROM, and the first boot:
   because the check replaces `.config`.
 - **the firmware needs nothing pressed**: this repository was made public on 2026-10-14 for exactly
   this reason, so `firmware-infinix-x6525`'s `source=` is the tarball in `firmware/` served straight
-  from it, pinned to the commit that added it (`186e3e0f`), and the build workflow fetches that URL
+  from it, pinned to the commit that carries it in the sanitized repository (`2b7b08a0`), and the build workflow fetches that URL
   and checks it against the package's sha512 on every push. Verified by hand as well: 124,616 bytes,
   the hash in the APKBUILD. (Use `raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>` for this
   sort of thing - `github.com/<owner>/<repo>/raw/<branch>/<path>` answers with an HTML page, which

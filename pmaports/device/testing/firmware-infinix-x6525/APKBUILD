@@ -2,7 +2,7 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=firmware-infinix-x6525
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Firmware for the Infinix X6525"
 url="https://github.com/Seuj09/pmos-infinix-x6525"
 arch="aarch64"
@@ -30,8 +30,8 @@ _tarball="firmware-infinix-x6525-$pkgver.tar.gz"
 # without them, so no HCI device appears at all. Those two are the stock
 # /odm/firmware/bt_configure_{pskey,rf}.ini laid out by tools/bt-ini2bin.py.
 _wcn="firmware-infinix-x6525-wcn-3.tar.gz"
-source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/186e3e0f21e12ffa194ca4a740053fc977b9c5ff/firmware/$_tarball
-	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/8ac4b91d75feba1234073a1611377ed9d88939b8/firmware/$_wcn"
+source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_tarball
+	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/$_wcn"
 
 package() {
 	install -Dm644 "$srcdir"/hdl_firmware_01.img \

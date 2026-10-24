@@ -68,7 +68,7 @@ that added it — the URL is immutable and the port's own CI fetches it and comp
 APKBUILD's sha512 on every push, so a changed file cannot pass unnoticed:
 
 ```
-https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/186e3e0f21e12ffa194ca4a740053fc977b9c5ff/firmware/firmware-infinix-x6525-1.tar.gz
+https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/2b7b08a0c01e8c3324fa9955a668df42bf45fb2a/firmware/firmware-infinix-x6525-1.tar.gz
 ```
 
 `.github/workflows/firmware-release.yml` can also put a versioned copy on this repository's releases,
