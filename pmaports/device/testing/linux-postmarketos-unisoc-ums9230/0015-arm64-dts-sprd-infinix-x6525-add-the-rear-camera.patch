@@ -1,4 +1,4 @@
-From bdb38e3a1388213525bc3ace9e1c72a5419843a9 Mon Sep 17 00:00:00 2001
+From 917cc7a482c97ccf3f954c5c8bef947484cb0e68 Mon Sep 17 00:00:00 2001
 From: Seuj09 <jeus110310@gmail.com>
 Date: Sat, 24 Oct 2026 10:42:13 +0000
 Subject: [PATCH] arm64: dts: sprd: add the rear camera to the Infinix X6525

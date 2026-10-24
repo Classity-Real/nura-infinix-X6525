@@ -1,4 +1,4 @@
-From 1d7b6252b183e79d580841dbc089f0f3016ccd23 Mon Sep 17 00:00:00 2001
+From 0df7eb0e1e6d15f179dd5b9ba12f1e80d8ef9b97 Mon Sep 17 00:00:00 2001
 From: Seuj09 <jeus110310@gmail.com>
 Date: Sat, 24 Oct 2026 11:13:23 +0000
 Subject: [PATCH] arm64: dts: sprd: give the X6525's charger an OTG boost

@@ -1,0 +1,31 @@
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="Seuj09 <jeus110310@gmail.com>"
+pkgname=firmware-infinix-x6525-modem
+pkgver=1
+pkgrel=0
+pkgdesc="Cellular modem firmware for the Infinix X6525"
+url="https://github.com/Seuj09/pmos-infinix-x6525"
+arch="aarch64"
+license="proprietary"
+options="!check !archcheck !strip !spdx !tracedeps pmb:cross-native"
+
+# The six images drivers/remoteproc/sprd_modem.c loads. They are this unit's
+# l_modem_a/l_deltanv_a/l_fixnv1_a/l_runtimenv1/l_gdsp_a/l_ldsp_a partitions,
+# each trimmed to the region size the main image's MECP header declares (a
+# partition is larger than its region, and the driver rejects a file larger
+# than the region). Provenance, sizes and the trimming rule are in the port
+# repository's firmware/README.md; the raw partition dumps are in
+# unit-data/bin/. l_fixnv.bin is this unit's factory NV and carries the IMEI.
+_tarball="firmware-infinix-x6525-modem-$pkgver.tar.gz"
+source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/607273e0681aae71e65ebdb0bd0d7a12941b2eb3/firmware/$_tarball"
+
+package() {
+	for f in l_modem l_deltanv l_fixnv l_runtimenv l_gdsp l_ldsp; do
+		install -Dm644 "$srcdir"/sprd/$f.bin \
+			"$pkgdir"/lib/firmware/sprd/$f.bin
+	done
+}
+
+sha512sums="
+864ba9c8b2c917809c515dbeb03f6512eaa85c91578a30e586665abafb7b1f015c09bfb976617db4931f13c1d88ad313275926f764d54a205879d26c7cc335aa  $_tarball
+"

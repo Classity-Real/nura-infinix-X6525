@@ -12,6 +12,7 @@ depends="
 	android-tools
 	bluez
 	firmware-infinix-x6525
+	firmware-infinix-x6525-modem
 	iw
 	linux-postmarketos-unisoc-ums9230
 	mesa-vulkan-panfrost

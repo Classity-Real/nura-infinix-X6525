@@ -1,4 +1,4 @@
-From 2128768e3804ef0a07b6ed83250aa75d9f890d70 Mon Sep 17 00:00:00 2001
+From 01fbeaf3087d90cc73d2c2a98ee9d67e64b3a400 Mon Sep 17 00:00:00 2001
 From: Seuj09 <jeus110310@gmail.com>
 Date: Sat, 24 Oct 2026 10:41:47 +0000
 Subject: [PATCH] media: i2c: add a Samsung S5K3L6 sensor driver for the
@@ -28,8 +28,8 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>
 ---
  drivers/media/i2c/Kconfig  |  10 +
  drivers/media/i2c/Makefile |   1 +
- drivers/media/i2c/s5k3l6.c | 972 +++++++++++++++++++++++++++++++++++++
- 3 files changed, 983 insertions(+)
+ drivers/media/i2c/s5k3l6.c | 977 +++++++++++++++++++++++++++++++++++++
+ 3 files changed, 988 insertions(+)
  create mode 100644 drivers/media/i2c/s5k3l6.c
 
 diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
@@ -67,10 +67,10 @@ index 9c8876e28..b06ca98a9 100644
  obj-$(CONFIG_VIDEO_S5K6A3) += s5k6a3.o
 diff --git a/drivers/media/i2c/s5k3l6.c b/drivers/media/i2c/s5k3l6.c
 new file mode 100644
-index 000000000..1681e5f03
+index 000000000..8b35a911a
 --- /dev/null
 +++ b/drivers/media/i2c/s5k3l6.c
-@@ -0,0 +1,972 @@
+@@ -0,0 +1,977 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +// Copyright (C) 2020-2021 Purism SPC
 +
@@ -1043,3 +1043,8 @@ index 000000000..1681e5f03
 +};
 +
 +module_i2c_driver(s5k3l6_i2c_driver);
++
++MODULE_AUTHOR("Purism SPC");
++MODULE_AUTHOR("Vincent Cloutier <vincent@cloutier.co>");
++MODULE_DESCRIPTION("Samsung S5K3L6 camera sensor driver");
++MODULE_LICENSE("GPL");
