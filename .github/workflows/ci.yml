@@ -46,9 +46,13 @@ env:
   KERNEL_REPO: https://codeberg.org/ums9230-mainline/linux
   KERNEL_TAG: v7.2-rc6-ums9230-0
 
+# Runs queue instead of cancelling: a new dispatch must not kill a build that
+# is already running (push and dispatch used to cancel each other's runs).
+# Each event type gets its own lane so pushing during an active dispatch does
+# not overtake its rom build either.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
