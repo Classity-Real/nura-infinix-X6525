@@ -206,13 +206,14 @@ branch that is the upstream base plus this port's commits and nothing else:
 | Tree | Fork and branch | Tip |
 |---|---|---|
 | kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `c27353303e23b35fcf47fe0cfb137eae3fb9bea6` |
-| U-Boot | `github.com/Seuj09/ums9230-mainline-u-boot`, branch `x6525` | `0b7433364843e89af4fdf80166f6e6729994b252` |
+| U-Boot | `github.com/Seuj09/ums9230-mainline-u-boot`, branch `x6525` | `6d247043391aa8ed7d55cfadfd60908077a01bad` |
 
 The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the twenty-two patches in `patches/upstream/`, one
 commit each (verified: the subjects match the patch files one for one and the tree's files are
 byte-identical to `dts/`, `drivers/` and `bindings/`). The U-Boot branch is the fork's `ums9230` plus
-its two board patches. Both were made by `git am`-ing the series, so `git format-patch` from either
-branch regenerates the patches - the branches are the source of truth now, not the patch files.
+the board commits (device tree, defconfig, environment, the pmicwdt command and the prodnv MAC
+preboot). Both were made by `git am`-ing the series, so `git format-patch` from either branch
+regenerates the patches - the branches are the source of truth now, not the patch files.
 The kernel branch is force-updated whenever the series changes (it was, to pick up the renamed
 thermal zones and the ninth patch, and again for the front camera): patch 9 lets the sprd GPIO binding accept hog nodes, which
 `charger-en-hog` in our DTS needs - the binding is `additionalProperties: false` without the

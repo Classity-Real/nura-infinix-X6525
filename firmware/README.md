@@ -121,16 +121,19 @@ The package installs them as `/lib/firmware/sprd/...`, which is the path the dri
 
 The dtsi's `bluetooth@10` node has `local-bd-address = [00 00 00 00 00 00]` with the comment
 "filled in by bootloader". This port chainloads U-Boot from `boot_a`, and U-Boot's `ft_board_setup()`
-does fill the property in - from its `bdaddr` environment variable. That variable is unset in this
-board's default environment (the common `ums9230.env` reads it from a UFS `prodnv` partition, which
-this eMMC board does not have), and `string_to_enetaddr(NULL)` zero-fills, so the property ends up
-all-zero anyway. The HCI core rejects that: it leaves `public_addr` zero and skips `set_bdaddr()` -
-the function that sends the two config blobs - so the controller would register but never be
-initialised. Patch 0013 in `patches/upstream/` makes the driver fall back to a random, locally
-administered address in that case, so Bluetooth works, but the address (and with it pairing records)
-changes on every boot. A stable address needs U-Boot to read one (the device's `prodnv` partition is
-the likely source) or a per-device DTS to supply one; until then this is a known limitation, not a
-configuration error.
+fills the property in from its `bdaddr` environment variable. The common environment reads that
+variable from `/btmac.txt` on a UFS `prodnv` partition; this eMMC board's environment now does the
+same with `load mmc 0#prodnv ... /btmac.txt`, and reads `/wifimac.txt` for the WLAN MAC
+(`board/unisoc/ums9230/infinix-x6525.env`). Both loads are guarded: if the files are absent, the
+variables stay unset.
+
+When `bdaddr` is unset, `string_to_enetaddr(NULL)` zero-fills, so the property ends up all-zero. The
+HCI core rejects that: it leaves `public_addr` zero and skips `set_bdaddr()` - the function that
+sends the two config blobs - so the controller would register but never be initialised. Patch 0013
+in `patches/upstream/` makes the driver fall back to a random, locally administered address in that
+case, so Bluetooth works, but the address (and with it pairing records) changes on every boot. With
+the prodnv files present the address is stable. Which of the two paths this unit takes has not been
+seen on hardware yet; `btmac.txt`/`wifimac.txt` are the first thing to check if it is still random.
 
 # Modem firmware
 

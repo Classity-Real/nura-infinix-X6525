@@ -559,14 +559,16 @@ and `btsprdsipc` loaded and still showed no controller; two separate causes were
    older shipped only the Wi-Fi/remoteproc blobs.
 2. **The BD address was never set.** The dtsi's `bluetooth@10` node has
    `local-bd-address = [00 00 00 00 00 00]` with the comment "filled in by bootloader". U-Boot's
-   `ft_board_setup()` does fill it in, from its `bdaddr` environment variable - but that variable is
-   unset in this board's default environment (the common `ums9230.env` reads it from a UFS `prodnv`
-   partition, which this eMMC board does not have), so the property is written all-zero. The HCI
-   core rejects that: it skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the
-   driver sends the two config blobs and enables the controller. Patch 0013 falls back to a random,
+   `ft_board_setup()` does fill it in, from its `bdaddr` environment variable. The board environment
+   now reads that variable from `/btmac.txt` on the eMMC `prodnv` partition (and `/wifimac.txt` for
+   the WLAN MAC), the same files the common UFS environment reads; the loads are guarded, so if the
+   files are absent the variables stay unset and the property is written all-zero. The HCI core
+   rejects all-zero: it skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the driver
+   sends the two config blobs and enables the controller. Patch 0013 falls back to a random,
    locally administered address in that case, so the adapter works but its address - and with it the
-   pairings - changes on every boot until the bootloader reads a real one (the `prodnv` partition is
-   the likely place) or a per-device DTS provides it.
+   pairings - changes on every boot. A stable address therefore depends on `prodnv` actually holding
+   those two files; check `bdaddr` in the U-Boot environment (`printenv bdaddr`) and, if it is
+   empty, the partition's contents. This path has not been seen on hardware yet.
 
 On an image built from this tree, check:
 
