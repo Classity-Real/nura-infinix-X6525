@@ -765,73 +765,83 @@ The stock OTA's `/odm/etc/sensor_config.xml` lists what the HAL expects per came
 - slot 1, front, 270 deg: `gc08a3_4lane` (1829), `ov8856_4lane` (1831)
 - slot 2, rear: `fakeserial` (the second rear lens of the SMART 8 is decorative)
 
-So the 13 MP main camera is one of hi1336 / s5k3l6 / ov13b10, and the 8 MP front one of gc08a3 /
-ov8856. **Which one is soldered is per unit**, and nothing in the OTA, the vendor kernel source or the
-mainline tree says which. The stock HAL identifies it at boot by reading chip IDs
-(`vendor.cam.sensor.slot.info`), which is the data we need for the DT.
+**Identified on this unit (2026-10-24).** Opening the stock Camera app once and reading the HAL
+properties gave:
+
+- slot 0 (rear): `s5k3l6_1836_13M` - the Samsung S5K3L6, 13 MP. The stock camera stack opens it with
+  four MIPI data lanes at 4208x3120 (`camioctl_sensor_if_set: ... mipi 0 10 0 4`);
+- slot 1 (front): `ov8856_1831_8M` - the OmniVision OV8856;
+- slot 2: `fakeserial` (the second rear lens is decorative).
+
+`persist.vendor.cam.sensor.tuning.list` reads
+`id0,s5k3l6_1836;id1,ov8856_1831;id2,fakeserial`, and `/mnt/vendor/productinfo/otpdata` is empty on
+this unit. The properties are `vendor.cam.sensor.slot.info`, `persist.vendor.cam.sensor.info` and
+`persist.vendor.cam.sensor.tuning.list`.
+
+The port now describes the rear camera and builds a driver for it:
+
+- `patches/upstream/0014-*` adds `drivers/media/i2c/s5k3l6.c`. It is the RFC driver posted by Vincent
+  Cloutier (itself a rewrite of Purism's s5k3l6xx carry), adapted to this board: 24 MHz MCLK, four
+  lanes, and the three mode register tables taken from the vendor's own userspace sensor library,
+  `proprietary/odm/lib64/libsensor_s5k3l6.so` in the public `vendor_X6525` tree, whose mode
+  descriptors say `mclk 24, lanes 4` and whose tables carry the PLL, lane and MIPI values used
+  below. The stock stack's 4-lane/10-bit setup is visible in the dmesg (`mipi 0 10 0 4`).
+- `patches/upstream/0015-*` adds the sensor node and the `&camsys` port to the board DTS: i2c0 at
+  0x20, four lanes, `CLK_SENSOR0` at 24 MHz, reset on ap_gpio 45, power-down on ap_gpio 47, and DVDD
+  as a fixed regulator behind the load switch on ap_gpio 11.
+- `CONFIG_VIDEO_S5K3L6=m` is in the ROM's kernel config.
 
 Mainline support, from the ROM's kernel config:
 
-| sensor | mainline driver | ROM config |
+| sensor | driver | ROM config |
 |---|---|---|
-| ov13b10 | `drivers/media/i2c/ov13b10.c` | `CONFIG_VIDEO_OV13B10=m` (enabled 2026-10-24) |
-| gc08a3 | `drivers/media/i2c/gc08a3.c` | `CONFIG_VIDEO_GC08A3=m` (enabled 2026-10-24) |
-| ov8856 | `drivers/media/i2c/ov8856.c` | `CONFIG_VIDEO_OV8856=m` (already) |
-| hi1336 | none | - (the vendor's userspace HAL driver `sensor_drv/classic/Hynix/hi1336_*` has the register/mode tables if it has to be ported) |
-| s5k3l6 | none | - (same, `sensor_drv/classic/Samsung/s5k3l6*`) |
+| s5k3l6 | `drivers/media/i2c/s5k3l6.c` (added by this port, patch 0014) | `CONFIG_VIDEO_S5K3L6=m` |
+| ov8856 | `drivers/media/i2c/ov8856.c` | `CONFIG_VIDEO_OV8856=m` (mainline driver; 19.2 MHz only) |
+| ov13b10 | `drivers/media/i2c/ov13b10.c` | `CONFIG_VIDEO_OV13B10=m` (not fitted here) |
+| gc08a3 | `drivers/media/i2c/gc08a3.c` | `CONFIG_VIDEO_GC08A3=m` (not fitted here) |
+| hi1336 | none | - (not fitted here; the vendor HAL has the tables) |
 
-The SoC side is done: `&camsys` (CSI/DCAM, `sprd,ums9230-camsys`) and the ISP node exist in the
-mainline dtsi, and the mainline reeder board DTS shows the binding pattern - `&camsys` ports with
-`data-lanes` and sensor endpoints, sensors as I2C subdevs with `dovdd`/`avdd`/`dvdd`, reset-gpios,
-`xvclk` at 24 MHz from `CLK_SENSOR0`/`CLK_SENSOR1`, and `rotation`/`orientation`. The camera rails
-(`vddcamio`, `vddcama0/1`, `vddcamd0/1`, `vddcammot`) are already defined in the mainline
-`sc2730.dtsi`.
+The SoC side was already done: `&camsys` (CSI/DCAM, `sprd,ums9230-camsys`) and the ISP node exist in
+the mainline dtsi, and the mainline reeder board DTS shows the binding pattern. The camera rails
+(`vddcamio`, `vddcama0/1`, `vddcamd0/1`, `vddcammot`) are defined in the mainline `sc2730.dtsi`.
 
-What is left is the board DT with the fitted sensors. To finish it, identify them on the phone. Try
-the per-unit partitions first (they may name the modules; they also hold the modem NV for 5.2):
+What to check on the device, with an image built from patches 0014/0015:
 
 ```sh
-ls -l /dev/disk/by-partlabel/ > /tmp/partitions.txt
-sudo mkdir -p /mnt/persist /mnt/productinfo
-sudo mount -o ro /dev/disk/by-partlabel/persist /mnt/persist
-sudo mount -o ro /dev/disk/by-partlabel/productinfo /mnt/productinfo
-sudo find /mnt/persist /mnt/productinfo -maxdepth 4 > /tmp/unit-data.txt 2>&1
-sudo grep -rila -E 'ov8856|gc08a3|hi1336|s5k3l6|ov13b10' /mnt/persist /mnt/productinfo \
-    >> /tmp/unit-data.txt 2>&1
-# the decisive one: the camera HAL reads its per-sensor OTP from
-# /mnt/vendor/productinfo/otpdata/<sensor-name>/id<N>_otp.bin, so the directory
-# names under otpdata are the fitted sensors
-sudo find /mnt/productinfo/otpdata -maxdepth 2 >> /tmp/unit-data.txt 2>&1
+# did the sensor probe, and what did the CSI/DCAM side create?
+dmesg | grep -iE 's5k3l6|camsys|csi|sprd-isp'
+media-ctl -p -d /dev/media0
+v4l2-ctl --list-devices
+v4l2-ctl --list-subdevs
+# the sensor's controls: use the test pattern first, it needs neither light
+# nor focus and exercises CSI + DCAM on its own
+v4l2-ctl -d /dev/v4l-subdev0 --list-ctrls
+v4l2-ctl -d /dev/v4l-subdev0 --set-ctrl=test_pattern=2
+v4l2-ctl -d /dev/video0 --all
+v4l2-ctl -d /dev/video0 --stream-mmap --stream-count=10 --stream-to=/tmp/frame.raw
 ```
 
-If that does not name a sensor, the stock system's camera HAL log does. The stock kernel is still in
-`boot_b` (the port only wrote `boot_a`); copying it back and booting it once shows the sensors the
-HAL identified. Treat pmOS' userdata as lost: Android cannot read that filesystem and will fail to mount it (or
-offer to format it). The pmOS image is flashed again afterwards, so do this only if the partition
-route failed, and keep the UART or fastboot within reach for the way back:
+(`v4l2-ctl` comes from `apk add v4l-utils`. The subdev and video numbers come from `media-ctl -p`;
+on this SoC the capture node belongs to the DCAM, and the ISP is a separate media entity.)
+
+There is no camera application yet: the mainline sprd stack exposes raw Bayer capture and the ISP
+blocks through V4L2, but libcamera has no sprd pipeline handler and there is no 3A. The first
+milestone is frames from the sensor, then a userspace pipeline.
+
+Still needed for the front OV8856 (its bus and address are not in any source that was available):
 
 ```sh
-# on pmOS, root; both images are the stock boot images
-sudo dd if=/dev/disk/by-partlabel/boot_b of=/tmp/boot-stock.img bs=4M
-sudo dd if=/tmp/boot-stock.img of=/dev/disk/by-partlabel/boot_a bs=4M conv=fsync
-reboot
-# on stock Android (root shell / adb):
-getprop vendor.cam.sensor.slot.info
-dmesg | grep -iE 'sensor|ov8856|hi1336|s5k3l6|ov13b10|gc08a3'
-# afterwards, back in pmOS: reflash the U-Boot boot.img to boot_a (FIRST_BOOT.md)
+# on the stock system, root, with the front camera opened once:
+ls -l /sys/bus/i2c/devices/
+cat /sys/bus/i2c/devices/*/name
+dmesg | grep -iE 'ov8856|cam[0-9]|sensor|mipi'
 ```
 
-If the stock system is running (root) instead of booting it later, the identification is one
-property away. Open the Camera app once so the camera HAL has run, then:
-
-```sh
-getprop vendor.cam.sensor.slot.info
-getprop persist.vendor.cam.sensor.info
-getprop persist.vendor.cam.sensor.tuning.list
-ls -lR /mnt/vendor/productinfo/otpdata
-dmesg | grep -iE 'sensor|ov8856|gc08a3|hi1336|s5k3l6|ov13b10|camsys|isp'
-cat /proc/cmdline; ls -l /dev/block/by-name
-```
+The sysfs listing gives the bus-address pairs the vendor driver instantiated (`<bus>-<addr>`), and
+the dmesg shows which CSI index and how many lanes the front camera uses. Note that the vendor's own
+OV8856 library is built for 24 MHz like the rear sensor, while the mainline ov8856 driver only has
+19.2 MHz tables, so the front camera will need either 24 MHz tables added to that driver or
+`CLK_SENSOR0` set to 19.2 MHz for it.
 
 ### 5.2 Cellular (modem)
 
@@ -845,15 +855,20 @@ memory regions and power domains; the reeder board DTS enables `&modem` and `&mo
 
 Missing pieces, in order:
 
-1. **The images and the unit's NV.** They are not in the OTA; they are the phone's `modem` (and
-   `nvdata`/`prodnv`) partitions, and `l_fixnv.bin` carries the IMEI. Nothing can register without
-   them. Dump them from pmOS:
+1. **The images and the unit's NV.** They are not in the OTA; they are the phone's own modem
+   partitions. On this eMMC unit (`ls -l /dev/block/by-name`) they are: `l_modem_a` (mmcblk0p20) for
+   the modem, `l_fixnv1_a` (p13) and `l_fixnv2_a` (p14) for the factory NV that carries the IMEI,
+   `l_deltanv_a` (p22) and `l_runtimenv1`/`l_runtimenv2` (p17/p18) for the calibration and runtime
+   NV, and `l_gdsp_a` (p24), `l_ldsp_a` (p26), `l_agdsp_a` (p28) for the DSP images. There is no
+   separate `nvdata` partition. The driver asks for these as `/lib/firmware/sprd/l_modem.bin`,
+   `l_fixnv.bin`, `l_deltanv.bin`, `l_runtimenv.bin`, `l_gdsp.bin`, `l_ldsp.bin`, so each partition
+   image becomes the matching file. Nothing can register without them. Dump them from pmOS:
    ```sh
-   sudo dd if=/dev/disk/by-partlabel/modem of=/tmp/modem.img bs=4M
-   gzip -1 /tmp/modem.img
-   ls -l /tmp/modem.img.gz
+   for p in l_modem_a l_fixnv1_a l_fixnv2_a l_deltanv_a l_runtimenv1 l_runtimenv2 l_gdsp_a l_ldsp_a; do
+       sudo dd if=/dev/disk/by-partlabel/$p of=/tmp/$p.img bs=4M
+   done
+   ls -l /tmp/l_*.img
    ```
-   (Check `/tmp/partitions.txt` first - the label may differ; `nvdata`/`prodnv` are worth dumping too.)
 2. **The DT**: enable `&modem` and `&pmsys` in the board DTS (the SoC nodes and regions are already
    there), and package the images under `/lib/firmware/sprd/`.
 3. **Userspace**: `rpmsg_wwan_ctrl` exposes the AT/control port and `rpmsg_wwan_net` the data port;
@@ -868,8 +883,11 @@ dmesg | grep -iE 'modem|sipc|rmb|wwan|sim|imei'
 getprop | grep -iE 'modem|radio|imei'
 ls -l /dev/block/by-name
 find /vendor /odm /mnt/vendor -iname 'l_*.bin' -o -iname '*modem*.bin' 2>/dev/null | head -40
-# and the images themselves (adb pull /sdcard/modem.img from the host afterwards):
-dd if=/dev/block/by-name/modem of=/sdcard/modem.img bs=4M
+# and the images themselves (copy them off the phone afterwards, or use the
+# partition list above and dd from pmOS):
+for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a; do
+    dd if=/dev/block/by-name/$p of=/sdcard/$p.img bs=4M
+done
 ```
 
 To get both datasets to the host (from the host, over the USB link; the login is in README.md):
