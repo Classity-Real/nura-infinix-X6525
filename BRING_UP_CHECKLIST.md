@@ -599,8 +599,9 @@ device package carries both sessions' drop-ins.
 image starts it through `plasma-mobile.service` (from the `plasma-mobile-systemd` subpackage), a
 getty replacement that runs `/usr/bin/startplasmamobile` on tty1 as uid 1000; that script execs
 `startplasma-wayland` with `PLASMA_DEFAULT_SHELL=org.kde.plasma.mobileshell`. The base preset
-(`90-base.preset`) enables `plasma-mobile.service` and disables `sddm.service`; the UI's
-`-systemd` post-install creates the `display-manager.service` alias. `plasmalogin.service` (the
+(`90-base.preset`) enables `plasma-mobile.service` and disables `sddm.service`; enabling the unit
+creates its `[Install] Alias=display-manager.service` link, and the UI's `-systemd` post-install
+covers the case where the unit was already enabled when that ran. `plasmalogin.service` (the
 Plasma login manager) is enabled by the same preset when that package is installed.
 
 The display driver choice is the same as for Phosh: only `sprd-drm` has the DCS backlight and the
