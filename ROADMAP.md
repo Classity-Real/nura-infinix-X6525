@@ -69,26 +69,54 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
 - **Charging**: bq24158 driver, VBUS detection, the USB-detection supply, and the charger-enable hog
   are in tree. JEITA tables and BC1.2 are not. Charging current is capped at 500 mA until BC1.2.
 
-## Deferred by request
+## Performance and the storage variant
 
-The user asked to leave these until the camera, connectivity and sensors are done:
+**In tree now:**
 
-- **UFS** - not fitted on this eMMC unit; see the note at the top. If a UFS unit is ever targeted,
-  U-Boot needs `CMD_UFS`/`UFS`/`UFS_SPRD_UMS9230` back and the DT needs the UFS node instead of
-  `sdio3`.
-- **Performance**:
-  - thermal throttling/trips (the zones exist, the trips do not);
-  - suspend/resume (untested; the PM co-processor and pmsys may matter here);
-  - GPU 850 MHz (needs the GPU PLL; the OPP table stops at 768 MHz for now);
-  - CPU DVFS beyond the upstream `cpufreq` node;
-  - storage tuning and read-ahead.
+- **CPU DVFS** - `sprd-cpufreq-v2` with the chip's own DVFS bins from the NVMEM cells, enabled in the
+  board DTS (`&cpufreq { sprd,soc-version = <0x36303654>; status = "okay"; }`).
+- **CPU thermal throttling** - the SoC's `cputop0`/`ank*` zones already have 70 C passive trips and
+  cpufreq cooling maps in the mainline dtsi.
+- **GPU thermal throttling** - patch 0021 gives the `gpu-thermal` zone a 70 C passive trip and a
+  devfreq cooling map to `&gpu` (Panfrost registers the cooling device). Before this the zone only
+  reported; the GPU never throttled.
+- **Storage PHY delays** - the board DTS carries the stock values for eMMC (HS/HS200/HS400/ES) and
+  microSD (legacy/HS/SDR50/SDR104).
+- **HS200/HS400 test knob** - patch 0022 adds `sdhci_sprd.enable_hs200=1`; see the test below.
+
+**Still open:**
+
+- **GPU 850 MHz** - the stock OPP table has 850 MHz @ 0.8 V, but the mainline composite GPU clock
+  does not propagate rate requests to its parents (`sprd_comp_determine_rate()` passes flags 0), so
+  GPLL stays at its 750 MHz default. GPLL also feeds the aux clocks through `/20`
+  (`gpll_42m5` -> aux0/1/2/probe), so reprogramming it for the GPU changes those rates unless the
+  clock tree is reworked. The OPP table stops at 768 MHz until that is solved and tested.
+- **eMMC link speed** - `sdhci_sprd_pdata` sets `SDHCI_QUIRK2_BROKEN_HS200` for every r11
+  controller, so the core clears `MMC_CAP2_HS200` and the link stays at DDR52 (HS400 is gated behind
+  HS200), although the stock kernel runs this part at HS400. The opt-in knob exists to test whether
+  the quirk is unnecessary on UMS9230; if it is, the quirk should be narrowed by compatible (and the
+  knob removed) after it has run on hardware. The eMMC is the root filesystem, so this is
+  deliberately not the default.
+- **Suspend/resume** - the firmware's PSCI is 0.2 (`compatible = "arm,psci-0.2"`), which has no
+  SYSTEM_SUSPEND; the vendor suspends through the PM co-processor, not PSCI. CPU idle
+  (core power-down, `arm,psci-suspend-param = <0x10000>`) works. `systemctl suspend` is therefore
+  expected to fail or only freeze; s2ram needs a pmsys suspend driver that does not exist yet.
+
+**UFS (the other storage variant):** not fitted on this eMMC unit, and the stock tree disables its
+`ufs@20200000` node too. The mainline kernel already builds `CONFIG_SCSI_UFS_SPRD=y` and the dtsi
+has the node disabled; the reeder enables it with `vcc-supply = <&vddemmccore>`. To support a UFS
+unit, U-Boot needs `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230` back in its defconfig, the board DTS
+needs the UFS node enabled (and the eMMC node likely disabled), and the bootcmd must scan `scsi` as
+well as `mmc`. None of that can be tested here, and enabling it unconditionally on an eMMC unit
+would share `vddemmccore` with the rootfs device, so it stays off.
 
 ## Upstreaming
 
-- The kernel series (now 20 patches in `patches/upstream/`) is cut against the
-  `v7.2-rc6-ums9230-0` tag and has not been sent. The two U-Boot patches have not been sent either.
-  `NOTES.md` explains where each series should go (kernel: maintainer by mail/issue, not a PR against
-  the stale branch; U-Boot: PR from the fork branch).
+- The kernel series (now 22 patches in `patches/upstream/`) is cut against the
+  `v7.2-rc6-ums9230-0` tag and has not been sent. Patch 22 is explicitly not for submission. The
+  two U-Boot patches have not been sent either. `NOTES.md` explains where each series should go
+  (kernel: maintainer by mail/issue, not a PR against the stale branch; U-Boot: PR from the fork
+  branch).
 - The fork branches in `NOTES.md` are force-updated when the series changes, so
   `git format-patch` from them remains the source of truth for the patch files.
 

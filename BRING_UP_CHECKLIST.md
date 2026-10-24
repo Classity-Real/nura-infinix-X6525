@@ -1208,8 +1208,9 @@ Vulkan, then software), and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-ga
 The GPU now also has a DVFS table, taken from the stock kernel's `operating-points` for this part:
 384 MHz at 0.70 V, 512 and 614.4 MHz at 0.75 V, 768 MHz at 0.80 V. Panfrost's devfreq scales through
 those; without it the GPU runs at whatever rate the bootloader left and never changes. The stock
-table's 850 MHz at 0.80 V is left out for now: the mainline GPU clock has fixed parents only up to
-768 MHz, and reaching 850 needs the GPU PLL programmed.
+table's 850 MHz at 0.80 V is left out for now: the mainline composite GPU clock does not propagate
+rate requests to GPLL (it stays at its 750 MHz default), and GPLL also feeds the aux clocks through
+`/20`, so 850 MHz needs clock-tree work and hardware testing (see ROADMAP.md).
 
 Checks after booting an image with the display switch:
 
@@ -1227,6 +1228,75 @@ apk add glmark2 mesa-demos vulkan-tools
 glmark2-es2-wayland --benchmark
 vulkaninfo --summary
 ```
+
+### 7.1 GPU thermal throttling
+
+Patch 0021 gives the SoC's `gpu-thermal` zone a 70 C passive trip and a devfreq cooling map to the
+GPU (Panfrost registers the cooling device). Before it, the zone only reported. Check the zone and
+that the GPU rate moves when the trip is crossed:
+
+```sh
+for z in /sys/class/thermal/thermal_zone*; do
+    printf '%s %s %s\n' "$z" "$(cat "$z/type")" "$(cat "$z/temp")"
+done
+cat /sys/class/thermal/thermal_zone*/trip_point_*_type 2>/dev/null
+cat /sys/class/thermal/thermal_zone*/trip_point_*_temp 2>/dev/null
+# while glmark2 (above) runs in another shell:
+watch -n 1 'cat /sys/class/devfreq/*/cur_freq'
+```
+
+- The `gpu-thermal` zone must be present, with a passive trip at 70000 and a cooling device. If the
+  zone is missing, `ap_thm2` did not probe; send `dmesg | grep -i thm`.
+- The GPU rate should drop below its current OPP once the zone crosses 70 C and return after it
+  cools. If it never moves, the cooling device did not register; check
+  `ls /sys/class/thermal/cooling_device*` and their `type`.
+
+### 7.2 eMMC HS200/HS400 (opt-in test)
+
+The mainline driver marks HS200 broken for every `sprd,sdhci-r11` controller, so the eMMC link comes
+up at DDR52 even though the stock kernel runs the same part at HS400. Patch 0022 adds a boot-time
+override; it is deliberately **off** by default because the eMMC is the root filesystem.
+
+On the host, add the option to the boot image before flashing (or to an already-extracted image):
+
+```sh
+sh tools/patch-cmdline.sh pmos-boot-fs.img sdhci_sprd.enable_hs200=1
+```
+
+Then flash `pmos-boot-fs.img` to `cache` and boot. To undo, use `--remove` with the same option.
+Keep the microSD image or a debug shell path available: if the link trains badly, the rootfs may not
+mount, and the fix is to remove the option from the extlinux `append` line (or reflash the boot
+image).
+
+Checks:
+
+```sh
+sudo dmesg | grep -iE 'mmc0|sdhci|hs200|hs400|ddr52'
+cat /sys/kernel/debug/mmc0/ios 2>/dev/null
+# throughput, both at DDR52 and with the override
+apk add hdparm
+sudo hdparm -t /dev/mmcblk0
+dd if=/dev/mmcblk0 of=/dev/null bs=1M count=512 iflag=direct
+```
+
+- `dmesg` should show a higher speed mode (`HS200`/`HS400`) and the card should still enumerate with
+  its full capacity.
+- If it floods `mmc0: error -84` / tuning errors, or the rootfs does not mount, remove the option
+  and report the `dmesg` lines. That result is the evidence needed to narrow the quirk.
+
+### 7.3 Suspend
+
+The firmware's PSCI is 0.2, which has no SYSTEM_SUSPEND; the vendor suspends through the PM
+co-processor and mainline has no driver for that path. Check what the kernel offers:
+
+```sh
+cat /sys/power/state
+systemctl suspend
+journalctl -b --no-pager | grep -iE 'suspend|psci|s2ram' | tail -20
+```
+
+`freeze` alone is expected at most; `mem` should not be offered. A failed `systemctl suspend` here is
+a missing driver, not a configuration error. Do not treat it as a regression.
 
 ## What to send when asking for help
 
