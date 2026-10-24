@@ -114,15 +114,21 @@ logcat (opening the rear camera):
   9850ka_s5k3l6: s5k3l6_drv_access_val: sensor s5k3l6: param_ptr->type=13
   9850ka_s5k3l6: s5k3l6_drv_power_on: (1:on, 0:off): 0
 
-Still needed: the live device tree's sensor nodes (bus, reg, sprd,phyid,
-reset/power-down GPIOs), which settle which socket is wired how, and the
-front camera's lane count. Copy the live tree:
+The live device tree was copied to unit-data/bin/fdt.dtb (270082 bytes). Its
+sensor sockets, as the stock kernel has them:
 
-  cp /sys/firmware/fdt /sdcard/fdt.dtb
-  # if that file does not exist:
-  tar -czf /sdcard/fdt.tar.gz -C /proc/device-tree .
+  sensor-sub   i2c1 (200e0000)  reg 0x5a  phyid 0  reset ap_gpio 41
+               power-down ap_gpio 40  vddcamio/vddcama1/vddcamd1  CLK_SENSOR1
+  sensor-main  i2c0 (200d0000)  reg 0x20  phyid 2  reset ap_gpio 44
+               power-down ap_gpio 46  vddcamio/vddcama0/vddcamd0/vddcammot
+               CLK_SENSOR0
+  sensor-main2 i2c1 (200e0000)  reg 0x20  phyid 3  fakeserial-gpios ap_gpio 126
+               CLK_SENSOR2
 
-and put it in unit-data/bin/.
+No sensor-sub2 node. The reg values are the 8-bit write addresses, so the
+rear S5K3L6 (sensor-sub) is at 7-bit 0x2d and the front OV8856 (sensor-main)
+at 7-bit 0x10. phyid 0 is the four-lane port (matches "mipi 0 10 0 4"),
+phyid 2 is a two-lane port.
 
 ======================================================================
 ## partitions

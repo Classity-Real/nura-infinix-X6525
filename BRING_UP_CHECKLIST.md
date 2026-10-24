@@ -745,19 +745,27 @@ the hardware is; the two things that are per unit rather than per project are no
 
 ### 5.1 Camera
 
-Sockets from the vendor board overlay (`arch/arm64/boot/dts/sprd/ums9230-1h10_go-overlay.dts`):
+Sockets as the running stock kernel has them, read from the live device tree (`unit-data/bin/fdt.dtb`,
+copied from `/sys/firmware/fdt`):
 
-| vendor node | bus | reg | CSI / phyid | supplies | reset | power-down | other |
-|---|---|---|---|---|---|---|---|
-| `sensor-main` | i2c0 | 0x20 | csi0, phyid 0 | vddcamio, vddcama0, vddcammot | ap_gpio 45 | ap_gpio 47 | `dvdd-gpios` ap_gpio 11 |
-| `sensor-sub` | i2c0 | 0x5a | csi0, phyid 2 | vddcamio, vddcama0, vddcammot | ap_gpio 44 | ap_gpio 46 | `dvdd-gpios` ap_gpio 11 |
-| `sensor-main2` | i2c1 | 0x20 | csi1, phyid 4 | vddcamio, vddcama1, vddcamd0, vddcammot | ap_gpio 41 | ap_gpio 40 | `avdd-gpios` 33, `mot-gpios` 88 |
-| `sensor-sub2` | i2c6 | 0x6e | csi2, phyid 3 | vddcamio, vddcamd1, vddcammot | ap_gpio 114 | - | `avdd-gpios` 130, `mot-gpios` 112 |
+| vendor node | bus | reg | 7-bit addr | phyid | reset | power-down | supplies | clock |
+|---|---|---|---|---|---|---|---|---|
+| `sensor-sub` (rear, S5K3L6) | i2c1 `200e0000` | 0x5a | 0x2d | 0 | ap_gpio 41 | ap_gpio 40 | vddcamio, vddcama1, vddcamd1 | CLK_SENSOR1 |
+| `sensor-main` (front, OV8856) | i2c0 `200d0000` | 0x20 | 0x10 | 2 | ap_gpio 44 | ap_gpio 46 | vddcamio, vddcama0, vddcamd0, vddcammot | CLK_SENSOR0 |
+| `sensor-main2` (`fakeserial`, decorative) | i2c1 `200e0000` | 0x20 | 0x10 | 3 | - | - | vddcama1 | CLK_SENSOR2 |
 
-There is also a flash controller: `sprd,flash-ocp8137` on i2c5 at 0x63, with torch/preflash/highlight
-on ap_gpio 32/138/139 and sync on 121. The vendor `reg` values are what the vendor kernel's
-`sprd_sensor` I2C driver uses; the sensor models' addresses in the stock HAL differ (see below), so
-treat the table as bus/socket/GPIO wiring, not as the sensor's I2C address.
+The vendor `reg` values are the 8-bit (write) form of the address; Linux wants the 7-bit one, hence
+the second column. There is no `sensor-sub2` client on this unit. The generic vendor overlay
+(`ums9230-1h10_go-overlay.dts`) has a different socket layout - it puts `sensor-sub` on i2c0 - so the
+live tree, not the overlay, is what the board DTS follows.
+
+`phyid` is the mainline camsys port number: 0 is `CAMSYS_CSI_4LANE`, 2 is `CAMSYS_CSI_M` (two lanes).
+The vendor driver's own CSI controller choice (`csi0`/`csi1` in the live tree) is not part of the
+mainline binding; the media graph selects a controller at stream time.
+
+There is also a flash controller: `sprd,flash-ocp8137` on i2c5 at 0x63 (and `flash-aw36515` at 0x64
+in the live tree), with torch/preflash/highlight on ap_gpio 32/138/139 and sync on 121. No mainline
+driver yet.
 
 The stock OTA's `/odm/etc/sensor_config.xml` lists what the HAL expects per camera slot:
 
@@ -775,8 +783,7 @@ properties gave:
 
 `persist.vendor.cam.sensor.tuning.list` reads
 `id0,s5k3l6_1836;id1,ov8856_1831;id2,fakeserial`, and `/mnt/vendor/productinfo/otpdata` is empty on
-this unit. The properties are `vendor.cam.sensor.slot.info`, `persist.vendor.cam.sensor.info` and
-`persist.vendor.cam.sensor.tuning.list`.
+this unit.
 
 The port now describes the rear camera and builds a driver for it:
 
@@ -786,9 +793,9 @@ The port now describes the rear camera and builds a driver for it:
   `proprietary/odm/lib64/libsensor_s5k3l6.so` in the public `vendor_X6525` tree, whose mode
   descriptors say `mclk 24, lanes 4` and whose tables carry the PLL, lane and MIPI values used
   below. The stock stack's 4-lane/10-bit setup is visible in the dmesg (`mipi 0 10 0 4`).
-- `patches/upstream/0015-*` adds the sensor node and the `&camsys` port to the board DTS: i2c0 at
-  0x20, four lanes, `CLK_SENSOR0` at 24 MHz, reset on ap_gpio 45, power-down on ap_gpio 47, and DVDD
-  as a fixed regulator behind the load switch on ap_gpio 11.
+- `patches/upstream/0015-*` adds the sensor node and the `&camsys` port to the board DTS: i2c1 at
+  7-bit 0x2d, four lanes, `CLK_SENSOR1` at 24 MHz, reset on ap_gpio 41, power-down on ap_gpio 40,
+  and the vddcamio/vddcama1/vddcamd1 rails.
 - `CONFIG_VIDEO_S5K3L6=m` is in the ROM's kernel config.
 
 Mainline support, from the ROM's kernel config:
@@ -828,37 +835,12 @@ There is no camera application yet: the mainline sprd stack exposes raw Bayer ca
 blocks through V4L2, but libcamera has no sprd pipeline handler and there is no 3A. The first
 milestone is frames from the sensor, then a userspace pipeline.
 
-Still needed for the front OV8856 (its bus and address are not in any source that was available):
-
-```sh
-# on the stock system, root, with the front camera opened once:
-ls -l /sys/bus/i2c/devices/
-cat /sys/bus/i2c/devices/*/name
-logcat -d | grep -iE 'i2c_addr|slave_addr|s5k3l6|ov8856' | tail -40
-dmesg | grep -iE 'ov8856|cam[0-9]|sensor|mipi'
-```
-
-The sysfs listing gives the bus-address pairs the vendor driver instantiated (`<bus>-<addr>`), and
-the dmesg shows which CSI index and how many lanes the front camera uses. On this unit it already
-showed `sensor-sub` on i2c-1 at 0x5a (not i2c0 as the generic vendor overlay has it), and no
-`sensor-sub2` - so the board's own dtbo differs from the overlay and has to be read.
-
-The live device tree is the authority for the sensor sockets (bus, `reg`, `sprd,phyid`, reset and
-power-down GPIOs). Copy it off the phone once:
-
-```sh
-# on the stock system, root
-cp /sys/firmware/fdt /sdcard/fdt.dtb
-# if that file does not exist, archive the expanded tree instead:
-tar -czf /sdcard/fdt.tar.gz -C /proc/device-tree .
-```
-
-Put the file in `unit-data/bin/`; `dtc -I dtb -O dts` on it then gives every sensor node as the
-running kernel sees it.
-
-Note that the vendor's own OV8856 library is built for 24 MHz like the rear sensor, while the
-mainline ov8856 driver only has 19.2 MHz tables, so the front camera will need either 24 MHz tables
-added to that driver or `CLK_SENSOR0` set to 19.2 MHz for it.
+The front OV8856 is not described yet. The live tree says it is in `sensor-main`: i2c0 at 7-bit 0x10,
+`phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/vddcamd0/
+vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its clock
+needs to come from `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear
+sensor is on `CLK_SENSOR1`, so the two do not conflict. If the mainline driver's address set does not
+match (it knows 0x10 and 0x36), 0x10 is the one to use.
 
 ### 5.2 Cellular (modem)
 
