@@ -131,3 +131,35 @@ administered address in that case, so Bluetooth works, but the address (and with
 changes on every boot. A stable address needs U-Boot to read one (the device's `prodnv` partition is
 the likely source) or a per-device DTS to supply one; until then this is a known limitation, not a
 configuration error.
+
+# Modem firmware
+
+`firmware-infinix-x6525-modem-1.tar.gz` carries the six images `drivers/remoteproc/sprd_modem.c`
+loads. They come from this unit's `l_*` partitions (`l_modem_a`, `l_deltanv_a`, `l_fixnv1_a`,
+`l_runtimenv1`, `l_gdsp_a`, `l_ldsp_a`), dumped with `dd` from the stock system; the dump commands are
+in BRING_UP_CHECKLIST.md 5.2.
+
+| partition | file | bytes |
+|---|---|---|
+| `l_modem_a` | `sprd/l_modem.bin` | 20447232 (0x1380000) |
+| `l_deltanv_a` | `sprd/l_deltanv.bin` | 131072 (0x20000) |
+| `l_fixnv1_a` | `sprd/l_fixnv.bin` | 1048576 (0x100000) |
+| `l_runtimenv1` | `sprd/l_runtimenv.bin` | 1179648 (0x120000) |
+| `l_gdsp_a` | `sprd/l_gdsp.bin` | 4456448 (0x440000) |
+| `l_ldsp_a` | `sprd/l_ldsp.bin` | 11534336 (0xb00000) |
+
+The partitions are bigger than the regions they feed. The `MECP` header at the start of `l_modem.bin`
+lists each region with its base and size in the modem's reserved memory, and the driver copies a file
+whole into its region and rejects anything larger, so each file is the **first `<region size>` bytes**
+of its partition - the image plus the zero padding the partition carries. The trailing few kilobytes
+of each partition (outside the region, sometimes a `0xFF` trailer) are not part of it. The three NV
+files are this unit's own data: `l_fixnv.bin` carries the IMEI. A build that is meant to be shared
+should replace them with an image that does not, or not ship them.
+
+At the time of writing the driver's loader copies the images and starts the modem; whether the
+Unisoc LTE stack then comes up on mainline is the open question BRING_UP_CHECKLIST.md 5.2 describes.
+
+```
+11298362 bytes
+sha512  864ba9c8b2c917809c515dbeb03f6512eaa85c91578a30e586665abafb7b1f015c09bfb976617db4931f13c1d88ad313275926f764d54a205879d26c7cc335aa
+```
