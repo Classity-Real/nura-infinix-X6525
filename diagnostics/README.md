@@ -42,9 +42,11 @@ fastboot flash boot_a diagnostics/boot-no-preboot.img
 ## If SSH works: the kernel runs, the display does not
 
 Check the compositor's DRM hand-off first. The image points Plasma/phoc at
-`/dev/dri/x6525-primary`, created by a udev rule that used `DRIVERS=="sprd-drm"`, while this tree's
-platform driver is `sprd-drm-drv`. If the symlink is absent, the compositor has a nonexistent device
-and the panel is never enabled:
+`/dev/dri/x6525-primary`, created by a udev rule. The card device has **no `DRIVERS` property**
+(confirmed on the phone: `udevadm info -q property -n /dev/dri/card1` shows only `DEVNAME`), so a
+`DRIVERS==...` rule cannot match and the symlink is absent while `card1` itself exists. The fixed
+rule matches `DEVPATH=="*/display-subsystem/drm/card[0-9]*"`. If the symlink is absent, the
+compositor has a nonexistent device and the panel is never enabled:
 
 ```sh
 ls -l /dev/dri /dev/dri/x6525-primary 2>&1
@@ -57,8 +59,10 @@ sudo ln -sf /dev/dri/card1 /dev/dri/x6525-primary
 sudo systemctl restart plasma-mobile
 ```
 
-If the panel lights up, the udev rule is the bug (the next build matches `sprd-drm*`). If it stays
-on the logo, continue with the mode test below.
+If the panel lights up, the udev rule is the bug (the next build matches the card's `DEVPATH`).
+If it stays on the logo, continue with the mode test below. The by-path link
+`/dev/dri/by-path/platform-display-subsystem-card` exists even without the custom one, so it can be
+used for the same test.
 
 The other display change is the 90 Hz mode, which the panel driver marked as preferred. If that
 timing is not accepted by this DSI/DPU path, DRM picks it, the modeset fails, and the bootloader logo

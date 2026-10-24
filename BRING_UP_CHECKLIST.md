@@ -740,9 +740,14 @@ Two things have caused this on this port. Check the first before rebuilding:
 
 1. **The compositor never gets the sprd-drm card.** The image points Plasma (and phoc) at
    `/dev/dri/x6525-primary`, created by
-   `/usr/lib/udev/rules.d/90-x6525-drm-primary.rules` with `DRIVERS=="sprd-drm"`. The platform
-   driver in this tree is named **`sprd-drm-drv`**, so the rule may never match. If the symlink is
-   missing, KWin/phoc has a nonexistent device and the panel is never modeset.
+   `/usr/lib/udev/rules.d/90-x6525-drm-primary.rules`. The first rule matched
+   `DRIVERS=="sprd-drm"`, and the later attempt matched `DRIVERS=="sprd-drm*"`; **neither can
+   match**, because the DRM card device has no `DRIVERS` property at all. Confirmed on the phone
+   2026-10-24: `udevadm info -q property -n /dev/dri/card1` prints only `DEVNAME`, and the symlink
+   is absent while `/dev/dri/card1` and `/dev/dri/by-path/platform-display-subsystem-card` exist.
+   The rule now matches the card's parent path instead:
+   `DEVPATH=="*/display-subsystem/drm/card[0-9]*"`. Without the link, KWin/phoc is started with a
+   nonexistent device and the panel is never modeset.
 2. **The 90 Hz mode is preferred.** The board DT's `native-mode` is timing0 (60 Hz). Patch 0019
    made timing1 (90 Hz) preferred; patch 0023 restores 60 Hz and keeps 90 Hz selectable. On this
    DSI/DPU path a rejected 90 Hz modeset also leaves the bootloader logo in place.
@@ -767,7 +772,7 @@ What the result means:
 
 | What you see | Meaning | Next |
 |---|---|---|
-| `/dev/dri/card1` exists, `/dev/dri/x6525-primary` missing | the udev rule did not match the driver name | create the link by hand (below); the port needs the rule fixed |
+| `/dev/dri/card1` exists, `/dev/dri/x6525-primary` missing | the udev rule did not match (the card has no `DRIVERS`; match its `DEVPATH` instead) | create the link by hand (below); the port needs the rule fixed |
 | no `/dev/dri/card1`, although dmesg says `Initialized sprd ... on minor 1` | the sprd DRM card is not registered (or was removed after init) | send the full `dmesg` from that line and `ls -l /dev/dri`; do not chase the compositor yet |
 | symlink exists, `journalctl -u plasma-mobile` shows a DRM/device error | compositor/modeset failure | send the journal; with the 0023 build also try `video=DSI-1:720x1612@60` for one boot |
 | `bl_power` is 1 or `brightness` is 0 | backlight off, not necessarily a DRM failure | set `brightness` to `max_brightness` and check the panel init in `dmesg` |
@@ -780,9 +785,12 @@ sudo systemctl restart plasma-mobile
 journalctl -u plasma-mobile -b --no-pager | tail -60
 ```
 
-If the panel lights up, the udev rule is the bug and the port must match `sprd-drm-drv` (or
-`sprd-drm*`) instead of `sprd-drm`. If it still stays on the logo, send the journal and the
-`/sys/class/drm` listing.
+If the panel lights up, the udev rule is the bug; the port matches the card's
+`DEVPATH=*/display-subsystem/drm/card*` now. If it still stays on the logo, send the journal and
+the `/sys/class/drm` listing. The by-path link
+`/dev/dri/by-path/platform-display-subsystem-card` exists whether or not the custom one does, so it
+can stand in for the test (point `KWIN_DRM_DEVICES`/`WLR_DRM_DEVICES` at it and restart the
+session).
 
 The 60 Hz test on an older image, for the second cause:
 
