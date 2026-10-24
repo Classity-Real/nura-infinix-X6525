@@ -54,7 +54,7 @@ index 0af83bf5f..2bb80861a 100644
  			ums9620-2h10.dtb
 diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
 new file mode 100644
-index 000000000..fdef47aa5
+index 000000000..08f494f0d
 --- /dev/null
 +++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
 @@ -0,0 +1,743 @@
@@ -763,7 +763,7 @@ index 000000000..fdef47aa5
 +		"Headphones", "HPL_OUT",
 +		"Headphones", "HPR_OUT",
 +		"Speaker Amp INL", "HPL_OUT",
-+		"Speaker Amp INR", "HPL_OUT",
++		"Speaker Amp INR", "HPR_OUT",
 +		"Speaker", "Speaker Amp OUTL",
 +		"Speaker", "Speaker Amp OUTR",
 +		"Modem Uplink", "Modem DAI AOUT",

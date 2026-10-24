@@ -703,7 +703,7 @@
 		"Headphones", "HPL_OUT",
 		"Headphones", "HPR_OUT",
 		"Speaker Amp INL", "HPL_OUT",
-		"Speaker Amp INR", "HPL_OUT",
+		"Speaker Amp INR", "HPR_OUT",
 		"Speaker", "Speaker Amp OUTL",
 		"Speaker", "Speaker Amp OUTR",
 		"Modem Uplink", "Modem DAI AOUT",
