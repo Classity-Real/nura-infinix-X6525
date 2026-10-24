@@ -1,6 +1,6 @@
 # Kernel patches for the ums9230-mainline tree
 
-Twenty patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
+Twenty-two patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
 to apply **in this order** to a clean checkout of it, producing byte-identical files to `dts/`,
 `drivers/` and `bindings/` — i.e. to what CI compiles.
 
@@ -26,11 +26,17 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 18 | `arm64: dts: sprd: give the X6525's GPU its stock DVFS table` | the ums9230 tree, with patch 3 |
 | 19 | `drm/panel: td4160-hx: add the panel's 90 Hz mode` | the ums9230 tree, later drm-misc with 4 |
 | 20 | `arm64: dts: sprd: add the front camera to the Infinix X6525` | the ums9230 tree, with patch 3 |
+| 21 | `arm64: dts: sprd: throttle the X6525's GPU at the SoC's thermal point` | the ums9230 tree, with patch 3 |
+| 22 | `mmc: sdhci-sprd: add an opt-in override for the HS200 quirk` | **bring-up only, not for submission** - a boot-time knob for the eMMC link |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
 14 and 15 add the rear camera, which patch 3 does not describe, and 20 adds the front one, a
 gpio-hog for its power-down pin and the two-lane camsys port; 16 adds a regulator to the charger
-driver and 17 wires it into the board. The series is only consistent once all twenty are applied, which is what the verification below checks.
+driver and 17 wires it into the board; 21 adds GPU devfreq cooling to the SoC's existing gpu-thermal
+zone. 22 is deliberately not upstream material: the driver marks HS200 broken for every r11
+controller, and the X6525's eMMC is the root filesystem, so the override is opt-in via
+`sdhci_sprd.enable_hs200=1` until it has run on hardware. The series is only consistent once all
+twenty-two are applied, which is what the verification below checks.
 Patch 3 also carries the `dtb-y` entry in `arch/arm64/boot/dts/sprd/Makefile` — the ROM's kernel
 package applies this series with `patch -p1` and then runs `dtbs_install`, so a patch 3 without that
 hunk builds no DTB for this board and the image build fails in boot-deploy looking for
