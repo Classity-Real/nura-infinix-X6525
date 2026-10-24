@@ -134,3 +134,7 @@ In the order the current work needs them:
 4. **Cellular** - `mmcli -L`, `mmcli -m any`, the remoteproc state and the service log
    (checklist 5.2).
 5. **90 Hz** - `modetest -M sprd-drm` / the compositor's refresh-rate setting (checklist 3.0).
+6. **MACs** - `printenv bdaddr wifiaddr` at the U-Boot prompt, then `ip link` and
+   `bluetoothctl show` on pmOS; if the variables are empty, check the `prodnv` files (checklist 2.1).
+7. **Performance** - the GPU thermal trip and cooling device, the HS200 opt-in test, and the
+   suspend expectations (checklist 7.1-7.3).
