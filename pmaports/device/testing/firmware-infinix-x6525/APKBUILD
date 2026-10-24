@@ -2,7 +2,7 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=firmware-infinix-x6525
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Firmware for the Infinix X6525"
 url="https://github.com/Seuj09/pmos-infinix-x6525"
 arch="aarch64"
@@ -22,13 +22,16 @@ options="!check !archcheck !strip !spdx !tracedeps pmb:cross-native"
 # .github/workflows/firmware-release.yml can also put a versioned copy on that
 # repository's releases; nothing depends on it.
 _tarball="firmware-infinix-x6525-$pkgver.tar.gz"
-# Built-in Wi-Fi/Bluetooth: the WCN remoteproc loads sprd/wcnmodem.bin, and the
+# Built-in Wi-Fi/Bluetooth: the WCN remoteproc loads sprd/wcnmodem.bin, the
 # sc23xx WLAN driver downloads sprd/wifi_board_config.bin (the stock
 # /odm/firmware/wifi_board_config.ini converted by tools/wifi-ini2bin.py, which
-# reproduces the stock driver's own four CRC-framed sections).
-_wcn="firmware-infinix-x6525-wcn-2.tar.gz"
+# reproduces the stock driver's own four CRC-framed sections), and btsprdsipc
+# needs sprd/bt_config_pskey.bin and sprd/bt_config_rf.bin - it fails its probe
+# without them, so no HCI device appears at all. Those two are the stock
+# /odm/firmware/bt_configure_{pskey,rf}.ini laid out by tools/bt-ini2bin.py.
+_wcn="firmware-infinix-x6525-wcn-3.tar.gz"
 source="$_tarball::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/186e3e0f21e12ffa194ca4a740053fc977b9c5ff/firmware/$_tarball
-	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/a8b30af6dffdc17e342a658dc05a85a9b4e2f214/firmware/$_wcn"
+	$_wcn::https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/8ac4b91d75feba1234073a1611377ed9d88939b8/firmware/$_wcn"
 
 package() {
 	install -Dm644 "$srcdir"/hdl_firmware_01.img \
@@ -37,9 +40,13 @@ package() {
 		"$pkgdir"/lib/firmware/sprd/wcnmodem.bin
 	install -Dm644 "$srcdir"/sprd/wifi_board_config.bin \
 		"$pkgdir"/lib/firmware/sprd/wifi_board_config.bin
+	install -Dm644 "$srcdir"/sprd/bt_config_pskey.bin \
+		"$pkgdir"/lib/firmware/sprd/bt_config_pskey.bin
+	install -Dm644 "$srcdir"/sprd/bt_config_rf.bin \
+		"$pkgdir"/lib/firmware/sprd/bt_config_rf.bin
 }
 
 sha512sums="
 a8ae389d7479ad8b3226cfb3a0d153f5306cdbe6a9b85e31584c5e6c7c34232a06562134ac9b3669fb4a0919e3335a830bd2b7b08a87e132c500d22fe70fa176  $_tarball
-9071ff1f2142a4a9f1c54dcd961b1433e6a425080e87450c54b82fd819307b8356b211cf5d13459cd60748b63ac40237301d50edd69bcec76e6110dd9988a40f  $_wcn
+a04ff31bda1efbaed13d4f18dde3a3054549d07ce83dda90af543acf1daed03c815490b6028c1fa2bf0c860db0a5db1ed60fa4d0c82caa6378f3676b527c00e7  $_wcn
 "

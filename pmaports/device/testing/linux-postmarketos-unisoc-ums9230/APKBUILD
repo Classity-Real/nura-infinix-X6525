@@ -52,6 +52,7 @@ source="
 	0010-dt-bindings-power-supply-sc27xx-fg-allow-power-suppl.patch
 	0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 	0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
+	0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
 "
 builddir="$srcdir/linux"
 
@@ -95,4 +96,5 @@ ededc2108a66340663f1af70f38ec417c9854e678044aac044c558f0ac5bfb49171884e4485e1087
 c8d4c9191516a0bff476855d8e63dec3fb284142ee27f766d3440c0cc8d4703530dd43680a3d91146d46333bbbb52c686e44fe5865fa4707a3ed0d97323e694c  0010-dt-bindings-power-supply-sc27xx-fg-allow-power-suppl.patch
 debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d40677c8992e35bc875acdce9d0afb363f09886830d9925ae5888  0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 775bdfac6606e64ac178376a3e056f53a75e8bb95dcbe2cf0cb1c72164e9a3c007b795185961a3cc871c6a6e713ec785c74a6d2c5d76017f8b3cd1207ed369d4  0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
+4807e547bbdb7424485c38f79a7156b6d9a43ffd41550a8cfa6ac4c7c2223adc81ab65dfc31b0d5fa49a02c4e3b968fe4a40f6fe67bfed5520408d5152f536fd  0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
 "

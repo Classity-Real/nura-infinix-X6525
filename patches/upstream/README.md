@@ -1,6 +1,6 @@
 # Kernel patches for the ums9230-mainline tree
 
-Eleven patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
+Thirteen patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
 to apply **in this order** to a clean checkout of it, producing byte-identical files to `dts/`,
 `drivers/` and `bindings/` — i.e. to what CI compiles.
 
@@ -17,9 +17,11 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 9 | `dt-bindings: gpio: sprd: allow gpio-hog nodes` | bindings/mainline; independent of this board |
 | 10 | `dt-bindings: power: supply: sc27xx-fg: allow power-supplies` | bindings/mainline; independent of this board |
 | 11 | `watchdog: sprd_wdt: keep a watchdog the bootloader started fed` | watchdog; independent of this board |
+| 12 | `spi: sprd: fix full-duplex PIO/DMA RX length and interrupt status clear` | the ums9230 tree; needed by the touch driver's reads |
+| 13 | `Bluetooth: btsprdsipc: fall back to a random BD address` | the ums9230 tree; this port's U-Boot does not fill `local-bd-address` |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
-the series is only consistent once all eleven are applied, which is what the verification below checks.
+the series is only consistent once all thirteen are applied, which is what the verification below checks.
 Patch 3 also carries the `dtb-y` entry in `arch/arm64/boot/dts/sprd/Makefile` — the ROM's kernel
 package applies this series with `patch -p1` and then runs `dtbs_install`, so a patch 3 without that
 hunk builds no DTB for this board and the image build fails in boot-deploy looking for
