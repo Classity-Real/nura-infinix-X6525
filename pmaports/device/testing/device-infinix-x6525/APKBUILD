@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=22
+pkgrel=23
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -392,9 +392,12 @@ EOF
 	# Name the sprd-drm card so the session above can point at it without
 	# guessing card0/card1. If sprd_drm failed to probe, no symlink appears,
 	# phoc cannot start, and the simpledrm console plus SSH remain for
-	# recovery - which is the diagnostic.
+	# recovery - which is the diagnostic. The platform driver is
+	# "sprd-drm-drv" in this tree; match the prefix so either name works (the
+	# first rule used the bare "sprd-drm" and could leave the symlink absent,
+	# which makes KWin start with a nonexistent DRM device).
 	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-drm-primary.rules <<'EOF'
-ACTION=="add", SUBSYSTEM=="drm", DRIVERS=="sprd-drm", KERNEL=="card[0-9]*", SYMLINK+="dri/x6525-primary"
+ACTION=="add", SUBSYSTEM=="drm", DRIVERS=="sprd-drm*", KERNEL=="card[0-9]*", SYMLINK+="dri/x6525-primary"
 EOF
 }
 
