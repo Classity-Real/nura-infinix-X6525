@@ -834,6 +834,7 @@ Still needed for the front OV8856 (its bus and address are not in any source tha
 # on the stock system, root, with the front camera opened once:
 ls -l /sys/bus/i2c/devices/
 cat /sys/bus/i2c/devices/*/name
+logcat -d | grep -iE 'i2c_addr|slave_addr|s5k3l6|ov8856' | tail -40
 dmesg | grep -iE 'ov8856|cam[0-9]|sensor|mipi'
 ```
 
