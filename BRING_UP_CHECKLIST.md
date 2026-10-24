@@ -931,10 +931,38 @@ Copy `modem-blobs.tar.gz` off the phone into `unit-data/bin/` (GitHub's web uplo
 `git push` takes 100 MB per file - if the archive is bigger, split it with
 `split -b 20m modem-blobs.tar.gz modem-blobs.part.` and upload the parts).
 
-With the blobs packaged under `/lib/firmware/sprd/`, the rest is userspace: `rpmsg_wwan_ctrl` exposes
-the AT/control port and `rpmsg_wwan_net` the data port; ModemManager is already installed by the UI
-and can drive an AT port. Whether the Unisoc LTE modem initialises on mainline has never been tried -
-that is the open question, and it needs the images above to answer.
+The images are in the port now: `firmware/firmware-infinix-x6525-modem-1.tar.gz` (trimmed as above)
+is installed by `firmware-infinix-x6525-modem` under `/lib/firmware/sprd/`, and the device package
+depends on it, so every ROM from here on carries them. What is left is whether the modem comes up.
+
+On the device, with a SIM inserted:
+
+```sh
+dmesg | grep -iE 'sprd-modem|remoteproc|sipc|rpmsg|wwan|modem|firmware'
+cat /sys/class/remoteproc/remoteproc*/state
+ls -l /dev/rpmsg* /dev/wwan* 2>/dev/null
+mmcli -L
+mmcli -m any
+```
+
+Reading the failure:
+
+- `failed to load ... sprd/l_*.bin`, or a missing file, is the package: check
+  `ls -l /lib/firmware/sprd/l_*.bin`.
+- `region ... outside memory range` or `firmware too large for region` means the file sizes do not
+  match the MECP header - re-trim each file to the region size (the table above) rather than to the
+  partition size.
+- `state` going to `running` but no `rpmsg` ports and no `wwan` device: the AP released the modem
+  core but the firmware did not reach its SIPC loop, or the mailbox/region wiring differs from the
+  reeder. That is the interesting failure, and the stock dmesg has the reference behaviour.
+- The modem firmware drives the SIM interface itself; nothing in the mainline DT enables the SIM
+  rails, so a SIM that stays unpowered would show up as "no SIM" in `mmcli` rather than as an error.
+  That is the next thing to look at if the modem does come up.
+
+Userspace: `rpmsg_wwan_ctrl` exposes the AT/control port and `rpmsg_wwan_net` the data port;
+ModemManager is already installed by the UI and can drive an AT port. Whether the Unisoc LTE modem
+initialises on mainline has never been tried - that is the open question these images now let us
+answer.
 
 With the stock system running (root), the modem side is also readable directly:
 
