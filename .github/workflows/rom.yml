@@ -48,7 +48,7 @@ jobs:
           # this step did not exist until the runners changed.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            kpartx kmod util-linux procps
+            fdisk kpartx kmod util-linux procps
 
       - name: Loop devices
         run: |
