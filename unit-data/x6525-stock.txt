@@ -36,7 +36,7 @@ cat /proc/cmdline (as pasted; two fragments look like terminal overlap):
   androidboot.wdten=e551 androidboot.dswdten=disable androidboot.dvfs_set=0x0
   androidboot.slot_suffix=_a sprdboot.flash=emmc FlashID=Hosing+433039463030
   sfi=0x00000400 androidboot.ddrsize=4096M androidboot.ddrsize.range=[4096,5120)
-  androidboot.serialno=<redacted-serial> androidboot.force_normal_boot=1
+  androidboot.serialno=<redacted> androidboot.force_normal_boot=1
   androidboot.boot_devices=soc/soc:ap-apb/201d0000.sdio
   androidboot.verifiedbootstate=orange androidboot.flash.locked=0
   androidboot.vbmeta.device=PARTUUID=1.0 androidboot.vbmeta.avb_version=1.1
@@ -114,8 +114,8 @@ logcat (opening the rear camera):
   9850ka_s5k3l6: s5k3l6_drv_access_val: sensor s5k3l6: param_ptr->type=13
   9850ka_s5k3l6: s5k3l6_drv_power_on: (1:on, 0:off): 0
 
-The live device tree was copied to unit-data/bin/fdt.dtb (270082 bytes). Its
-sensor sockets, as the stock kernel has them:
+The live device tree (/sys/firmware/fdt) is not kept in this repository - it carries the
+serial number. Its sensor sockets, as the stock kernel has them:
 
   sensor-sub   i2c1 (200e0000)  reg 0x5a  phyid 0  reset ap_gpio 41
                power-down ap_gpio 40  vddcamio/vddcama1/vddcamd1  CLK_SENSOR1

@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=19
+pkgrel=20
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -12,7 +12,6 @@ depends="
 	android-tools
 	bluez
 	firmware-infinix-x6525
-	firmware-infinix-x6525-modem
 	iw
 	linux-postmarketos-unisoc-ums9230
 	mesa-vulkan-panfrost
@@ -110,6 +109,88 @@ package() {
 	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
 	ln -s /usr/lib/systemd/system/bluetooth.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/bluetooth.service
+	# The cellular modem's images are on this phone, not in the package: the
+	# NV in particular is per unit and carries the IMEI, so shipping it in a
+	# public port would publish it. The kernel asks for sprd/l_*.bin, so a
+	# oneshot unit copies each image out of its partition first (trimmed to the
+	# region size the main image's MECP header declares) and only then loads
+	# the driver. sprd_modem is blacklisted from coldplug for that reason.
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-modem-nv <<'EOF'
+#!/bin/sh
+# Copy this phone's own modem images from its partitions into /lib/firmware/sprd.
+#
+# The port does not ship them: the NV carries the unit's IMEI, and the rest are
+# vendor images that live on the device anyway. Each file is the first <size>
+# bytes of its partition - the region size the main image's MECP header
+# declares (BRING_UP_CHECKLIST.md 5.2).
+set -u
+
+dst=/lib/firmware/sprd
+by=/dev/disk/by-partlabel
+mkdir -p "$dst"
+
+copy() {
+	label=$1
+	file=$2
+	size=$3
+
+	if [ -s "$dst/$file" ] && [ "$(stat -c %s "$dst/$file")" = "$size" ]; then
+		return 0
+	fi
+	if [ ! -e "$by/$label" ]; then
+		echo "x6525-modem-nv: no $label partition" >&2
+		return 1
+	fi
+	if ! dd if="$by/$label" of="$dst/.$file.tmp" bs=4096 \
+			count=$((size / 4096)) status=none; then
+		echo "x6525-modem-nv: could not read $label" >&2
+		rm -f "$dst/.$file.tmp"
+		return 1
+	fi
+	mv "$dst/.$file.tmp" "$dst/$file"
+}
+
+rc=0
+copy l_modem_a l_modem.bin 20447232 || rc=1
+copy l_deltanv_a l_deltanv.bin 131072 || rc=1
+copy l_fixnv1_a l_fixnv.bin 1048576 || rc=1
+copy l_runtimenv1 l_runtimenv.bin 1179648 || rc=1
+copy l_gdsp_a l_gdsp.bin 4456448 || rc=1
+copy l_ldsp_a l_ldsp.bin 11534336 || rc=1
+exit $rc
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-modem-nv.service <<'EOF'
+[Unit]
+Description=Extract this phone's modem images from its own partitions
+After=local-fs.target
+Before=network-pre.target modemmanager.service
+ConditionPathExists=/dev/disk/by-partlabel/l_modem_a
+
+[Service]
+Type=oneshot
+# - : a unit with a different partition layout must still boot; the modem then
+# fails to load its firmware instead of the boot stopping.
+ExecStart=-/usr/bin/x6525-modem-nv
+# sprd_modem is blacklisted, so this is the only place it gets loaded, and the
+# rpmsg/WWAN modules follow from the devices it creates.
+ExecStart=/sbin/modprobe sprd_modem
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	install -Dm644 /dev/stdin "$pkgdir"/etc/modprobe.d/x6525-modem.conf <<'EOF'
+# The modem's firmware is extracted from this unit's partitions by
+# x6525-modem-nv.service. Until that has run, the driver must not probe.
+blacklist sprd_modem
+EOF
+
+	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
+	ln -s /usr/lib/systemd/system/x6525-modem-nv.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-modem-nv.service
 
 	# The device tree's local-mac-address for the WLAN channel is all zeroes
 	# ("filled in by bootloader"); U-Boot fills it from its wifiaddr environment
@@ -209,6 +290,7 @@ EOF
 enable x6525-emmc-cacheoff.service
 enable x6525-emmc-flush.service
 enable bluetooth.service
+enable x6525-modem-nv.service
 EOF
 
 	# For the phosh build (the device package serves both UIs): point the

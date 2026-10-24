@@ -788,8 +788,8 @@ the hardware is; the two things that are per unit rather than per project are no
 
 ### 5.1 Camera
 
-Sockets as the running stock kernel has them, read from the live device tree (`unit-data/bin/fdt.dtb`,
-copied from `/sys/firmware/fdt`):
+Sockets as the running stock kernel has them, read from the live device tree (`/sys/firmware/fdt`;
+not kept in this repository - it carries the serial number):
 
 | vendor node | bus | reg | 7-bit addr | phyid | reset | power-down | supplies | clock |
 |---|---|---|---|---|---|---|---|---|
@@ -914,26 +914,34 @@ own partitions, and the NV carries the IMEI. On this eMMC unit (`ls -l /dev/bloc
 `sprd/pm_bootcode.bin` and `sprd/pm_sys.bin`, which come from `pm_sys_a` (p30); the reeder does not
 enable `&pmsys` and the modem does not need it to start, so it can wait.
 
-The images have to be dumped from the phone. From the stock system (root), the whole set in one go:
+The port does not ship these images. The NV carries the IMEI and the rest are per-unit vendor
+images, so a public port must not publish them; instead the device package installs
+`x6525-modem-nv.service`, which runs `/usr/bin/x6525-modem-nv` at boot: it copies each file out of
+its partition (trimmed to the region size above), then loads `sprd_modem`. The driver is blacklisted
+from coldplug so it waits for that. Every phone therefore uses its own images, and nothing is
+published.
+
+If the service could not run (a different partition layout, or it failed), the same copy can be done
+by hand and the driver reloaded; a reboot is the clean retry because the driver will not have
+probed:
+
+```sh
+# on pmOS, root
+sudo /usr/bin/x6525-modem-nv
+ls -l /lib/firmware/sprd/l_*.bin
+sudo reboot
+```
+
+The images can also be dumped from the stock system (root) if they are needed for inspection; keep
+the result **out of the repository**, it carries the IMEI:
 
 ```sh
 cd /sdcard
-for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a pm_sys_a; do
+for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a; do
     dd if=/dev/block/by-name/$p of=$p.img bs=4M
 done
 ls -l *.img
-gzip -1 *.img
-tar czf modem-blobs.tar.gz *.img.gz
-ls -l modem-blobs.tar.gz
 ```
-
-Copy `modem-blobs.tar.gz` off the phone into `unit-data/bin/` (GitHub's web upload takes 25 MB; a
-`git push` takes 100 MB per file - if the archive is bigger, split it with
-`split -b 20m modem-blobs.tar.gz modem-blobs.part.` and upload the parts).
-
-The images are in the port now: `firmware/firmware-infinix-x6525-modem-1.tar.gz` (trimmed as above)
-is installed by `firmware-infinix-x6525-modem` under `/lib/firmware/sprd/`, and the device package
-depends on it, so every ROM from here on carries them. What is left is whether the modem comes up.
 
 On the device, with a SIM inserted:
 
@@ -947,8 +955,8 @@ mmcli -m any
 
 Reading the failure:
 
-- `failed to load ... sprd/l_*.bin`, or a missing file, is the package: check
-  `ls -l /lib/firmware/sprd/l_*.bin`.
+- `failed to load ... sprd/l_*.bin`, or a missing file, means the extraction did not run: check
+  `ls -l /lib/firmware/sprd/l_*.bin` and the service's output (`journalctl -u x6525-modem-nv`).
 - `region ... outside memory range` or `firmware too large for region` means the file sizes do not
   match the MECP header - re-trim each file to the region size (the table above) rather than to the
   partition size.
