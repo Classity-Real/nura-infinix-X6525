@@ -189,6 +189,8 @@ finish
 feature "Bluetooth (btsprdsipc over the WCN SIPC link)"
 need "CONFIG_BT_SPRDSIPC=m"                      cfg BT_SPRDSIPC "$CFG"
 need "btsprdsipc is loaded at boot"              grep -q 'btsprdsipc' "$DPKG/APKBUILD"
+need "the pskey config blob is packaged"         grep -q 'bt_config_pskey.bin' "$FWPKG/APKBUILD"
+need "the RF config blob is packaged"            grep -q 'bt_config_rf.bin' "$FWPKG/APKBUILD"
 need "bluez is a dependency"                     sh -c ". '$DPKG/APKBUILD'; printf '%s\n' \"\$depends\" | grep -qE '(^|[[:space:]])bluez([[:space:]]|\$)'"
 need "bluetooth.service is enabled"              grep -q 'bluetooth.service' "$DPKG/APKBUILD"
 finish
@@ -407,10 +409,14 @@ if [ -n "$IMAGE" ]; then
 		esac
 	fi
 
-	# Wi-Fi: the firmware and the module autoload live in the rootfs
+	# Wi-Fi and Bluetooth: the firmware and the module autoload live in the
+	# rootfs. btsprdsipc fails its probe without the two BT blobs, so their
+	# absence is a missing controller, not a cosmetic difference.
 	if [ -s "$TMP/root.img" ]; then
 		for f in /lib/firmware/sprd/wcnmodem.bin \
 			 /lib/firmware/sprd/wifi_board_config.bin \
+			 /lib/firmware/sprd/bt_config_pskey.bin \
+			 /lib/firmware/sprd/bt_config_rf.bin \
 			 /usr/lib/modules-load.d/x6525-wifi.conf; do
 			debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 				ok "the root filesystem has $f" ||
