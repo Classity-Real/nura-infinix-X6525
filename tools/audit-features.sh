@@ -159,9 +159,12 @@ finish
 feature "on-screen keyboard / UI service"
 # buffyboard: postmarketos-ui-buffyboard ships the service and enables it.
 # phosh: postmarketos-ui-phosh brings phosh, phoc and the OSK
-# (phosh-osk-stub), started by greetd. Both UI APKBUILDs have their own
-# service-manager defaults, so rom.yml pins it explicitly.
-need "rom.yml selects buffyboard or phosh"       grep -Eq '^ *ui = (buffyboard|phosh)' "$ROOT/.github/workflows/rom.yml"
+# (phosh-osk-stub), started by greetd.
+# plasma-mobile: postmarketos-ui-plasma-mobile brings the Plasma Mobile
+# shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
+# plasma-mobile.service. All three have their own service-manager defaults,
+# so rom.yml pins it explicitly.
+need "rom.yml selects a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
 need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
@@ -412,6 +415,34 @@ if [ -n "$IMAGE" ]; then
 					ok "the phosh image has $f" ||
 					bad "the phosh image has no $f"
 			done ;;
+		plasma-mobile)
+			# Plasma Mobile on a systemd image: 90-base.preset enables
+			# plasma-mobile.service, a getty replacement that runs
+			# /usr/bin/startplasmamobile (which execs startplasma-wayland,
+			# i.e. KWin Wayland). Its [Install] is either
+			# Alias=display-manager.service or WantedBy=graphical.target,
+			# depending on the KDE version - accept either. The device
+			# package's KWIN_DRM_DEVICES drop-in is what keeps KWin on the
+			# panel driver, so it is checked too.
+			for f in /usr/bin/startplasmamobile /usr/bin/startplasma-wayland \
+				 /usr/bin/kwin_wayland /usr/bin/plasmashell \
+				 /usr/share/wayland-sessions/plasma-mobile.desktop \
+				 /usr/lib/systemd/system/plasma-mobile.service \
+				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf; do
+				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
+					ok "the plasma image has $f" ||
+					bad "the plasma image has no $f"
+			done
+			if debugfs -R "stat /etc/systemd/system/display-manager.service" \
+				"$TMP/root.img" 2>/dev/null | grep -q . ||
+			   debugfs -R "stat /etc/systemd/system/graphical.target.wants/plasma-mobile.service" \
+				"$TMP/root.img" 2>/dev/null | grep -q . ||
+			   debugfs -R "stat /etc/systemd/system/graphical.target.wants/plasmalogin.service" \
+				"$TMP/root.img" 2>/dev/null | grep -q .; then
+				ok "the plasma session is enabled at boot"
+			else
+				bad "no enabled plasma display manager (display-manager alias or graphical.target wants)"
+			fi ;;
 		*)
 			bad "rom.yml selects no known UI (ui = ${ui:-none})" ;;
 		esac
