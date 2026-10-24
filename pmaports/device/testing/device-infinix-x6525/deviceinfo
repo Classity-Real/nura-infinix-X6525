@@ -54,16 +54,18 @@ deviceinfo_flash_method="fastboot"
 # "rndis.usb0" there.
 deviceinfo_usb_network_function="ncm.usb0"
 # boot_a takes U-Boot: `pmbootstrap flasher flash_kernel`, or `fastboot flash
-# boot_a boot.img` with the exported image. The rootfs is NOT flashed into an
-# eMMC partition. `install` builds it as a full MBR+GPT disk image whose first
-# partition carries /extlinux, /vmlinuz, /initramfs and the DTB, and U-Boot
-# cannot see a partition table nested inside a partition - blk-uclass.c's
-# part_create_block_devices() returns unless the device is UCLASS_BLK, and a
-# partition is UCLASS_PARTITION - so `flasher flash_rootfs`, which would write
-# that whole image into `super` (1.36 GB, no length check), leaves the phone at
-# the U-Boot prompt. Write the disk image to a microSD card instead, whole, and
-# boot from the card; only boot_a is touched on the eMMC. FIRST_BOOT.md has the
-# exact steps. The rootfs partition variable stays for the case the rootfs is
-# flashed as a filesystem image by hand; the documented procedure never uses it.
+# boot_a boot.img` with the exported image. The root filesystem is NOT flashed
+# by pmbootstrap on this port: the rom workflow builds a split install (a boot
+# filesystem image and a root filesystem image, no partition table), and
+# U-Boot cannot see a partition table nested inside an eMMC partition in any
+# case - blk-uclass.c's part_create_block_devices() returns unless the device
+# is UCLASS_BLK, and a partition is UCLASS_PARTITION. `flasher flash_rootfs`
+# cannot work here: with a split install it names a disk image that was never
+# built ($IMAGE), and with an unsplit local install it would write that whole
+# image into `super` (no length check), where U-Boot does not look, leaving the
+# phone at the U-Boot prompt. Flash the two filesystems into `cache` and
+# `userdata` by hand instead - FIRST_BOOT.md has the exact steps. The rootfs
+# partition variable is kept only because the flasher abstraction expects one;
+# the documented procedure never uses it.
 deviceinfo_flash_fastboot_partition_kernel="boot_a"
 deviceinfo_flash_fastboot_partition_rootfs="super"
