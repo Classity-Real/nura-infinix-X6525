@@ -171,6 +171,33 @@ nothing corrects memory at runtime - so relocation and the stack would land abov
   of the artifact, its `/memory@80000000` is the 4 GiB window above. So installing `u-boot.bin` as the
   boot.img payload, the way `u-boot-jolla-c2` does, is correct.
 
+# pmsys firmware: the split, resolved (2026-10-24)
+
+The mainline `sprd_pmsys` driver wants two files, and the vendor partition table says exactly what
+they are. `proprietary/vendor/etc/modem_sp_info.xml` (public `Bocchi-The-Dev/vendor_X6525`) has:
+
+```
+<partition00 base="0x88040000" size="0x200000" name="pmsys" src_file="pm_sys" .../>
+<partition01 base="0x62010000" size="0x1000" name="pm_sys_bootcode" src_file="NULL"
+             flag="0x00001004" bootcode="0x3800 0x9 0xf44f4818 ... 0x10040000"/>
+```
+
+- `pm_bootcode.bin` is the `bootcode` attribute, 31 words, written little-endian. It is not a
+  partition (`src_file="NULL"`). The Jolla C2 BSP's `convert_bootcode.py` does the same conversion;
+  `tools/pm-bootcode-from-xml.py` is this port's copy and reproduces the committed file.
+- `pm_sys.bin` is the `pm_sys_a` partition verbatim (1 MB here; the XML reserves 0x200000). Its
+  entry at offset 0 is a Thumb stub: `ldr.w sp,[pc,#112]` (SP=0x32400), copy loops, then
+  `ldr r0,=0x10040000; bx r0`. The source addresses in those loops (0x100b527c, ...) are offsets from
+  0x10040000, so the image is linked for 0x10040000 - the PM co-processor's view of 0x88040000.
+  The bootcode's last instruction jumps to 0x10040000 too, which closes the loop: bootcode at
+  0x62010000, sys image at 0x88040000, nothing else.
+- the remaining 0x100000-0x2c0000 range is BSS: the stub zeroes 0x1018a130..0x101d7034 (about
+  1.97 MB from the base), and the driver's region is 0x2c0000.
+
+`x6525-pmsys.service` copies `pm_sys_a` to `sprd/pm_sys.bin` at boot, then loads `sprd_pmsys`
+(blacklisted from coldplug for the same reason as `sprd_modem`). The bootcode is shipped in the
+firmware package. Nothing per-unit is published.
+
 # Public forks (what pmaports can fetch)
 
 Both trees are published as forks of the GitHub mirrors of the Codeberg repos, each with an `x6525`
