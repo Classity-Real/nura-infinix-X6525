@@ -280,11 +280,17 @@ jobs:
             echo "firmware: $url is not published yet - run the firmware release workflow"
           fi
 
-          # The Wi-Fi/BT firmware tarball is the second source= entry and
-          # second sha512; it is pinned to a commit, so it must fetch and match.
-          url=$(source_url "$P" 2)
-          [ -n "$url" ] || { echo "firmware: no second source= URL in $P"; exit 1; }
-          check "$url" "$(sha "$P" 2)"
+          # Every other source= is pinned to a commit, so it must fetch and
+          # match: Wi-Fi/BT, GNSS and pmsys bootcode. The first one is the
+          # touch image, which may still be waiting for the release workflow
+          # (handled above); there is nothing unpublished after it.
+          i=2
+          while :; do
+            url=$(source_url "$P" "$i")
+            [ -n "$url" ] || break
+            check "$url" "$(sha "$P" "$i")"
+            i=$((i + 1))
+          done
 
       - name: Check the ROM's own kernel config takes our symbols
         run: |
