@@ -772,9 +772,11 @@ heap, and FUSE/overlayfs as modules. `ANDROID_BINDERFS=y` was the missing option
 
 What the image does not carry yet: the Waydroid userspace (Alpine edge has `waydroid`,
 `waydroid-systemd`, `waydroid-nftrules`, and `lxc`) and the Android system image, which
-`waydroid init` downloads (needs internet). Graphics: with no GPU firmware, Waydroid falls back to
-software rendering (SwiftShader) - it can run, slowly. Phosh is a Wayland compositor, so Waydroid's
-session can run as a window.
+`waydroid init` downloads (needs internet). Graphics: Waydroid renders through its own gralloc,
+which on a mainline host means Mesa's gbm/panfrost path through libhybris; that combination is
+untested here. If it does not come up, Waydroid falls back to software rendering (SwiftShader) and
+still runs, slowly. Both Phosh and Plasma Mobile are Wayland compositors, so Waydroid's session
+runs as a window either way.
 
 To try it on an image built after the binderfs change:
 
