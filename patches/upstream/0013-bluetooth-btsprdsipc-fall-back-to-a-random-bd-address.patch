@@ -77,7 +77,7 @@ diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
 +		 * byte. Setting them on byte 0 would leave it a real multicast
 +		 * address half the time. */
 +		((u8 *)&addr)[5] = (((u8 *)&addr)[5] & 0xfc) | 0x02;
-+		dev_warn(&rpdev->dev, "no local-bd-address, using %pM\n",
++		dev_warn(&rpdev->dev, "no local-bd-address, using %pMR\n",
 +			 &addr);
 +	}
 +	bacpy(&hdev->public_addr, &addr);
