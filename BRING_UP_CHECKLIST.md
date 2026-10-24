@@ -793,6 +793,10 @@ sudo mount -o ro /dev/disk/by-partlabel/productinfo /mnt/productinfo
 sudo find /mnt/persist /mnt/productinfo -maxdepth 4 > /tmp/unit-data.txt 2>&1
 sudo grep -rila -E 'ov8856|gc08a3|hi1336|s5k3l6|ov13b10' /mnt/persist /mnt/productinfo \
     >> /tmp/unit-data.txt 2>&1
+# the decisive one: the camera HAL reads its per-sensor OTP from
+# /mnt/vendor/productinfo/otpdata/<sensor-name>/id<N>_otp.bin, so the directory
+# names under otpdata are the fitted sensors
+sudo find /mnt/productinfo/otpdata -maxdepth 2 >> /tmp/unit-data.txt 2>&1
 ```
 
 If that does not name a sensor, the stock system's camera HAL log does. The stock kernel is still in
