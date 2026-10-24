@@ -1,14 +1,15 @@
-# Staging for the Infinix X6525: the fifteen patches below add this board
+# Staging for the Infinix X6525: the seventeen patches below add this board
 # (device tree, panel, touch, charger and camera sensor drivers, the bindings
-# they need, two binding fixes, a watchdog fix and a Bluetooth fallback) and
-# are cut against the same tag this package builds from. They come back out
+# they need, two binding fixes, a watchdog fix, a Bluetooth fallback and the
+# charger's OTG boost regulator) and are cut against the same tag this package
+# builds from. They come back out
 # once the series is merged upstream - see the port repository's
 # pmaports/README.md and patches/upstream/. Everything else is unchanged.
 maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=14
+pkgrel=15
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -56,6 +57,8 @@ source="
 	0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
 	0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 	0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
+	0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
+	0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 "
 builddir="$srcdir/linux"
 
@@ -102,4 +105,6 @@ debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d4067
 2ade1accb8ed2725ed05bcc45eef32c34e7b57f456bd0b53c9ed86bfc9b613b2c24175009f12e981bcfa3b9f6a6b3972ff3cb916055e1ed30255ae33c7e92bae  0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
 b427730f2afd756392999209ae7cc0b376971b442b67ecb9cba59739deb41fa245179c91811e1ce24e5dbc573851f84a1864f1e0602bf7608bb6f37f14e2309b  0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 872ebf31a5a66ffd72a8242ad591c41dc6789ba92300f7c31fa777be44871b6fe54a69effdea47fc2d498a7cb183763b2094c65f0728bd04652561665662d066  0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
+d60690620aa1f5d569fe9408720704c7277284a70f38ff698b87968d82a73eaee8cdb0a99e9c27963d3d153fd8af00fa458bfcf43f991edb43a3254efb3592c0  0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
+2a0a32cdb4550f2b5ee8b32fdf2fe09ef9764d02b39b0378320327810fcf557715af187bb976b21fb9246e202e4f01d9590a27f5cbf13f07f15ab2d85b46dd46  0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 "

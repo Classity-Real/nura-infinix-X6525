@@ -1,0 +1,78 @@
+From 1d7b6252b183e79d580841dbc089f0f3016ccd23 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sat, 24 Oct 2026 11:13:23 +0000
+Subject: [PATCH] arm64: dts: sprd: give the X6525's charger an OTG boost
+ regulator
+
+The charger's boost converter is the only 5 V source on the USB-C port,
+so describe it as the otg-vbus regulator and point the Type-C port
+manager's vbus-supply at it. With that, TCPM can source VBUS when an OTG
+adapter makes the phone the host; musb-sprd then puts the controller in
+host mode through the role switch that is already wired to the connector.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+---
+ .../boot/dts/sprd/ums9230-infinix-x6525.dts   | 32 +++++++++++++------
+ 1 file changed, 22 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 1bb9c700f..c1db2cc1f 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -270,10 +270,11 @@ &sdio3 {
+  * mainline driver is sc27xx_pd.c: the stock device points its MUSB at that same
+  * controller plus the VBUS gpio extcon, and runs dr-mode = "peripheral".
+  *
+- * The role switch is kept even though this board only ever acts as a device:
+- * musb-sprd.c takes the mode from the build config rather than from dr_mode, so
+- * a kernel built with both USB_MUSB_HOST and USB_MUSB_GADGET comes up as a host
+- * until the role switch says otherwise - which is what the reeder relies on.
++ * The role switch is what makes OTG possible: musb-sprd.c takes the mode from
++ * the build config rather than from dr_mode, so with USB_MUSB_DUAL_ROLE the
++ * port manager can put the controller in host mode when a USB-C OTG adapter is
++ * attached. The VBUS the host has to provide comes from the charger's boost
++ * converter, exposed as the otg-vbus regulator below.
+  */
+ &hsphy {
+ 	phy-supply = <&vddusb33>;
+@@ -326,7 +327,9 @@ usb_detect: usb-charger-detect {
+  * "charger_en" and holds LOW while the battery charges (debugfs gpio, phone on
+  * a charger, status Charging). Driven low it is the bq24158's active-low CE
+  * pin, so it is hogged low below to keep charging enabled. Not carried over:
+- * the otg-vbus regulator, tran_charger and charger-manager.
++ * tran_charger and charger-manager. The vendor's otg-vbus regulator is kept,
++ * but the bq2415x driver registers it itself (patch 0016) instead of a vendor
++ * charger wrapper.
+  * The driver learns what is plugged in from a power supply: usb_detect below
+  * (drivers/extcon-charger-detect.c) turns the VBUS pin that the stock
+  * extcon-gpio node reads (pmic_eic 0) into one. A plain VBUS pin cannot tell a
+@@ -387,15 +390,24 @@ charger: charger@6a {
+ 		ti,termination-current = <60>;		/* mA, vendor 60000 uA */
+ 		ti,resistor-sense = <56>;		/* mohm */
+ 		ti,usb-charger-detection = <&usb_detect>;
++
++		/*
++		 * The boost converter that supplies VBUS in host (OTG) mode.
++		 * patch 0016 teaches the mainline bq2415x driver to register
++		 * this child as a regulator, so the Type-C port manager can
++		 * switch it on when the data role becomes host.
++		 */
++		vddvbus: otg-vbus {
++			regulator-name = "otg-vbus";
++		};
+ 	};
+ };
+ 
+ &pmic_typec_pd {
+-	/* No vbus-supply: the vendor's is the charger's own otg-vbus regulator
+-	 * (its node has nothing but a name - the charger driver registers it),
+-	 * and mainline's bq2415x registers no regulator for that boost.
+-	 * sc27xx_pd.c treats a missing vbus as -ENODEV and carries on, so this
+-	 * costs the source role, nothing else. */
++	/* The port manager sources VBUS through the charger's boost converter
++	 * when a USB-C OTG adapter makes this phone the host (see the
++	 * otg-vbus regulator under the charger node). */
++	vbus-supply = <&vddvbus>;
+ 	status = "okay";
+ 
+ 	connector {
