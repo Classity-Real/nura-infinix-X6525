@@ -1,6 +1,6 @@
 # Kernel patches for the ums9230-mainline tree
 
-Seventeen patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
+Eighteen patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
 to apply **in this order** to a clean checkout of it, producing byte-identical files to `dts/`,
 `drivers/` and `bindings/` — i.e. to what CI compiles.
 
@@ -23,10 +23,11 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 15 | `arm64: dts: sprd: add the rear camera to the Infinix X6525` | the ums9230 tree, with patch 3 |
 | 16 | `power: supply: bq2415x: expose the OTG boost as a regulator` | power-supply, later mainline |
 | 17 | `arm64: dts: sprd: give the X6525's charger an OTG boost regulator` | the ums9230 tree, with patch 3 |
+| 18 | `arm64: dts: sprd: give the X6525's GPU its stock DVFS table` | the ums9230 tree, with patch 3 |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
 14 and 15 add the rear camera, which patch 3 does not describe; 16 adds a regulator to the charger
-driver and 17 wires it into the board. The series is only consistent once all seventeen are applied, which is what the verification below checks.
+driver and 17 wires it into the board. The series is only consistent once all eighteen are applied, which is what the verification below checks.
 Patch 3 also carries the `dtb-y` entry in `arch/arm64/boot/dts/sprd/Makefile` — the ROM's kernel
 package applies this series with `patch -p1` and then runs `dtbs_install`, so a patch 3 without that
 hunk builds no DTB for this board and the image build fails in boot-deploy looking for
