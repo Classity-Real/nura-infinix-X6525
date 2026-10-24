@@ -1,0 +1,27 @@
+From af227641fbf649d408ab25b621ab5beb5335b207 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sat, 24 Oct 2026 10:00:00 +0800
+Subject: [PATCH] board: unisoc: ums9230: infinix-x6525: scan UFS as well
+
+Some X6525 units shipped UFS instead of the eMMC on sdio3. Scan the scsi
+bus right after mmc so those units find their extlinux entry, and mirror
+the cache-partition debug output for an scsi boot.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ board/unisoc/ums9230/infinix-x6525.env | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/board/unisoc/ums9230/infinix-x6525.env b/board/unisoc/ums9230/infinix-x6525.env
+index 5a524ca6..7fdc2b3a 100644
+--- a/board/unisoc/ums9230/infinix-x6525.env
++++ b/board/unisoc/ums9230/infinix-x6525.env
+@@ -1,4 +1,4 @@
+-bootcmd=pmicwdt stop; sleep 5; pstore display console; pstore display dump; sleep 15; bootflow scan -lb mmc; echo === no bootflow: the cache partition ===; part number mmc 0 cache cachenum; echo cache is partition ${cachenum}; ls mmc 0:${cachenum} /; ls mmc 0:${cachenum} /extlinux
++bootcmd=pmicwdt stop; sleep 5; pstore display console; pstore display dump; sleep 15; bootflow scan -lb mmc; bootflow scan -lb scsi; echo === no bootflow: the cache partition ===; part number mmc 0 cache cachenum; echo cache is partition ${cachenum}; ls mmc 0:${cachenum} /; ls mmc 0:${cachenum} /extlinux; echo === no bootflow on scsi: the cache partition ===; part number scsi 0 cache cachenum; echo cache is partition ${cachenum}; ls scsi 0:${cachenum} /; ls scsi 0:${cachenum} /extlinux
+ fdt_addr_r=0x9df00000
+ kernel_addr_r=0x80080000
+ kernel_comp_addr_r=0xc0000000
+-- 
+2.43.0
+

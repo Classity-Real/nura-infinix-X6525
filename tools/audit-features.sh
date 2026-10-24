@@ -127,6 +127,20 @@ need "the eMMC cache units are preset-enabled"   grep -q 'enable x6525-emmc-cach
 need "the eMMC flush unit is preset-enabled"     grep -q 'enable x6525-emmc-flush.service' "$DPKG/APKBUILD"
 finish
 
+# Some X6525 units shipped UFS instead of the eMMC on sdio3. The kernel side
+# is built in (no initramfs module), and the U-Boot side mirrors the fork's
+# reeder enablement: the defconfig keeps the UFS stack and the board
+# environment scans the scsi bus right after mmc (patch upstream-uboot 0007).
+feature "storage: UFS (the other X6525 units)"
+need "CONFIG_SCSI_UFSHCD=y"                      cfg SCSI_UFSHCD "$CFG"
+need "CONFIG_SCSI_UFSHCD_PLATFORM=y"             cfg SCSI_UFSHCD_PLATFORM "$CFG"
+need "CONFIG_SCSI_UFS_SPRD=y"                    cfg SCSI_UFS_SPRD "$CFG"
+need "the &ufs node is enabled in the DTS"       grep -q '&ufs {' "$DTS"
+need "U-Boot keeps the UFS stack (UFS_SPRD_UMS9230)" grep -q 'CONFIG_UFS_SPRD_UMS9230=y' "$ROOT/uboot/configs/infinix-x6525_defconfig"
+need "U-Boot's board DTS enables &ufs"           grep -q '&ufs {' "$ROOT/uboot/dts/ums9230-infinix-x6525.dts"
+need "U-Boot scans scsi right after mmc"         grep -q 'bootflow scan -lb mmc; bootflow scan -lb scsi' "$ROOT/uboot/board/unisoc/ums9230/infinix-x6525.env"
+finish
+
 feature "serial console (ttyS1)"
 need "CONFIG_SERIAL_SPRD=y"                      cfg SERIAL_SPRD "$CFG"
 need "console=ttyS1 on the kernel command line"  grep -q 'console=ttyS1' "$DPKG/kernel-cmdline.conf"
@@ -163,9 +177,13 @@ feature "on-screen keyboard / UI service"
 # plasma-mobile: postmarketos-ui-plasma-mobile brings the Plasma Mobile
 # shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
 # plasma-mobile.service. All three have their own service-manager defaults,
-# so rom.yml pins it explicitly.
-need "rom.yml selects a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
+# so the Build PMOS rom job (ci.yml) pins them and its ui input picks which.
+need "rom.yml records a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
 need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
+need "Build PMOS's rom job writes a ui line"     grep -Fq 'ui = ${{ inputs.ui' "$ROOT/.github/workflows/ci.yml"
+need "the ui input defaults to phosh"            grep -Fq "inputs.ui || 'phosh'" "$ROOT/.github/workflows/ci.yml"
+need "the ui input offers plasma-mobile"         grep -qE '^[[:space:]]*-[[:space:]]*plasma-mobile$' "$ROOT/.github/workflows/ci.yml"
+need "the ui input offers buffyboard"            grep -qE '^[[:space:]]*-[[:space:]]*buffyboard$' "$ROOT/.github/workflows/ci.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
@@ -317,7 +335,8 @@ if [ -n "$IMAGE" ]; then
 			for sym in MMC_SDHCI_SPRD EXT4_FS SERIAL_SPRD DRM_SPRD DRM_PANEL_TD4160_HX \
 				   DRM_FBDEV_EMULATION FRAMEBUFFER_CONSOLE TOUCHSCREEN_OVT_TCM_SPI \
 				   CHARGER_BQ2415X CHARGER_EXTCON_DETECT USB_MUSB_SPRD TYPEC_SC27XX_PD \
-				   USB_CONFIGFS USB_CONFIGFS_NCM USB_LIBCOMPOSITE PSTORE_RAM; do
+				   USB_CONFIGFS USB_CONFIGFS_NCM USB_LIBCOMPOSITE PSTORE_RAM \
+				   SCSI_UFS_SPRD; do
 				cfg "$sym" "$TMP/config" || { bad "the built config lacks CONFIG_$sym=y|m"; symfail=1; }
 			done
 			[ "$symfail" = 0 ] && ok "the built config has every symbol the features need"
@@ -336,9 +355,9 @@ if [ -n "$IMAGE" ]; then
 		fi
 	fi
 
-	# the login the README documents: user <rom.yml's --password>, root locked
+	# the login the README documents: user <ci.yml's --password>, root locked
 	if [ -s "$TMP/root.img" ]; then
-		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/rom.yml" |
+		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/ci.yml" |
 			head -1 | cut -d' ' -f2)
 		debugfs -R "dump /etc/shadow $TMP/shadow" "$TMP/root.img" >/dev/null 2>&1
 		if [ -s "$TMP/shadow" ]; then

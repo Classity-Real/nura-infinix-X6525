@@ -1,4 +1,4 @@
-From d7631cad29cf6431e26f71f2a69dff9d9c1f2cdb Mon Sep 17 00:00:00 2001
+From 96ecc14129e4cd6b6f398e383d5576e6f4f18ab6 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 17 Oct 2026 20:59:05 +0800
 Subject: [PATCH] board: unisoc: ums9230: infinix-x6525: show the last kernel
@@ -24,10 +24,10 @@ index 83657718..57ab32c5 100644
  kernel_addr_r=0x80080000
  kernel_comp_addr_r=0xc0000000
 diff --git a/configs/infinix-x6525_defconfig b/configs/infinix-x6525_defconfig
-index 8aea625e..38fac289 100644
+index 5946acc5..357819fb 100644
 --- a/configs/infinix-x6525_defconfig
 +++ b/configs/infinix-x6525_defconfig
-@@ -60,3 +60,10 @@ CONFIG_VIDEO_FONT_16X32=y
+@@ -64,3 +64,10 @@ CONFIG_VIDEO_FONT_16X32=y
  CONFIG_VIDEO_ANSI=y
  CONFIG_SYS_WHITE_ON_BLACK=y
  CONFIG_VIDEO_SIMPLE=y

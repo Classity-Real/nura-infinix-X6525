@@ -16,14 +16,17 @@
   `nvt_nt36xxx_spi_ts` as candidates; himax and chipone are absent, so the loaded-module list alone
   does not identify the part - the bound driver does.
 - The SC27xx PMIC is on `spi4.0`; a Goodix fingerprint device registers `gf-keys`.
-- Internal storage (UFS vs eMMC) is still undetermined - check the board DTB.
+- Internal storage (UFS vs eMMC) is still undetermined at this point - check the board DTB.
+  (Resolved just below: this unit is eMMC. Other X6525 units shipped UFS - see FIRST_BOOT.md,
+  "Storage variants".)
 - The `lcd_*` group on the cmdline is `lcd_id` / `lcd_name` / `tp_vendor_id` / `lcd_base` / `lcd_size` /
   `logo_bpix` - it carries **no timing values** (the paste was truncated at the very end, so a stray
   parameter cannot be fully ruled out, but the group itself looks complete).
 - **Internal storage is eMMC** (`sprdboot.flash=emmc`), on **sdio3**
   (`androidboot.boot_devices=soc/soc:ap-apb/201d0000.sdio`). `sdio0` is the microSD slot. The reeder is
   UFS internally, so its storage nodes must not be copied. `CLK`/`SDHCI_SPRD` promotion in `pmos.config`
-  was therefore the right call and UFS is irrelevant for this device.
+  was therefore the right call; UFS is irrelevant for this unit (other X6525 units shipped UFS -
+  FIRST_BOOT.md, "Storage variants").
 - Other confirmed board values: `lcd_base=9e000000` (framebuffer region), `lcd_id=ID416002`,
   `logo_bpix=24`, `androidboot.pmic.chipid=2730` (SC2730 - so `sc2730.dtsi` is correct),
   `androidboot.slot_suffix=_a`, `androidboot.flash.locked=0`, `verifiedbootstate=orange` (unlocked).

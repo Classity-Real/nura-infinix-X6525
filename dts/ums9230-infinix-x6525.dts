@@ -43,9 +43,10 @@
 	aliases {
 		serial0 = &uart0;
 		serial1 = &uart1;		/* ttyS1 [T: console=ttyS1,115200n8] */
-		/* the internal storage is the eMMC, so it is the first mmc
-		 * device: sprdboot.flash=emmc and androidboot.boot_devices=
-		 * .../201d0000.sdio, sdio0 is the microSD slot */
+		/* this unit's internal storage is the eMMC, so it is the first
+		 * mmc device: sprdboot.flash=emmc and androidboot.boot_devices=
+		 * .../201d0000.sdio, sdio0 is the microSD slot; a UFS unit names
+		 * the UFS controller (androidboot.boot_devices=...20200000.ufs) */
 		mmc0 = &sdio3;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
@@ -202,7 +203,9 @@
  * (sprdboot.flash=emmc) on sdio3 (androidboot.boot_devices=.../201d0000.sdio),
  * while sdio0 is the microSD slot (downstream 1h10-go adds a card-detect to it).
  * The reeder is the opposite way round: UFS internally, sdio0 for the card, so
- * its storage nodes cannot be copied.
+ * its storage-node values cannot be copied. The X6525 also shipped with UFS
+ * units: they boot the same image with the &ufs node at the end of this
+ * section.
  */
 &sdio0 {
 	/* microSD slot, the rescue boot path. The timing values are the running
@@ -259,6 +262,20 @@
 	/* No vqmmc-supply: vddsdio is the microSD slot's IO rail (it is
 	 * &sdio0's vqmmc above), and the running system's eMMC node names no
 	 * IO supply of its own - the port had the card slot's rail here. */
+	status = "okay";
+};
+
+/*
+ * UFS - the alternate internal storage. Some X6525 units shipped with a UFS
+ * part instead of the eMMC above; they boot the same image with just this
+ * node (the cmdline names its controller, androidboot.boot_devices=
+ * ...20200000.ufs). vcc is the same core rail the eMMC runs on, and the
+ * kernel already carries CONFIG_SCSI_UFS_SPRD. This mirrors the reeder's
+ * board dts; on an eMMC unit the controller probes, finds nothing and
+ * drops out.
+ */
+&ufs {
+	vcc-supply = <&vddemmccore>;
 	status = "okay";
 };
 

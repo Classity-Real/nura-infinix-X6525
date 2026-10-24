@@ -10,8 +10,15 @@ pkgname=u-boot-infinix-x6525
 # pkgver is <u-boot version>_git<commit date>, as jolla-c2 does; _commit is the
 # x6525 tip. GitHub's commit archives are regenerated on demand, so the hash
 # below is for that tarball as fetched today - check it if it ever fails.
+#
+# The UFS enablement (2026-10-24) lives only in the three board files staged
+# next to this APKBUILD: the fork cannot be bumped from here, so prepare()
+# copies the staged files over the tarball's older copies before the build.
+# They are the same bytes this repo carries in uboot/, which CI builds from
+# the patch chain in patches/upstream-uboot/. The tarball hash stays as is -
+# keep it the first sha512sums line.
 pkgver=2025.07_git20261017
-pkgrel=3
+pkgrel=4
 pkgdesc="U-Boot bootloader for the Infinix X6525"
 url="https://github.com/Seuj09/ums9230-mainline-u-boot"
 arch="aarch64"
@@ -25,10 +32,22 @@ makedepends="
 	openssl-dev
 "
 _commit="434a9c96ba4b3d42d9e95ee5eb2fd9fc956c0ac2"
-source="$pkgname-$pkgver.tar.gz::$url/archive/$_commit.tar.gz"
+source="
+	$pkgname-$pkgver.tar.gz::$url/archive/$_commit.tar.gz
+	infinix-x6525_defconfig
+	ums9230-infinix-x6525.dts
+	infinix-x6525.env
+"
 options="!check !tracedeps pmb:cross-native"
 # GitHub names the extracted directory <repo>-<commit>
 builddir="$srcdir/ums9230-mainline-u-boot-$_commit"
+
+prepare() {
+	default_prepare
+	cp "$srcdir"/infinix-x6525_defconfig "$builddir"/configs/
+	cp "$srcdir"/ums9230-infinix-x6525.dts "$builddir"/dts/
+	cp "$srcdir"/infinix-x6525.env "$builddir"/board/unisoc/ums9230/
+}
 
 build() {
 	make ARCH=arm infinix-x6525_defconfig
@@ -42,4 +61,7 @@ package() {
 
 sha512sums="
 7aefacc983b9cb41c17e961278a911fd4604b4b5483ef85f09ebff3bce44b1411298d1464c3ad0abbb513514f49213c0a20a9906cb749ff47371d28a7b28b051  $pkgname-$pkgver.tar.gz
+510dfbe9dd089e98d3ff852022a8be832e346d3ef0b1d721ea19618366e1ba91eeebc721379408ff1764e30bbf0e68d8eedca5e2d22b1ec543afc2b8e70f8bc8  infinix-x6525_defconfig
+808cfe2bffc0450c05ffcc272ddbf8497520b3fc483d64244264a0702486fef11516ffaf5d9d94016e08a82da6d38034b53cdcf02e4edbd1f62e1642719f55ac  ums9230-infinix-x6525.dts
+7dc911a5c77c65d8dcb516b8555cee1118b5867674beb22767937acad27b84c8eaee8649581117421a12dd673150aa78a002f1c224c01ac257a6e946e7f5713a  infinix-x6525.env
 "

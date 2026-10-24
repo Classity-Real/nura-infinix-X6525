@@ -1,4 +1,4 @@
-From 2b896c1f89f0e389c3abf8ab8410e9b14349abf9 Mon Sep 17 00:00:00 2001
+From bd7d9727f28e84cbbd301e335c7cfb4b21e6113d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 17 Oct 2026 22:58:58 +0800
 Subject: [PATCH] board: unisoc: ums9230: infinix-x6525: fix pstore record

@@ -1,4 +1,4 @@
-From 434a9c96ba4b3d42d9e95ee5eb2fd9fc956c0ac2 Mon Sep 17 00:00:00 2001
+From 2ee80a49a8e92341b8d65f24424a28013534fd3e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 18 Oct 2026 11:11:57 +0800
 Subject: [PATCH] spi: sprd-adi: add a pmicwdt command, run it from the X6525
@@ -30,10 +30,10 @@ index d62b5965..5a524ca6 100644
  kernel_addr_r=0x80080000
  kernel_comp_addr_r=0xc0000000
 diff --git a/configs/infinix-x6525_defconfig b/configs/infinix-x6525_defconfig
-index 38fac289..feea6910 100644
+index 357819fb..b8d7ba20 100644
 --- a/configs/infinix-x6525_defconfig
 +++ b/configs/infinix-x6525_defconfig
-@@ -67,3 +67,4 @@ CONFIG_CMD_PSTORE_RECORD_SIZE=0x8000
+@@ -71,3 +71,4 @@ CONFIG_CMD_PSTORE_RECORD_SIZE=0x8000
  CONFIG_CMD_PSTORE_CONSOLE_SIZE=0x8000
  CONFIG_CMD_PSTORE_FTRACE_SIZE=0x0
  CONFIG_CMD_PSTORE_PMSG_SIZE=0x8000

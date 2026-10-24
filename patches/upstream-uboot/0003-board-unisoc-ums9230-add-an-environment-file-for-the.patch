@@ -1,4 +1,4 @@
-From 0b7433364843e89af4fdf80166f6e6729994b252 Mon Sep 17 00:00:00 2001
+From f16b65ecd3182ecc59f399453f58e21a1b61b8ac Mon Sep 17 00:00:00 2001
 From: Seuj09 <jeus110310@gmail.com>
 Date: Sat, 17 Oct 2026 06:26:24 +0800
 Subject: [PATCH] board: unisoc: ums9230: add an environment file for the
@@ -32,7 +32,7 @@ index 00000000..83657718
 +stdout=serial,vidconsole
 +stderr=serial,vidconsole
 diff --git a/configs/infinix-x6525_defconfig b/configs/infinix-x6525_defconfig
-index 3e0402f1..8aea625e 100644
+index adcca168..5946acc5 100644
 --- a/configs/infinix-x6525_defconfig
 +++ b/configs/infinix-x6525_defconfig
 @@ -13,6 +13,7 @@ CONFIG_BOOTSTD_FULL=y

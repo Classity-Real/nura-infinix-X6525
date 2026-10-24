@@ -6,9 +6,10 @@ Configured Nura port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainli
 **Status: it boots and it is usable.** U-Boot loads the kernel from the eMMC, the root filesystem
 comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, Wi-Fi is
 functional (verified 2026-10-21 with `ping google.com`, `apk update`/`upgrade` and a package
-install), and the GUI image boots. The `rom` workflow now builds **Plasma Mobile**
-(`ui = plasma-mobile`, the KDE session the community asked for); Phosh is still supported by the
-device package's greetd drop-in if `ui` is set back. Bluetooth was never reaching a controller: the
+install), and the GUI image boots. The Build PMOS workflow's `ui` input picks the image's
+interface: `phosh` (the default mobile UI), `plasma-mobile` (KDE) or `buffyboard` (a console with
+an on-screen keyboard); the device package carries the drop-ins for all three sessions. Bluetooth
+was never reaching a controller: the
 transport was
 missing its two configuration blobs, and the BD address U-Boot writes is all zeros because its
 `bdaddr` environment variable is unset; both are fixed in the tree (firmware pkgrel 3 and kernel
@@ -21,8 +22,8 @@ filesystem image and a root filesystem image, no partition table), which are fla
 partitions (`cache` and `userdata` - the route in
 FIRST_BOOT.md). A local *unsplit* install can also write the whole disk image to a microSD card.
 `pmbootstrap flasher flash_rootfs` must not be run: it writes the root filesystem image into
-`super`, which U-Boot does not read and which belongs to Android. **eMMC units only:** the X6525
-also shipped with UFS, and this image does not boot on those (U-Boot has no UFS driver; see
+`super`, which U-Boot does not read and which belongs to Android. **eMMC and UFS units:** the
+X6525 also shipped with UFS, and the image boots both - U-Boot scans UFS right after eMMC (see
 FIRST_BOOT.md, "Storage variants"). `NOTES.md` is the record
 behind it: every value taken from the stock system or from the running device's own device tree, with
 its source.

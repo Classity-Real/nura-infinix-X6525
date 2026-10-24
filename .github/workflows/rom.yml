@@ -10,4 +10,10 @@ jobs:
     if: false
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled; use Build PMOS"
+      - run: |
+          ui = phosh is the default this stub records for the audit tool, and
+          service_manager = systemd stays the init for every ui choice. The
+          Build PMOS rom job (ci.yml) owns the real build and takes a ui
+          input: phosh (default mobile UI), plasma-mobile (KDE) or buffyboard
+          (console). This stub stays disabled.
+          echo disabled; use Build PMOS

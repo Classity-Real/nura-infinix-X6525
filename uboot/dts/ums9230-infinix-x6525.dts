@@ -20,8 +20,9 @@
 	aliases {
 		serial0 = &uart0;
 		serial1 = &uart1;
-		/* eMMC is the boot device (androidboot.boot_devices=
-		 * .../201d0000.sdio, sprdboot.flash=emmc) */
+		/* this unit's internal storage is the eMMC (androidboot.
+		 * boot_devices=.../201d0000.sdio, sprdboot.flash=emmc); a UFS
+		 * unit names the UFS controller (...20200000.ufs) */
 		mmc0 = &sdio3;
 	};
 
@@ -84,6 +85,13 @@
 &sdio3 {
 	bus-width = <8>;
 	non-removable;
+	status = "okay";
+};
+
+/* UFS - some X6525 units shipped UFS instead of eMMC. The dtsi's ufs node
+ * has no status line of its own, so enable it here; on eMMC units the
+ * controller probes, finds nothing and drops out. */
+&ufs {
 	status = "okay";
 };
 

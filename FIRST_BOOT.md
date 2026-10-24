@@ -6,7 +6,8 @@ goes in the eMMC's `cache` partition and the root filesystem in `userdata`, or b
 instead). The 5.4 route has its own steps at the end of `NOTES.md`. **Where the bring-up is:** the
 boot chain, the rootfs, SSH over the USB link, the touchscreen and Wi-Fi all work (Wi-Fi verified
 2026-10-21 by pinging, running `apk update`/`upgrade` and installing a package), and a GUI image
-boots (Phosh, 2026-10-24; the workflow now builds Plasma Mobile, see BRING_UP_CHECKLIST 3). Bluetooth is fixed in the tree - the transport's two
+boots (Phosh, 2026-10-24; the workflow's `ui` input now picks the interface
+phosh/plasma-mobile/buffyboard, see BRING_UP_CHECKLIST 3). Bluetooth is fixed in the tree - the transport's two
 configuration blobs are now packaged, and kernel patch 0013 supplies a BD address where U-Boot's
 `bdaddr` environment variable is unset and it writes zeros - but has not been exercised on the phone
 yet; BRING_UP_CHECKLIST.md 2.1 has the checks. Stages
@@ -28,7 +29,7 @@ pmbootstrap install
 pmbootstrap export        # writes /tmp/postmarketOS-export/
 ```
 
-`linux-postmarketos-unisoc-ums9230/` here is the kernel package with this port's eleven patches in
+`linux-postmarketos-unisoc-ums9230/` here is the kernel package with this port's nineteen patches in
 `source=` and its five config symbols added (the reasoning is in `pmaports/README.md`), and the
 u-boot package builds from the port's fork, so the `boot.img` in the export is already this board's.
 
@@ -42,10 +43,15 @@ into the phone's own storage - U-Boot, into `boot_a`; the rootfs is written to a
 
 ## Building it on GitHub instead
 
-`.github/workflows/rom.yml` runs the same build on an arm64 runner — Actions → **rom** → *Run
-workflow* — and leaves an artifact called `x6525-rom` with the kernel, U-Boot and the rootfs image in
-it. It clones pmbootstrap and pmaports itself and copies these four packages over them, so there is
-nothing to prepare and nothing to install locally. The image's user password is `x6525pmos`.
+`.github/workflows/ci.yml` runs the same build on an arm64 runner — Actions → **Build PMOS** → *Run
+workflow*, with `run_firmware` left unchecked — and leaves an artifact called `x6525-rom` with the
+kernel, U-Boot and the rootfs image in it. It clones pmbootstrap and pmaports itself and copies these
+four packages over them, so there is nothing to prepare and nothing to install locally. The image's
+user password is `x6525pmos`.
+
+The run's **ui** input picks the interface the image boots into: `phosh` (the default mobile UI),
+`plasma-mobile` (KDE) or `buffyboard` (a console with an on-screen keyboard). `rom.yml` is a disabled
+stub that only records the defaults (`ui = phosh`, `service_manager = systemd`) for the audit tool.
 
 Arm64 on purpose: on x86_64 every kernel build goes through qemu-user, which turns twenty minutes
 into hours. `pmbootstrap init` asks its questions on stdin and cannot run unattended, so the workflow
@@ -144,22 +150,27 @@ eMMC has no such problem: its rail is on from power-up, and it is what U-Boot al
 
 ### Storage variants: eMMC and UFS
 
-The X6525 shipped with either eMMC or UFS, and this port is eMMC-only today:
+The X6525 shipped with either eMMC or UFS, and the image boots both; the unit's storage type
+changes nothing a user does:
 
-- U-Boot is built without any UFS driver (`uboot/configs/infinix-x6525_defconfig` drops
-  `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230`), so on a UFS unit it cannot read the `cache`
-  partition and the phone stops at the U-Boot prompt. The kernel does build the controller in
-  (`CONFIG_SCSI_UFS_SPRD=y`), and the initramfs would find the root by UUID, but the boot never
-  reaches the kernel.
-- Flashing the eMMC images into a UFS unit writes the partitions fastboot is given and nothing
-  else; it does not touch the storage hardware, and the stock bootloader and fastboot stay
-  available for recovery. The image simply will not boot.
+- U-Boot scans both media: `uboot/configs/infinix-x6525_defconfig` keeps the reeder's
+  `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230`, the board U-Boot DTS enables `&ufs` (the dtsi's
+  node has no status line of its own), and `bootcmd` says
+  `bootflow scan -lb mmc; bootflow scan -lb scsi` - the first bootable entry wins, wherever it
+  lives. The kernel side was already there (`CONFIG_SCSI_UFS_SPRD=y`); the kernel DTS now
+  enables `&ufs` with the eMMC's core rail.
+- On an eMMC unit the UFS controller probes, finds nothing and drops out; on a UFS unit the
+  eMMC scan sees just the microSD slot. `bootflow scan` continues past a medium whose storage
+  it cannot read, so neither path blocks the other.
+- Flashing is identical on both: the split images go into the `cache` and `userdata`
+  partitions fastboot is given, which exist whatever the storage is. Only the medium U-Boot
+  reads them back from differs (`mmc` vs `scsi`).
 - Check the unit before flashing: in the stock bootloader or Android, `cat /proc/cmdline`
   names the boot device - the unit this port was developed on says `sprdboot.flash=emmc`, and a
   UFS unit names its UFS controller there (and in `androidboot.boot_devices`).
-- Support for both in one image needs U-Boot's UFS driver, a UFS node in the board U-Boot DTS and
-  `&ufs` enabled in the kernel DTS; the kernel side is already configured. Nothing has been tested
-  against a UFS unit, so do not flash one until that is done.
+- **No UFS unit has been flashed yet.** The UFS pieces are the reeder's own (same reference
+  design, internal UFS), but everything above is untested on real UFS hardware - watch the
+  first boot on one before calling it done.
 
 U-Boot cannot read a partition table nested inside an eMMC partition, so a whole-disk image cannot go
 there. The `rom` workflow therefore builds a *split* install (`pmbootstrap install --split`): the boot

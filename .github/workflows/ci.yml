@@ -19,6 +19,15 @@ on:
         description: "also run the firmware release job"
         type: boolean
         default: false
+      ui:
+        description: "UI for the ROM: phosh = mobile UI (default), plasma-mobile = KDE, buffyboard = console"
+        required: false
+        type: choice
+        default: "phosh"
+        options:
+          - phosh
+          - plasma-mobile
+          - buffyboard
   push:
     paths:
       - "dts/**"
@@ -339,7 +348,7 @@ jobs:
             '[pmbootstrap]' \
             'device = infinix-x6525' \
             'kernel = stable' \
-            'ui = phosh' \
+            'ui = ${{ inputs.ui || 'phosh' }}' \
             'service_manager = systemd' \
             'user = user' \
             'hostname = x6525' \

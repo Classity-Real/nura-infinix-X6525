@@ -310,9 +310,9 @@ pgrep -a buffyboard
 
 If nothing is listed, the process was killed at switch_root and no service restarted it. An image
 built with `ui = console` has no buffyboard service - it is shipped by `postmarketos-ui-buffyboard` -
-while `rom.yml` now selects `ui = buffyboard`, which installs it and enables it (the systemd unit via
+while the `rom` job's `buffyboard` option installs it and enables it (the systemd unit via
 `postmarketos-base`'s preset; on an OpenRC image the UI's openrc subpackage adds the script to the
-default runlevel). `rom.yml` also pins `service_manager = systemd`, because the UI package defaults
+default runlevel). The job also pins `service_manager = systemd`, because the UI package defaults
 to OpenRC and the init system would otherwise change with the UI. Until that image is flashed, start
 it by hand over SSH as `user`; it draws on the console and injects keys there, so an SSH session is
 enough:
@@ -589,9 +589,10 @@ bluetoothctl show
 
 ## 3. GUI
 
-Touch (1) and Wi-Fi (2) are done. The `rom` workflow now builds **Plasma Mobile**
-(`ui = plasma-mobile` in rom.yml); the Phosh steps below still apply when `ui` is set back, and the
-device package carries both sessions' drop-ins.
+Touch (1) and Wi-Fi (2) are done. The Build PMOS `rom` job takes a **ui** input: `phosh` (the
+default mobile UI), `plasma-mobile` (KDE) or `buffyboard` (a console with a keyboard). The Phosh
+and Plasma steps below cover whichever the input picked, and the device package carries both
+sessions' drop-ins.
 
 ### 3.0 What the Plasma Mobile image runs
 
@@ -686,7 +687,7 @@ route.
 
 ### 3.3 Switch the UI and build
 
-`rom.yml` now selects `ui = phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
+the `rom` job's `ui` input defaults to `phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
 defaults to systemd and uses greetd with the `greetd-phrog` greeter). Because there is no GPU
 firmware, the device package installs the software-renderer drop-in:
 

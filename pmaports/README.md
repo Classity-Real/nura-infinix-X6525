@@ -53,9 +53,10 @@ marks `fate = "obsolete"`.
    branch `x6525` in `ums9230-mainline-u-boot`, which is that fork's `ums9230` plus the three board
    commits this repo carries in `../uboot/` and `../patches/upstream-uboot/` - so it waits on nothing.
    `_commit` and the `sha512` are the fork's tip; point both back at `codeberg.org/ums9230-mainline/u-boot`
-   once the board is merged there. The X6525 boots from eMMC on `sdio3`, which U-Boot's SDHCI path
-   covers (the reeder exercises UFS instead), and CI builds `u-boot.bin` from the same two files on
-   every push.
+   once the board is merged there. The UFS enablement is newer than that tip, so the three board
+   files are staged next to the APKBUILD as well and `prepare()` copies them over the tarball's
+   copies. The X6525 boots from eMMC on `sdio3` or from UFS (the reeder exercises the UFS path),
+   and CI builds `u-boot.bin` from the same files on every push.
 
 ## The touch firmware
 
