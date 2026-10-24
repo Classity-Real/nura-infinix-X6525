@@ -813,9 +813,10 @@ journalctl -b --no-pager | grep -iE 'kwin|plasma|drm|no drm|primary' | tail -80
 journalctl -b --no-pager _UID=10000 | tail -80
 ```
 
-If KWin exits with a mode/modeset error, the image still has 90 Hz preferred; use a build with
-patch 0023 (60 Hz preferred) before chasing the compositor further. The manual symlink alone cannot
-fix a rejected 90 Hz mode on the old image.
+A reboot is the reliable retry after creating the link by hand: KWin lives in the user session and
+can survive a restart of the system unit. If KWin exits with a mode/modeset error, the image still
+has 90 Hz preferred; use a build with patch 0023 (60 Hz preferred) before chasing the compositor
+further. The manual symlink alone cannot fix a rejected 90 Hz mode on the old image.
 
 The 60 Hz test on an older image, for the second cause:
 

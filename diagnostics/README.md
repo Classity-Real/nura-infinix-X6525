@@ -81,6 +81,9 @@ journalctl -b --no-pager | grep -iE 'kwin|plasma|drm|no drm|primary' | tail -80
 journalctl -b --no-pager _UID=10000 | tail -80
 ```
 
+Reboot after creating the link by hand rather than only restarting `plasma-mobile`: KWin runs in the
+user session and can survive the unit restart, and the old image still prefers 90 Hz.
+
 The other display change is the 90 Hz mode, which the panel driver marked as preferred. If that
 timing is not accepted by this DSI/DPU path, DRM picks it and the modeset fails; once sprd_drm has
 taken the panel over, that means a black screen (the bootloader logo may stay on some builds).
