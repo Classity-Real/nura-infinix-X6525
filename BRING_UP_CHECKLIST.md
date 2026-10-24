@@ -839,10 +839,26 @@ dmesg | grep -iE 'ov8856|cam[0-9]|sensor|mipi'
 ```
 
 The sysfs listing gives the bus-address pairs the vendor driver instantiated (`<bus>-<addr>`), and
-the dmesg shows which CSI index and how many lanes the front camera uses. Note that the vendor's own
-OV8856 library is built for 24 MHz like the rear sensor, while the mainline ov8856 driver only has
-19.2 MHz tables, so the front camera will need either 24 MHz tables added to that driver or
-`CLK_SENSOR0` set to 19.2 MHz for it.
+the dmesg shows which CSI index and how many lanes the front camera uses. On this unit it already
+showed `sensor-sub` on i2c-1 at 0x5a (not i2c0 as the generic vendor overlay has it), and no
+`sensor-sub2` - so the board's own dtbo differs from the overlay and has to be read.
+
+The live device tree is the authority for the sensor sockets (bus, `reg`, `sprd,phyid`, reset and
+power-down GPIOs). Copy it off the phone once:
+
+```sh
+# on the stock system, root
+cp /sys/firmware/fdt /sdcard/fdt.dtb
+# if that file does not exist, archive the expanded tree instead:
+tar -czf /sdcard/fdt.tar.gz -C /proc/device-tree .
+```
+
+Put the file in `unit-data/bin/`; `dtc -I dtb -O dts` on it then gives every sensor node as the
+running kernel sees it.
+
+Note that the vendor's own OV8856 library is built for 24 MHz like the rear sensor, while the
+mainline ov8856 driver only has 19.2 MHz tables, so the front camera will need either 24 MHz tables
+added to that driver or `CLK_SENSOR0` set to 19.2 MHz for it.
 
 ### 5.2 Cellular (modem)
 

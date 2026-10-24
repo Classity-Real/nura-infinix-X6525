@@ -95,11 +95,34 @@ rear camera opened, front not opened):
 So: slot 0 rear = S5K3L6 (13 MP, 4 MIPI lanes, 10-bit, CSI0); slot 1 front =
 OV8856; slot 2 = fakeserial.
 
-Still needed: the I2C bus and address the stock driver uses for each sensor
-(the vendor board overlay lists 0x20 and 0x5a, which look like 8-bit forms of
-0x10 and 0x2d but the HAL sets the address itself), and the front camera's
-lane count and CSI port. The sysfs listing, `logcat` i2c_addr lines and a
-dmesg captured with the front camera open answer both.
+ls -l /sys/bus/i2c/devices/ (the sensor clients):
+  0-0020 -> .../200d0000.i2c/i2c-0/0-0020     name: sensor-main
+  1-0020 -> .../200e0000.i2c/i2c-1/1-0020     name: sensor-main2
+  1-005a -> .../200e0000.i2c/i2c-1/1-005a     name: sensor-sub
+  2-0027 -> .../200f0000.i2c/i2c-2/2-0027     name: sec-nfc
+  3-006a -> .../20100000.i2c/i2c-3/3-006a     name: aw32257 (charger)
+  4-0052 -> .../20110000.i2c/i2c-4/4-0052     name: stmvl53l0
+  5-0063 -> .../20210000.i2c/i2c-5/5-0063     name: flash-aw36515
+  5-0064 -> .../20210000.i2c/i2c-5/5-0064     name: flash-ocp81375
+
+So the live board puts sensor-sub on i2c-1 (200e0000), not on i2c0 as the
+generic vendor overlay does, and it has no sensor-sub2 client. If the DT
+`reg` values are 8-bit addresses (which they look like), then sensor-sub
+(0x5a -> 0x2d) is the S5K3L6 and sensor-main (0x20 -> 0x10) is the OV8856.
+
+logcat (opening the rear camera):
+  9850ka_s5k3l6: s5k3l6_drv_access_val: sensor s5k3l6: param_ptr->type=13
+  9850ka_s5k3l6: s5k3l6_drv_power_on: (1:on, 0:off): 0
+
+Still needed: the live device tree's sensor nodes (bus, reg, sprd,phyid,
+reset/power-down GPIOs), which settle which socket is wired how, and the
+front camera's lane count. Copy the live tree:
+
+  cp /sys/firmware/fdt /sdcard/fdt.dtb
+  # if that file does not exist:
+  tar -czf /sdcard/fdt.tar.gz -C /proc/device-tree .
+
+and put it in unit-data/bin/.
 
 ======================================================================
 ## partitions
