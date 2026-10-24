@@ -243,7 +243,8 @@ finish
 
 echo
 echo "== missing by design (documented, not defects) =="
-printf '  known-missing  cameras: no mainline driver work started\n'
+printf '  known-missing  cameras: the tree has the camsys/ISP drivers and ov8856, but the board\n'
+printf '                 DTS has no camera nodes and the other stock sensors are not ported\n'
 printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
 printf '  known-missing  cellular: no modem firmware or userspace stack is packaged; the WCN modem\n'
