@@ -229,7 +229,7 @@ If it keeps happening without power cuts, collect the storage-side evidence:
 
 ```sh
 sudo dmesg | grep -iE 'mmc0|sdhci|I/O error|ext4|jbd2' | tail -60
-cat /sys/block/mmcblk0/queue/write_cache      # 'write through' = the udev rule took
+cat /sys/block/mmcblk0/queue/write_cache      # should stay 'write back' - barriers; the card cache is off instead
 cat /sys/class/mmc_host/mmc0/mmc0:*/speed 2>/dev/null
 cat /sys/class/mmc_host/mmc0/mmc0:*/name 2>/dev/null
 mount | grep ' / '
@@ -248,7 +248,24 @@ flight, and the ext4 journal can replay; write throughput is the price. The serv
 `sysinit.target`, i.e. after the initramfs's own fsck/resize - the first boot after a flash must
 still not be cut short.
 
-On an image built before this service, apply the same for the current and the next boots:
+**Images up to device package pkgrel 18 did not run either unit**, even though both `.service`
+files were in the image: the build log says
+`Removed '/etc/systemd/system/sysinit.target.wants/x6525-emmc-cacheoff.service'` - pmOS's
+`systemd-apk-trigger` runs `systemctl preset` for every newly installed unit, and
+`99-default.preset` is `disable *`. Symlinks created by the package are removed again; only a
+preset rule survives. pkgrel 19 ships
+`/usr/lib/systemd/system-preset/90-infinix-x6525.preset` for exactly this reason. Verify on a
+running image:
+
+```sh
+systemctl is-enabled x6525-emmc-cacheoff.service x6525-emmc-flush.service   # both: enabled
+systemctl status x6525-emmc-cacheoff.service --no-pager
+sudo mmc extcsd read /dev/mmcblk0 | grep -iE 'CACHE|Cache'   # CACHE_CTRL should be 0x00
+cat /sys/block/mmcblk0/queue/write_cache                     # 'write back': barriers still sent
+```
+
+On an image built before this service (or before pkgrel 19), apply the same by hand for the
+current and the next boots:
 
 ```sh
 sudo apk add mmc-utils

@@ -120,6 +120,11 @@ need "CONFIG_MMC_SDHCI_SPRD=y"                   cfg MMC_SDHCI_SPRD "$CFG"
 need "CONFIG_MMC_BLOCK=y"                        cfg MMC_BLOCK "$CFG"
 need "CONFIG_EXT4_FS=y"                          cfg EXT4_FS "$CFG"
 need "deviceinfo flashes the kernel to boot_a"   grep -q 'partition_kernel="boot_a"' "$DPKG/deviceinfo"
+# enabling a unit with a hand-made symlink does not survive the image build
+# (pmOS's systemd-apk-trigger runs `systemctl preset` and 99-default.preset is
+# `disable *`), so the cache units need a preset rule of their own
+need "the eMMC cache units are preset-enabled"   grep -q 'enable x6525-emmc-cacheoff.service' "$DPKG/APKBUILD"
+need "the eMMC flush unit is preset-enabled"     grep -q 'enable x6525-emmc-flush.service' "$DPKG/APKBUILD"
 finish
 
 feature "serial console (ttyS1)"
@@ -407,6 +412,21 @@ if [ -n "$IMAGE" ]; then
 		*)
 			bad "rom.yml selects no known UI (ui = ${ui:-none})" ;;
 		esac
+	fi
+
+	# eMMC power-loss safety: the units must be present *and enabled*. The
+	# symlinks are what systemd reads; the preset file is what keeps them
+	# across the preset run during the build.
+	if [ -s "$TMP/root.img" ]; then
+		for f in /usr/lib/systemd/system/x6525-emmc-cacheoff.service \
+			 /usr/lib/systemd/system/x6525-emmc-flush.service \
+			 /usr/lib/systemd/system-preset/90-infinix-x6525.preset \
+			 /etc/systemd/system/sysinit.target.wants/x6525-emmc-cacheoff.service \
+			 /etc/systemd/system/multi-user.target.wants/x6525-emmc-flush.service; do
+			debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
+				ok "the root filesystem has $f" ||
+				bad "the root filesystem has no $f"
+		done
 	fi
 
 	# Wi-Fi and Bluetooth: the firmware and the module autoload live in the
