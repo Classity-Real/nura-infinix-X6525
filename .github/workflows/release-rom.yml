@@ -3,6 +3,9 @@ name: Release ROM
 # Downloads the x6525-rom artifact from a Build PMOS run and publishes it
 # as a GitHub Release under the given tag.
 #
+# Files >= 2 GiB are split into 1900 MiB parts (GitHub asset limit).
+# Reassemble: cat name.part* > name
+#
 # Usage: Actions → Release ROM → Run workflow
 #   tag:    e.g. rom-2026.10.24 or v0.1.0
 #   run_id: optional; omit to use the latest successful Build PMOS run
@@ -82,15 +85,40 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ steps.run.outputs.run_id }}
 
-      - name: Show what will be released
+      - name: Prepare upload set (split files over 2 GiB)
         run: |
           set -euo pipefail
-          echo "Contents of rom-out:"
+          LIMIT=$((2 * 1024 * 1024 * 1024))
+          CHUNK=$((1900 * 1024 * 1024))
+          mkdir -p upload
+          SPLIT_NOTES=""
+
+          echo "Source files:"
           find rom-out -type f -printf '%p\t%s bytes\n' | sort
-          test -n "$(find rom-out -type f | head -1)" || {
-            echo "::error::Artifact downloaded but no files found"
+
+          while IFS= read -r -d '' f; do
+            size=$(stat -c%s "$f")
+            base=$(basename "$f")
+            if [ "$size" -ge "$LIMIT" ]; then
+              echo "Splitting $f ($size bytes) into $((CHUNK / 1024 / 1024)) MiB parts"
+              # e.g. infinix-x6525.img.part00, .part01, ...
+              split -b "$CHUNK" -d -a 2 "$f" "upload/${base}.part"
+              n=$(find upload -name "${base}.part*" | wc -l)
+              SPLIT_NOTES="${SPLIT_NOTES}\n- \`${base}\` was split into ${n} parts: \`${base}.part00\` ... Reassemble: \`cat ${base}.part* > ${base}\`"
+            else
+              cp -a "$f" "upload/${base}"
+            fi
+          done < <(find rom-out -type f -print0)
+
+          echo "Upload set:"
+          find upload -type f -printf '%p\t%s bytes\n' | sort
+          test -n "$(find upload -type f | head -1)" || {
+            echo "::error::No files prepared for upload"
             exit 1
           }
+
+          # Persist split notes for the release body (optional file)
+          printf '%s' "$SPLIT_NOTES" > /tmp/split-notes.txt
 
       - name: Create tagged release and upload assets
         env:
@@ -103,14 +131,18 @@ jobs:
           RUN_ID="${{ steps.run.outputs.run_id }}"
 
           if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "::error::Release tag $TAG already exists"
+            echo "::error::Release tag $TAG already exists. Delete it first or pick a new tag."
             exit 1
           fi
 
-          mapfile -t FILES < <(find rom-out -type f | sort)
+          mapfile -t FILES < <(find upload -type f | sort)
           echo "Uploading ${#FILES[@]} file(s) to tag $TAG"
 
           NOTES="postmarketOS image for Infinix X6525 (nura). Built by Build PMOS (run ${RUN_ID}). Artifact: x6525-rom."
+          NOTES="${NOTES} GitHub release assets must be under 2 GiB; larger images are split into 1900 MiB parts."
+          if [ -s /tmp/split-notes.txt ]; then
+            NOTES="${NOTES}$(cat /tmp/split-notes.txt)"
+          fi
 
           if [ "$PRE" = "true" ]; then
             gh release create "$TAG" \
