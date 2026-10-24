@@ -385,7 +385,18 @@ if [ -n "$IMAGE" ]; then
 				bad "cannot tell the root filesystem's init system" ;;
 			esac ;;
 		phosh)
-			for f in /usr/bin/phosh /usr/bin/phoc /usr/bin/greetd \
+			# phosh 0.58 moved the shell out of /usr/bin: phosh-session
+			# (the session's Exec=) starts gnome-session with the phosh
+			# session, which runs /usr/libexec/phosh. Older versions put
+			# the binary at /usr/bin/phosh. Either one is the shell; what
+			# must not happen is neither being there.
+			if debugfs -R "stat /usr/libexec/phosh" "$TMP/root.img" 2>/dev/null | grep -q . ||
+			   debugfs -R "stat /usr/bin/phosh" "$TMP/root.img" 2>/dev/null | grep -q .; then
+				ok "the phosh image has the phosh shell"
+			else
+				bad "the phosh image has no phosh shell (/usr/bin/phosh or /usr/libexec/phosh)"
+			fi
+			for f in /usr/bin/phosh-session /usr/bin/phoc /usr/bin/greetd \
 				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the phosh image has $f" ||
