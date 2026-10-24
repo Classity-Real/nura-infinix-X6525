@@ -529,51 +529,45 @@
 
 /* ---- camera -------------------------------------------------------------
  * The stock system identifies the rear sensor as an S5K3L6: slot 0 reports
- * "s5k3l6_1836_13M" in vendor.cam.sensor.slot.info and the stock camera HAL
- * opens it at 4208x3120 over four MIPI data lanes. The vendor board overlay
- * puts sensor-main on i2c0 with reset on ap_gpio 45, power-down on ap_gpio 47
- * and a GPIO-switched DVDD on ap_gpio 11, clocked from CLK_SENSOR0.
+ * "s5k3l6_1836_13M" in vendor.cam.sensor.slot.info, and the stock camera HAL
+ * opens it at 4208x3120 over four MIPI data lanes (camioctl_sensor_if_set:
+ * "mipi 0 10 0 4").
+ *
+ * The live device tree (unit-data/bin/fdt.dtb, copied from /sys/firmware/fdt
+ * on the stock system) puts it in the sensor-sub socket: i2c1, reg 0x5a -
+ * the 8-bit form of the S5K3L6's 0x2d address - reset on ap_gpio 41,
+ * power-down on ap_gpio 40, AVDD from vddcama1, DVDD from vddcamd1, I/O from
+ * vddcamio, and CLK_SENSOR1 (sprd,phyid 0, so the four-lane port).
  *
  * The driver's register tables are extracted from the vendor's own sensor
  * library (libsensor_s5k3l6.so, "s5k3l6_v1"); it runs the part at a 24 MHz
  * MCLK with four lanes and the three modes below.
  *
- * The front camera is an OV8856, but its bus and address have not been read
- * off the stock system yet, so it is not described here.
+ * The front camera is an OV8856 in the sensor-main socket (i2c0, reg 0x20,
+ * i.e. 0x10, sprd,phyid 2); it is not described yet. The sensor-main2 socket
+ * is the decorative second rear lens ("fakeserial" in the HAL).
  */
-/ {
-	vddcamd_main: regulator-vddcamd-main {
-		compatible = "regulator-fixed";
-		regulator-name = "vddcamd-main";
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
-		vin-supply = <&vddcamd0>;
-		gpio = <&ap_gpio 11 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-	};
-};
-
-&i2c0 {
+&i2c1 {
 	status = "okay";
 	clock-frequency = <400000>;
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	camera@20 {
+	camera@2d {
 		compatible = "samsung,s5k3l6";
-		reg = <0x20>;
-		reset-gpios = <&ap_gpio 45 GPIO_ACTIVE_LOW>;
-		power-down-gpios = <&ap_gpio 47 GPIO_ACTIVE_HIGH>;
+		reg = <0x2d>;
+		reset-gpios = <&ap_gpio 41 GPIO_ACTIVE_LOW>;
+		power-down-gpios = <&ap_gpio 40 GPIO_ACTIVE_HIGH>;
 
-		clocks = <&mm_gate CLK_MM_SENSOR0_EB>;
+		clocks = <&mm_gate CLK_MM_SENSOR1_EB>;
 		clock-names = "mclk";
-		assigned-clocks = <&mm_clk CLK_SENSOR0>;
+		assigned-clocks = <&mm_clk CLK_SENSOR1>;
 		assigned-clock-parents = <&pll1 CLK_TWPLL_48M>;
 		assigned-clock-rates = <24000000>;
 
 		vddio-supply = <&vddcamio>;
-		vdda-supply = <&vddcama0>;
-		vddd-supply = <&vddcamd_main>;
+		vdda-supply = <&vddcama1>;
+		vddd-supply = <&vddcamd1>;
 
 		rotation = <90>;
 		orientation = <1>;
