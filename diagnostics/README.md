@@ -41,9 +41,28 @@ fastboot flash boot_a diagnostics/boot-no-preboot.img
 
 ## If SSH works: the kernel runs, the display does not
 
-The newest display change is the 90 Hz mode, which the panel driver marks as preferred. If that
+Check the compositor's DRM hand-off first. The image points Plasma/phoc at
+`/dev/dri/x6525-primary`, created by a udev rule that used `DRIVERS=="sprd-drm"`, while this tree's
+platform driver is `sprd-drm-drv`. If the symlink is absent, the compositor has a nonexistent device
+and the panel is never enabled:
+
+```sh
+ls -l /dev/dri /dev/dri/x6525-primary 2>&1
+ls -l /sys/class/drm
+udevadm info -q property -n /dev/dri/card1 | grep -E 'DEVNAME|DRIVERS'
+journalctl -u plasma-mobile -b --no-pager | tail -60
+
+# if card1 exists but the symlink does not:
+sudo ln -sf /dev/dri/card1 /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+```
+
+If the panel lights up, the udev rule is the bug (the next build matches `sprd-drm*`). If it stays
+on the logo, continue with the mode test below.
+
+The other display change is the 90 Hz mode, which the panel driver marked as preferred. If that
 timing is not accepted by this DSI/DPU path, DRM picks it, the modeset fails, and the bootloader logo
-stays while the kernel runs. Force the 60 Hz mode for one boot first:
+stays while the kernel runs. Force the 60 Hz mode for one boot:
 
 ```sh
 cp pmos-boot-fs.img test-bootfs-60hz.img

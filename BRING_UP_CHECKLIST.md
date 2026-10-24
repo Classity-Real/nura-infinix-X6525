@@ -730,6 +730,70 @@ Once the GUI is stable, remove them one at a time, re-testing each: first `cpuid
 `cpufreq.off=1` (find which one stalls the CPUs; see FIRST_BOOT.md), then
 `initcall_debug`/`ignore_loglevel`.
 
+### 3.5 Black screen after U-Boot: the panel is not being driven
+
+Symptom: the U-Boot logo stays on screen, no kernel console and no UI, but SSH over USB works. The
+kernel is running; the panel simply keeps the bootloader's last frame because no kernel client ever
+enables it. The kernel console is on `simpledrm` then, and the panel is not scanning that memory.
+
+Two things have caused this on this port. Check the first before rebuilding:
+
+1. **The compositor never gets the sprd-drm card.** The image points Plasma (and phoc) at
+   `/dev/dri/x6525-primary`, created by
+   `/usr/lib/udev/rules.d/90-x6525-drm-primary.rules` with `DRIVERS=="sprd-drm"`. The platform
+   driver in this tree is named **`sprd-drm-drv`**, so the rule may never match. If the symlink is
+   missing, KWin/phoc has a nonexistent device and the panel is never modeset.
+2. **The 90 Hz mode is preferred.** The board DT's `native-mode` is timing0 (60 Hz). Patch 0019
+   made timing1 (90 Hz) preferred; patch 0023 restores 60 Hz and keeps 90 Hz selectable. On this
+   DSI/DPU path a rejected 90 Hz modeset also leaves the bootloader logo in place.
+
+Collect this first (works over SSH):
+
+```sh
+ls -l /dev/dri /dev/dri/by-path /dev/dri/x6525-primary 2>&1
+ls -l /sys/class/drm
+cat /proc/fb
+udevadm info -q property -n /dev/dri/card1 | grep -E 'DEVNAME|DRIVERS'
+cat /sys/class/backlight/td4160/brightness \
+    /sys/class/backlight/td4160/actual_brightness \
+    /sys/class/backlight/td4160/bl_power
+cat /proc/cmdline
+systemctl status plasma-mobile --no-pager
+journalctl -u plasma-mobile -b --no-pager | tail -60
+sudo dmesg | grep -iE 'sprd-drm|td4160|dsi|dpu|panel|backlight|connector|drm' | tail -100
+```
+
+What the result means:
+
+| What you see | Meaning | Next |
+|---|---|---|
+| `/dev/dri/card1` exists, `/dev/dri/x6525-primary` missing | the udev rule did not match the driver name | create the link by hand (below); the port needs the rule fixed |
+| no `/dev/dri/card1`, although dmesg says `Initialized sprd ... on minor 1` | the sprd DRM card is not registered (or was removed after init) | send the full `dmesg` from that line and `ls -l /dev/dri`; do not chase the compositor yet |
+| symlink exists, `journalctl -u plasma-mobile` shows a DRM/device error | compositor/modeset failure | send the journal; with the 0023 build also try `video=DSI-1:720x1612@60` for one boot |
+| `bl_power` is 1 or `brightness` is 0 | backlight off, not necessarily a DRM failure | set `brightness` to `max_brightness` and check the panel init in `dmesg` |
+
+Manual hand-off test, if `card1` exists but the symlink does not:
+
+```sh
+sudo ln -sf /dev/dri/card1 /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+journalctl -u plasma-mobile -b --no-pager | tail -60
+```
+
+If the panel lights up, the udev rule is the bug and the port must match `sprd-drm-drv` (or
+`sprd-drm*`) instead of `sprd-drm`. If it still stays on the logo, send the journal and the
+`/sys/class/drm` listing.
+
+The 60 Hz test on an older image, for the second cause:
+
+```sh
+sh tools/patch-cmdline.sh pmos-boot-fs.img "video=DSI-1:720x1612@60"
+fastboot flash cache pmos-boot-fs.img
+```
+
+That only affects the kernel's fbdev mode; if the compositor is not using the sprd card at all, it
+cannot help.
+
 ## 4. Audio
 
 The SC2730 codec, the SPRD platform/machine drivers and the simple amplifier are all modules; the
