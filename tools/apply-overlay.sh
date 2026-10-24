@@ -45,13 +45,15 @@ install -Dm644 "$HERE/drivers/ovt-tcm-spi.c" \
 	"$TREE/drivers/input/touchscreen/ovt-tcm-spi.c"
 install -Dm644 "$HERE/drivers/extcon-charger-detect.c" \
 	"$TREE/drivers/power/supply/extcon-charger-detect.c"
+install -Dm644 "$HERE/drivers/s5k3l6.c" \
+	"$TREE/drivers/media/i2c/s5k3l6.c"
 install -Dm644 "$HERE/bindings/linux,extcon-charger-detect.yaml" \
 	"$TREE/Documentation/devicetree/bindings/power/supply/linux,extcon-charger-detect.yaml"
 install -Dm644 "$HERE/bindings/infinix,td4160-hx-panel.yaml" \
 	"$TREE/Documentation/devicetree/bindings/display/panel/infinix,td4160-hx-panel.yaml"
 install -Dm644 "$HERE/bindings/omnivision,tcm-spi.yaml" \
 	"$TREE/Documentation/devicetree/bindings/input/touchscreen/omnivision,tcm-spi.yaml"
-echo "copied device tree, three drivers and three bindings"
+echo "copied device tree, four drivers and three bindings"
 
 # 'git apply' rather than patch(1): its --check semantics are unambiguous in
 # both directions, whereas patch's reverse detection happily reports success

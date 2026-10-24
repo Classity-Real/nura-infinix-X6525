@@ -243,9 +243,10 @@ finish
 
 echo
 echo "== missing by design (documented, not defects) =="
-printf '  known-missing  cameras: camsys/ISP and gc08a3/ov13b10/ov8856 are enabled, but the board\n'
-printf '                 DTS has no camera nodes; the fitted 13MP/8MP module is per unit, and\n'
-printf '                 hi1336/s5k3l6 have no mainline driver (BRING_UP_CHECKLIST 5.1)\n'
+printf '  known-missing  cameras: the rear S5K3L6 is described and driven (s5k3l6 driver and\n'
+printf '                 board nodes, patches 14/15); the front OV8856 is not described yet,\n'
+printf '                 and there is no camera userspace (no libcamera sprd pipeline, no 3A)\n'
+printf '                 (BRING_UP_CHECKLIST 5.1)\n'
 printf '  known-missing  USB source role: mainline bq2415x exposes no VBUS regulator for the boost\n'
 printf '  known-missing  BC1.2 detection: charging is limited to 500 mA until the SC2730 has a driver\n'
 printf '  known-missing  cellular: no modem firmware or userspace stack is packaged; the WCN modem\n'
