@@ -895,28 +895,46 @@ The mainline tree already has the modem stack, and the ROM config builds it:
 `ums9230.dtsi` has the `modem@65003400` and `pmsys` nodes (disabled) with the SIPC mailbox, reserved
 memory regions and power domains; the reeder board DTS enables `&modem` and `&modem_dai`.
 
-Missing pieces, in order:
+What is missing is the firmware. `&modem` and `&modem_dai` are already enabled in the board DTS, so
+the remoteproc probes now and stops at `request_firmware("sprd/l_modem.bin")`; nothing crashes, it
+just cannot boot the modem. The images and the unit's NV are not in the OTA - they are the phone's
+own partitions, and the NV carries the IMEI. On this eMMC unit (`ls -l /dev/block/by-name`):
 
-1. **The images and the unit's NV.** They are not in the OTA; they are the phone's own modem
-   partitions. On this eMMC unit (`ls -l /dev/block/by-name`) they are: `l_modem_a` (mmcblk0p20) for
-   the modem, `l_fixnv1_a` (p13) and `l_fixnv2_a` (p14) for the factory NV that carries the IMEI,
-   `l_deltanv_a` (p22) and `l_runtimenv1`/`l_runtimenv2` (p17/p18) for the calibration and runtime
-   NV, and `l_gdsp_a` (p24), `l_ldsp_a` (p26), `l_agdsp_a` (p28) for the DSP images. There is no
-   separate `nvdata` partition. The driver asks for these as `/lib/firmware/sprd/l_modem.bin`,
-   `l_fixnv.bin`, `l_deltanv.bin`, `l_runtimenv.bin`, `l_gdsp.bin`, `l_ldsp.bin`, so each partition
-   image becomes the matching file. Nothing can register without them. Dump them from pmOS:
-   ```sh
-   for p in l_modem_a l_fixnv1_a l_fixnv2_a l_deltanv_a l_runtimenv1 l_runtimenv2 l_gdsp_a l_ldsp_a; do
-       sudo dd if=/dev/disk/by-partlabel/$p of=/tmp/$p.img bs=4M
-   done
-   ls -l /tmp/l_*.img
-   ```
-2. **The DT**: enable `&modem` and `&pmsys` in the board DTS (the SoC nodes and regions are already
-   there), and package the images under `/lib/firmware/sprd/`.
-3. **Userspace**: `rpmsg_wwan_ctrl` exposes the AT/control port and `rpmsg_wwan_net` the data port;
-   ModemManager is already installed by the UI and can drive an AT port. Whether the Unisoc LTE
-   modem initialises on mainline has never been tried - that is the open question, and it needs the
-   images from (1) to answer.
+| partition | mainline file the driver asks for | what it is |
+|---|---|---|
+| `l_modem_a` (mmcblk0p20) | `sprd/l_modem.bin` | the modem firmware |
+| `l_fixnv1_a` (p13) | `sprd/l_fixnv.bin` | factory NV, carries the IMEI |
+| `l_deltanv_a` (p22) | `sprd/l_deltanv.bin` | calibration NV delta |
+| `l_runtimenv1` (p17) | `sprd/l_runtimenv.bin` | runtime NV |
+| `l_gdsp_a` (p24) | `sprd/l_gdsp.bin` | GDSP image |
+| `l_ldsp_a` (p26) | `sprd/l_ldsp.bin` | LDSP image |
+
+`l_fixnv2_a`/`l_runtimenv2` are the other copy of the NV pair, and `l_agdsp_a` is the audio DSP
+(not requested by this driver). The `pmsys` node, if it is ever enabled, asks for
+`sprd/pm_bootcode.bin` and `sprd/pm_sys.bin`, which come from `pm_sys_a` (p30); the reeder does not
+enable `&pmsys` and the modem does not need it to start, so it can wait.
+
+The images have to be dumped from the phone. From the stock system (root), the whole set in one go:
+
+```sh
+cd /sdcard
+for p in l_modem_a l_fixnv1_a l_deltanv_a l_runtimenv1 l_gdsp_a l_ldsp_a pm_sys_a; do
+    dd if=/dev/block/by-name/$p of=$p.img bs=4M
+done
+ls -l *.img
+gzip -1 *.img
+tar czf modem-blobs.tar.gz *.img.gz
+ls -l modem-blobs.tar.gz
+```
+
+Copy `modem-blobs.tar.gz` off the phone into `unit-data/bin/` (GitHub's web upload takes 25 MB; a
+`git push` takes 100 MB per file - if the archive is bigger, split it with
+`split -b 20m modem-blobs.tar.gz modem-blobs.part.` and upload the parts).
+
+With the blobs packaged under `/lib/firmware/sprd/`, the rest is userspace: `rpmsg_wwan_ctrl` exposes
+the AT/control port and `rpmsg_wwan_net` the data port; ModemManager is already installed by the UI
+and can drive an AT port. Whether the Unisoc LTE modem initialises on mainline has never been tried -
+that is the open question, and it needs the images above to answer.
 
 With the stock system running (root), the modem side is also readable directly:
 

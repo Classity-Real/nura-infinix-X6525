@@ -13,6 +13,9 @@ partition images. Commands and what each output decides are in
 | `bin/l_modem_a.img` | the modem image (`l_modem_a`, mmcblk0p20 on this unit) |
 | `bin/l_fixnv*.img`, `bin/l_deltanv_a.img`, `bin/l_runtimenv*.img` | the unit's modem NV/IMEI |
 | `bin/l_gdsp_a.img`, `bin/l_ldsp_a.img`, `bin/l_agdsp_a.img` | the modem DSP images |
+| `bin/pm_sys_a.img` | the PM-system firmware (only needed if `&pmsys` is enabled) |
+| `bin/modem-blobs.tar.gz` | all of the above, gzipped together - the easiest upload |
+| `bin/fdt.dtb` | the live device tree (`/sys/firmware/fdt`), the source for the DT work |
 | `bin/*.img` | any other partition named in the checklist (`prodnv`, `persist`, `productinfo`) |
 
 Keep this directory to this unit's data; the files are text except `bin/`. Nothing here is used by
