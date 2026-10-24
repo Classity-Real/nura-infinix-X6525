@@ -104,10 +104,10 @@ are not generated here come off the stock ROM's ODM partition:
   in `device-bsp-s19mps`'s `convert_ini.py` (Jolla C2, the same WCN block); both converters produce
   identical bytes for these INIs.
 
-The tarball rebuilds byte for byte from a staging directory `sprd/` holding exactly those four files:
+The tarball rebuilds byte for byte from a staging directory holding exactly those four files:
 
 ```sh
-cd firmware
+mkdir /tmp/wcn-stage && cd /tmp/wcn-stage     # then place sprd/ with the four files here
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' -cf - sprd \
     | gzip -n -9 > firmware-infinix-x6525-wcn-3.tar.gz
 ```
