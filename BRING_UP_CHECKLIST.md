@@ -589,7 +589,43 @@ bluetoothctl show
 
 ## 3. GUI
 
-Touch (1) and Wi-Fi (2) are done. What is left for a Phosh image:
+Touch (1) and Wi-Fi (2) are done. The `rom` workflow now builds **Plasma Mobile**
+(`ui = plasma-mobile` in rom.yml); the Phosh steps below still apply when `ui` is set back, and the
+device package carries both sessions' drop-ins.
+
+### 3.0 What the Plasma Mobile image runs
+
+`postmarketos-ui-plasma-mobile` brings the Plasma Mobile shell and KWin Wayland. The systemd
+image starts it through `plasma-mobile.service` (from the `plasma-mobile-systemd` subpackage), a
+getty replacement that runs `/usr/bin/startplasmamobile` on tty1 as uid 1000; that script execs
+`startplasma-wayland` with `PLASMA_DEFAULT_SHELL=org.kde.plasma.mobileshell`. The base preset
+(`90-base.preset`) enables `plasma-mobile.service` and disables `sddm.service`; the UI's
+`-systemd` post-install creates the `display-manager.service` alias. `plasmalogin.service` (the
+Plasma login manager) is enabled by the same preset when that package is installed.
+
+The display driver choice is the same as for Phosh: only `sprd-drm` has the DCS backlight and the
+68x152 mm size that gives the 2x scale, so the device package writes
+`/etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf` (and the same drop-in for
+`plasmalogin.service`) with `KWIN_DRM_DEVICES=/dev/dri/x6525-primary`. The udev rule creates that
+symlink only when a sprd-drm card exists; if `sprd_drm` failed to probe, KWin has no device and the
+session does not start (simpledrm console and SSH remain).
+
+Check a running Plasma image:
+
+```sh
+systemctl status plasma-mobile.service --no-pager
+journalctl -b -u plasma-mobile.service --no-pager | tail -40
+systemctl show plasma-mobile.service -p Environment | tr ' ' '\n' | grep KWIN_DRM
+ls -l /dev/dri/x6525-primary /etc/systemd/system/display-manager.service
+cat /sys/class/backlight/td4160/brightness
+```
+
+- `plasma-mobile.service` failed and `journalctl` shows `Failed to open DRM device` or no card:
+  check `ls /dev/dri` and whether `sprd-drm` probed (`dmesg | grep -i sprd.*drm`).
+- The session runs but is not on the panel, or the brightness slider does nothing: the drop-in did
+  not apply - `systemctl show ... Environment` must list `KWIN_DRM_DEVICES=/dev/dri/x6525-primary`.
+- The shell is up but the screen is mirrored/oversized: KWin's output scale, not the panel size
+  reported by `sprd-drm`; `kscreen-doctor -o` shows the mode and scale.
 
 ### 3.1 Test the compositor live, before a build
 

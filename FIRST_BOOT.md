@@ -4,9 +4,9 @@ This is the checklist for the **mainline route** (U-Boot chainloaded from `boot_
 `linux-postmarketos-unisoc-ums9230` kernel with `dts/ums9230-infinix-x6525.dts`; the boot filesystem
 goes in the eMMC's `cache` partition and the root filesystem in `userdata`, or both on a microSD card
 instead). The 5.4 route has its own steps at the end of `NOTES.md`. **Where the bring-up is:** the
-boot chain, the rootfs, SSH over the USB link, the touchscreen, Wi-Fi and the Phosh GUI all work
-(Wi-Fi verified 2026-10-21 by pinging, running `apk update`/`upgrade` and installing a package;
-the GUI image booted on 2026-10-24). Bluetooth is fixed in the tree - the transport's two
+boot chain, the rootfs, SSH over the USB link, the touchscreen and Wi-Fi all work (Wi-Fi verified
+2026-10-21 by pinging, running `apk update`/`upgrade` and installing a package), and a GUI image
+boots (Phosh, 2026-10-24; the workflow now builds Plasma Mobile, see BRING_UP_CHECKLIST 3). Bluetooth is fixed in the tree - the transport's two
 configuration blobs are now packaged, and kernel patch 0013 supplies a BD address where U-Boot's
 `bdaddr` environment variable is unset and it writes zeros - but has not been exercised on the phone
 yet; BRING_UP_CHECKLIST.md 2.1 has the checks. Stages
@@ -141,6 +141,25 @@ driver (`configs/infinix-x6525_defconfig` has no `DM_REGULATOR`/`DM_PMIC`; `sdhc
 supplies). In the stock dump both rails are *disabled* while no card is in use, so unless the stock
 bootloader leaves them on, the slot is unpowered when U-Boot looks and the boot ends at the prompt. The
 eMMC has no such problem: its rail is on from power-up, and it is what U-Boot already reads.
+
+### Storage variants: eMMC and UFS
+
+The X6525 shipped with either eMMC or UFS, and this port is eMMC-only today:
+
+- U-Boot is built without any UFS driver (`uboot/configs/infinix-x6525_defconfig` drops
+  `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230`), so on a UFS unit it cannot read the `cache`
+  partition and the phone stops at the U-Boot prompt. The kernel does build the controller in
+  (`CONFIG_SCSI_UFS_SPRD=y`), and the initramfs would find the root by UUID, but the boot never
+  reaches the kernel.
+- Flashing the eMMC images into a UFS unit writes the partitions fastboot is given and nothing
+  else; it does not touch the storage hardware, and the stock bootloader and fastboot stay
+  available for recovery. The image simply will not boot.
+- Check the unit before flashing: in the stock bootloader or Android, `cat /proc/cmdline`
+  names the boot device - the unit this port was developed on says `sprdboot.flash=emmc`, and a
+  UFS unit names its UFS controller there (and in `androidboot.boot_devices`).
+- Support for both in one image needs U-Boot's UFS driver, a UFS node in the board U-Boot DTS and
+  `&ufs` enabled in the kernel DTS; the kernel side is already configured. Nothing has been tested
+  against a UFS unit, so do not flash one until that is done.
 
 U-Boot cannot read a partition table nested inside an eMMC partition, so a whole-disk image cannot go
 there. The `rom` workflow therefore builds a *split* install (`pmbootstrap install --split`): the boot
