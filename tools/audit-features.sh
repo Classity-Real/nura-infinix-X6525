@@ -195,6 +195,15 @@ need "the GPU supply is set"                     grep -q 'mali-supply' "$DTS"
 need "Mesa panfrost Vulkan is a dependency"      grep -q 'mesa-vulkan-panfrost' "$DPKG/APKBUILD"
 finish
 
+feature "performance (CPU DVFS, thermal throttling, storage)"
+need "CPU DVFS enabled for the T606"             grep -q 'sprd,soc-version = /bits/ 64 <0x36303654>' "$DTS"
+need "GPU #cooling-cells in the board DTS"       grep -q '#cooling-cells = <2>' "$DTS"
+need "GPU thermal cooling map"                   grep -q 'cooling-device = <&gpu ' "$DTS"
+need "the GPU thermal patch"                     test -f "$ROOT"/patches/upstream/0021-*.patch
+need "the HS200 opt-in patch"                    test -f "$ROOT"/patches/upstream/0022-*.patch
+need "the HS200 parameter exists"                grep -q 'enable_hs200' "$ROOT"/patches/upstream/0022-*.patch
+finish
+
 feature "Bluetooth (btsprdsipc over the WCN SIPC link)"
 need "CONFIG_BT_SPRDSIPC=m"                      cfg BT_SPRDSIPC "$CFG"
 need "btsprdsipc is loaded at boot"              grep -q 'btsprdsipc' "$DPKG/APKBUILD"
@@ -289,6 +298,10 @@ printf '                 no gpsd/geoclue is installed (BRING_UP_CHECKLIST 5.3, R
 printf '  known-missing  sensors: the VL53L0X node is unverified, and the hub parts named in the\n'
 printf '                 pmsys firmware (SC7A20E, MMC5603, LS9801) have not been seen on hardware;\n'
 printf '                 the fingerprint reader has no mainline driver (ROADMAP.md)\n'
+printf '  known-missing  performance: system suspend is unavailable (PSCI 0.2 has no SYSTEM_SUSPEND;\n'
+printf '                 the vendor path goes through the PM core); GPU 850 MHz needs GPLL/clock-tree\n'
+printf '                 work; HS200/HS400 on the eMMC is opt-in only (sdhci_sprd.enable_hs200=1,\n'
+printf '                 patch 22) until it has run on hardware (ROADMAP.md, checklist 7)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then
