@@ -529,34 +529,43 @@ iptables -I FORWARD 2 -i "$DEF" -o "$AP" -m state --state RELATED,ESTABLISHED -j
 
 Internet over the USB link (docs in README.md) keeps working as before and is the fallback.
 
-### 2.1 Bluetooth (untested)
+### 2.1 Bluetooth
 
-The device package (pkgrel 17) now loads `btsprdsipc` at boot and enables `bluetooth.service`, so
-an image built from this tree needs none of the manual steps below. On an image without that:
+Status from the sources, not yet from the hardware. An earlier image had `bluetooth.service` enabled
+and `btsprdsipc` loaded and still showed no controller; two separate causes were found:
 
-BlueZ is not in the image; with Wi-Fi working it can be installed on the device instead of waiting
-for a rebuild:
+1. **The transport's firmware was missing.** `btsprdsipc_probe()` requests
+   `sprd/bt_config_pskey.bin` and `sprd/bt_config_rf.bin` and returns an error if either cannot be
+   loaded, so the HCI device is never registered (`drivers/bluetooth/btsprdsipc.c`, the two
+   `request_firmware()` calls). `firmware-infinix-x6525` pkgrel 3 now ships both, built by
+   `tools/bt-ini2bin.py` from the stock `/odm/firmware/bt_configure_{pskey,rf}.ini`; pkgrel 2 and
+   older shipped only the Wi-Fi/remoteproc blobs.
+2. **The BD address was never set.** The dtsi's `bluetooth@10` node has
+   `local-bd-address = [00 00 00 00 00 00]` with the comment "filled in by bootloader". This port
+   chainloads U-Boot from `boot_a` and that U-Boot does not patch the property, so the HCI core
+   skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the driver sends the two config
+   blobs and enables the controller. Patch 0013 falls back to a random, locally administered
+   address in that case, so the adapter works but its address - and with it the pairings - changes
+   on every boot until the bootloader or a per-device DTS provides a stable one.
+
+On an image built from this tree, check:
 
 ```sh
-sudo apk add bluez
-sudo systemctl enable --now bluetooth   # Alpine does not enable it for you
-sudo modprobe btsprdsipc
-sudo dmesg | grep -iE 'btsprd|bluetooth|hci|sprd'
+sudo dmesg | grep -iE 'btsprd|bluetooth|hci'
 systemctl status bluetooth --no-pager
 rfkill list
 bluetoothctl list
+bluetoothctl show
 ```
 
-`systemctl status` saying `inactive (dead)` only means it was never started; start it as above. If
-it starts but exits, `journalctl -u bluetooth -b --no-pager | tail -30` says why.
-
-- `hci0` in `bluetoothctl list` (or an HCI line in `dmesg`) means the controller came up over the
-  same WCN block that runs Wi-Fi. Then `systemctl status bluetooth` (enable it if the package did not
-  start it) and `bluetoothctl power on`, `scan on`.
-- no controller: send the `dmesg` lines. The Bluetooth side may need its own firmware, or the dtsi's
-  `btwf` child needs a change; nothing has exercised it yet.
-
-Once it works, add `bluez` to the device package's `depends` so the image ships it.
+- `dmesg` should show `no local-bd-address, using xx:xx:xx:xx:xx:xx` (patch 0013's fallback), then
+  the HCI device; `bluetoothctl list` should list `hci0`. `bluetoothctl show` prints the address,
+  `powered: no` until `bluetoothctl power on`; then `scan on`.
+- No `hci0`: `dmesg | grep btsprdsipc` says whether a firmware request failed (`-2` is ENOENT) or
+  the SIPC channel never appeared (compare `dmesg | grep -i wcn` with the Wi-Fi checks above).
+  `ls /lib/firmware/sprd/` must list `bt_config_pskey.bin` and `bt_config_rf.bin`.
+- `systemctl status` saying `inactive (dead)` means it was never started; `systemctl enable --now
+  bluetooth` starts it. If it starts and exits, `journalctl -u bluetooth -b --no-pager | tail -30`.
 
 ## 3. GUI
 

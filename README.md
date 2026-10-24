@@ -4,16 +4,20 @@ Draft postmarketOS port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mai
 (`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
 
 **Status: it boots and it is usable.** U-Boot loads the kernel from the eMMC, the root filesystem
-comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, and Wi-Fi is
+comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, Wi-Fi is
 functional (verified 2026-10-21 with `ping google.com`, `apk update`/`upgrade` and a package
-install). Bluetooth and the GUI are the next milestones.
+install), and the Phosh image boots. Bluetooth was never reaching a controller: the transport was
+missing its two configuration blobs and the bootloader does not fill in the BD address; both are
+fixed in the tree (firmware pkgrel 3 and kernel patch 0013) but not yet exercised on the phone -
+BRING_UP_CHECKLIST.md 2.1 has the checks.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
-how to build the image either here or on GitHub. `pmbootstrap install` builds a whole MBR+GPT disk
-image; U-Boot cannot read a partition table nested inside a partition, so the flash procedure writes
-the image's two filesystems into real eMMC partitions (`cache` and `userdata` - the route in
-FIRST_BOOT.md) or the whole image onto a microSD card. `pmbootstrap flasher flash_rootfs` must not be
-run: it would put that disk image into `super`, where U-Boot cannot see it. `NOTES.md` is the record
+how to build the image either here or on GitHub. The `rom` workflow builds a *split* install (a boot
+filesystem image and a root filesystem image, no partition table), which are flashed into real eMMC
+partitions (`cache` and `userdata` - the route in
+FIRST_BOOT.md). A local *unsplit* install can also write the whole disk image to a microSD card.
+`pmbootstrap flasher flash_rootfs` must not be run: it writes the root filesystem image into
+`super`, which U-Boot does not read and which belongs to Android. `NOTES.md` is the record
 behind it: every value taken from the stock system or from the running device's own device tree, with
 its source.
 
