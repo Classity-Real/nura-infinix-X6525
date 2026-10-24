@@ -210,13 +210,14 @@ enable x6525-emmc-flush.service
 enable bluetooth.service
 EOF
 
-	# Point the Phosh session at the real panel (sprd-drm) instead of the
-	# bootloader's simpledrm: only the panel driver registers the DCS
-	# backlight and reports the 68x152 mm size that gives the 2x output scale.
-	# simpledrm stays as the console fallback; the symlink the drop-in names is
-	# created by a udev rule only when a sprd-drm card exists. The renderer is
-	# deliberately not pinned: wlroots tries GLES2 (panfrost, which needs no
-	# firmware on this Valhall job-manager GPU), then Vulkan, then pixman.
+	# For the phosh build (the device package serves both UIs): point the
+	# session at the real panel (sprd-drm) instead of the bootloader's
+	# simpledrm. Only the panel driver registers the DCS backlight and reports
+	# the 68x152 mm size that gives the 2x output scale. simpledrm stays as the
+	# console fallback; the symlink the drop-in names is created by a udev rule
+	# only when a sprd-drm card exists. The renderer is deliberately not
+	# pinned: wlroots tries GLES2 (panfrost, which needs no firmware on this
+	# Valhall job-manager GPU), then Vulkan, then pixman.
 	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/10-x6525-software.conf <<'EOF'
 [Service]
 # Drive the real panel (sprd-drm), not the bootloader's simpledrm: only the
@@ -224,11 +225,26 @@ EOF
 # that gives the 2x scale. simpledrm stays as the console fallback; the
 # symlink is created below only when a sprd-drm card exists.
 Environment=WLR_DRM_DEVICES=/dev/dri/x6525-primary
-# The renderer is deliberately not pinned. wlroots tries GLES2 first (via
-# Mesa panfrost once the GPU firmware is packaged), then Vulkan, and falls
-# back to pixman - so this image stays usable before the GPU works and uses
-# it automatically afterwards.
+# The renderer is deliberately not pinned. wlroots tries GLES2 first (Mesa
+# panfrost; this Valhall job-manager GPU needs no firmware), then Vulkan, and
+# falls back to pixman.
 EOF
+
+	# Plasma Mobile: plasma-mobile.service runs /usr/bin/startplasmamobile,
+	# which starts KWin Wayland as the session. KWin reads KWIN_DRM_DEVICES (a
+	# colon-separated list; with it set, every other card is ignored) and gets
+	# the same panel-driver choice as phoc above - the backlight and the
+	# 68x152 mm scale only exist on that card. plasmalogin.service, the Plasma
+	# login manager some images pull in, starts a KWin-based greeter and gets
+	# the same environment. Drop-in directories for units that are not
+	# installed are ignored, so these are harmless on a phosh image.
+	for unit in plasma-mobile plasmalogin; do
+		install -Dm644 /dev/stdin \
+			"$pkgdir"/etc/systemd/system/$unit.service.d/10-x6525-drm.conf <<'EOF'
+[Service]
+Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
+EOF
+	done
 
 	# Name the sprd-drm card so the session above can point at it without
 	# guessing card0/card1. If sprd_drm failed to probe, no symlink appears,
