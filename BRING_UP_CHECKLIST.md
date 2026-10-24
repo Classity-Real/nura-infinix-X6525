@@ -722,6 +722,34 @@ waydroid session start
 If it fails: `sudo waydroid log | tail -50`, `ls /dev/binderfs` (Waydroid mounts it),
 `sudo dmesg | grep -i binder`, and `systemctl status waydroid-container`.
 
+## 7. GPU (Mali-G57, Panfrost)
+
+The kernel side is ready: the dtsi has an `&gpu` node (our DTS sets `mali-supply = <&vddgpu>` and
+`status = "okay"`), and the config builds `CONFIG_DRM_PANFROST=m` with OPP/devfreq support. Alpine's
+aarch64 Mesa contains both the panfrost Gallium driver (`mesa-dri-gallium`, already pulled in by
+`postmarketos-base-mesa`) and panvk (`mesa-vulkan-panfrost`, now a device dependency).
+
+The missing piece is the GPU firmware, **`mali_csffw.bin`**, which Panfrost loads for a Valhall
+(G57) GPU. It must come off the stock system; publishing the blob is a licensing decision, so it
+may need to stay local rather than be fetched by CI:
+
+```sh
+# stock system, as root (or adb root + adb pull)
+ls -l /vendor/firmware /vendor/firmware_mnt/image | grep -i mali
+dmesg | grep -iE 'mali|gpu|bifrost|valhall' > mali-dmesg.txt
+ls -l /vendor/lib/modules | grep -i mali > mali-modules.txt
+```
+
+Once it is packaged under `/lib/firmware/mali_csffw.bin`, no session change is needed: the greetd
+drop-in no longer pins a renderer, and wlroots tries GLES2 (panfrost) first, then Vulkan, then falls
+back to pixman. Checks:
+
+```sh
+sudo dmesg | grep -iE 'panfrost|mali'
+ls -l /dev/dri/
+journalctl -u greetd -b --no-pager | tail -30
+```
+
 ## What to send when asking for help
 
 - Which step and which row of the tables above you are on.
