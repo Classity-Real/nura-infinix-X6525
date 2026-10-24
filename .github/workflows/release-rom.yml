@@ -1,15 +1,12 @@
 name: Release ROM
 
-# Downloads the x6525-rom artifact from a Build PMOS run and publishes it
-# as a GitHub Release under the given tag.
+# Downloads the x6525-rom artifact from a Build PMOS run, packs it into a
+# single zip, and publishes that as a GitHub Release.
 #
-# Files >= 2 GiB are split into 1900 MiB parts (GitHub asset limit).
-# Reassemble: cat name.part* > name
+# If the zip is still >= 2 GiB (GitHub asset limit), only the zip is split
+# into 1900 MiB parts. Reassemble: cat x6525-rom.zip.part* > x6525-rom.zip
 #
 # Usage: Actions → Release ROM → Run workflow
-#   tag:    e.g. rom-2026.10.24 or v0.1.0
-#   run_id: optional; omit to use the latest successful Build PMOS run
-#           that has the x6525-rom artifact
 
 on:
   workflow_dispatch:
@@ -85,40 +82,36 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ steps.run.outputs.run_id }}
 
-      - name: Prepare upload set (split files over 2 GiB)
+      - name: Zip artifact (split zip only if over 2 GiB)
         run: |
           set -euo pipefail
           LIMIT=$((2 * 1024 * 1024 * 1024))
           CHUNK=$((1900 * 1024 * 1024))
           mkdir -p upload
-          SPLIT_NOTES=""
 
           echo "Source files:"
           find rom-out -type f -printf '%p\t%s bytes\n' | sort
-
-          while IFS= read -r -d '' f; do
-            size=$(stat -c%s "$f")
-            base=$(basename "$f")
-            if [ "$size" -ge "$LIMIT" ]; then
-              echo "Splitting $f ($size bytes) into $((CHUNK / 1024 / 1024)) MiB parts"
-              # e.g. infinix-x6525.img.part00, .part01, ...
-              split -b "$CHUNK" -d -a 2 "$f" "upload/${base}.part"
-              n=$(find upload -name "${base}.part*" | wc -l)
-              SPLIT_NOTES="${SPLIT_NOTES}\n- \`${base}\` was split into ${n} parts: \`${base}.part00\` ... Reassemble: \`cat ${base}.part* > ${base}\`"
-            else
-              cp -a "$f" "upload/${base}"
-            fi
-          done < <(find rom-out -type f -print0)
-
-          echo "Upload set:"
-          find upload -type f -printf '%p\t%s bytes\n' | sort
-          test -n "$(find upload -type f | head -1)" || {
-            echo "::error::No files prepared for upload"
+          test -n "$(find rom-out -type f | head -1)" || {
+            echo "::error::Artifact downloaded but no files found"
             exit 1
           }
 
-          # Persist split notes for the release body (optional file)
-          printf '%s' "$SPLIT_NOTES" > /tmp/split-notes.txt
+          # One zip of the whole tree (store only: .img rarely shrinks, saves time)
+          echo "Creating x6525-rom.zip ..."
+          (cd rom-out && zip -r -0 -q ../upload/x6525-rom.zip .)
+          ZSIZE=$(stat -c%s upload/x6525-rom.zip)
+          echo "x6525-rom.zip is $ZSIZE bytes"
+
+          if [ "$ZSIZE" -ge "$LIMIT" ]; then
+            echo "Zip exceeds 2 GiB; splitting into $((CHUNK / 1024 / 1024)) MiB parts"
+            split -b "$CHUNK" -d -a 2 upload/x6525-rom.zip upload/x6525-rom.zip.part
+            rm -f upload/x6525-rom.zip
+            echo "split" > /tmp/was-split
+            find upload -name 'x6525-rom.zip.part*' -printf '%p\t%s bytes\n' | sort
+          else
+            echo "single" > /tmp/was-split
+            ls -l upload/x6525-rom.zip
+          fi
 
       - name: Create tagged release and upload assets
         env:
@@ -138,10 +131,11 @@ jobs:
           mapfile -t FILES < <(find upload -type f | sort)
           echo "Uploading ${#FILES[@]} file(s) to tag $TAG"
 
-          NOTES="postmarketOS image for Infinix X6525 (nura). Built by Build PMOS (run ${RUN_ID}). Artifact: x6525-rom."
-          NOTES="${NOTES} GitHub release assets must be under 2 GiB; larger images are split into 1900 MiB parts."
-          if [ -s /tmp/split-notes.txt ]; then
-            NOTES="${NOTES}$(cat /tmp/split-notes.txt)"
+          NOTES="postmarketOS image for Infinix X6525 (nura). Built by Build PMOS (run ${RUN_ID})."
+          if [ "$(cat /tmp/was-split)" = "split" ]; then
+            NOTES="${NOTES} Packaged as x6525-rom.zip, split into 1900 MiB parts under the GitHub 2 GiB asset limit. Reassemble: cat x6525-rom.zip.part* > x6525-rom.zip && unzip x6525-rom.zip"
+          else
+            NOTES="${NOTES} Download x6525-rom.zip and unzip it."
           fi
 
           if [ "$PRE" = "true" ]; then
