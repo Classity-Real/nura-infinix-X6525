@@ -731,6 +731,49 @@ pactl list short sinks
 The DTS feeds the amplifier's right input from `HPR_OUT`; an earlier revision had both inputs on
 `HPL_OUT` (mono), fixed on 2026-10-24 while chasing this.
 
+## 4.5 USB: OTG host (a keyboard, a stick) and the charger's boost
+
+A USB-C OTG adapter makes the phone the host, and the kernel side mostly works: the Type-C port
+manager (sc27xx_pd) detects the adapter, switches the data role to host, and musb-sprd puts the
+controller in host mode through the role switch in the board tree. What was missing is the 5 V: the
+port's only source is the charger's boost converter, and the port manager's `vbus-supply` had nothing
+to enable (`sc27xx_pd_set_vbus()` returns quietly when no regulator is supplied), so a keyboard got
+no power and never enumerated. It looked like "host mode with no VBUS", which is also where the
+"unknown USB mode" notification comes from.
+
+The port now carries both halves:
+
+- patch 16 makes the bq2415x driver register its `otg-vbus` DT child as a regulator; enabling it
+  enters boost mode (charging is disabled while the port sources power) and disabling it restores
+  the charger's automatic mode;
+- patch 17 adds that child to the charger node and sets `vbus-supply` on `&pmic_typec_pd`.
+
+With a USB-C OTG adapter and a keyboard plugged in:
+
+```sh
+dmesg | grep -iE 'musb|usb 1-1|input:|role|bq2415x'
+cat /sys/class/typec/port0/data_role        # host while the adapter is attached
+cat /sys/class/power_supply/bq2415x-*/mode  # boost while the port is sourcing
+lsusb                                        # apk add usbutils
+```
+
+If `data_role` says host but nothing enumerates:
+
+- check that `mode` says `boost`; if it does not, the regulator never got enabled (look for
+  bq2415x errors in dmesg) or the charger did not accept the boost command;
+- the boost converter is the AW32257 at i2c3 0x6a, register-compatible with the bq24158; if its
+  boost bit does nothing, the fallback is to write `boost` to the charger's `mode` sysfs entry by
+  hand and see whether VBUS appears - that isolates the regulator wiring from the chip;
+- a self-powered device (a powered hub) can enumerate even without VBUS, so it is not a good test.
+
+The role switch also allows userspace control, which is useful for isolating the controller from the
+port manager:
+
+```sh
+cat /sys/class/usb_role/*/role
+echo host > /sys/class/usb_role/<name>/role     # data role only; VBUS still needs the regulator
+```
+
 ## 5. Camera and cellular: the vendor data, and what is still missing
 
 The outputs collected below go into [`unit-data/x6525-stock.txt`](unit-data/x6525-stock.txt) (or a
