@@ -861,6 +861,18 @@ The port now describes the rear camera and builds a driver for it:
   and the vddcamio/vddcama1/vddcamd1 rails.
 - `CONFIG_VIDEO_S5K3L6=m` is in the ROM's kernel config.
 
+The front camera is now described too:
+
+- `patches/upstream/0020-*` adds `camera@10` on `&i2c0` for the front OV8856, plus the two-lane
+  `CAMSYS_CSI_M` port. It uses the mainline `ov8856` driver at 19.2 MHz on `CLK_SENSOR0`
+  (`TWPLL_96M` parent) and the `vddcamio`/`vddcama0`/`vddcamd0` rails.
+- the vendor library (`libsensor_ov8856_front.so`) runs the part at 24 MHz, but the mainline driver
+  has register tables only for 19.2 MHz and the SoC clock can supply that, so the node asks for
+  19.2 MHz. If the sensor probes but does not stream, the clock/PLL tables are the first suspect.
+- the mainline driver has no power-down handling, so a gpio-hog holds `ap_gpio 46` low; the pins are
+  not otherwise driven by the driver.
+- `CONFIG_VIDEO_OV8856=m` is in the ROM's kernel config.
+
 Mainline support, from the ROM's kernel config:
 
 | sensor | driver | ROM config |
@@ -898,12 +910,27 @@ There is no camera application yet: the mainline sprd stack exposes raw Bayer ca
 blocks through V4L2, but libcamera has no sprd pipeline handler and there is no 3A. The first
 milestone is frames from the sensor, then a userspace pipeline.
 
-The front OV8856 is not described yet. The live tree says it is in `sensor-main`: i2c0 at 7-bit 0x10,
-`phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/vddcamd0/
-vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its clock
-needs to come from `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear
-sensor is on `CLK_SENSOR1`, so the two do not conflict. If the mainline driver's address set does not
-match (it knows 0x10 and 0x36), 0x10 is the one to use.
+The front OV8856 is described by patch 0020. The live tree puts it in `sensor-main`: i2c0 at 7-bit
+0x10, `phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/
+vddcamd0/vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its
+clock is `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear sensor is on
+`CLK_SENSOR1`, so the two do not conflict. The pin the driver leaves alone (power-down) is held low
+by a gpio-hog in the board DTS.
+
+Check both sensors after boot:
+
+```sh
+sudo dmesg | grep -iE 's5k3l6|ov8856|i2c|camsys'
+media-ctl -p -d /dev/media0
+v4l2-ctl --list-devices
+# the front sensor's controls (test pattern first, as above)
+v4l2-ctl -d /dev/v4l-subdev1 --list-ctrls
+```
+
+A probe with no `i2c` error means the address, rails and reset pin are right. No probe at all on
+i2c0 usually means the power-down hog or the 19.2 MHz clock: check `dmesg` for
+`ov8856 0-0010: failed to get xvclk` / `unsupported clock rate` and `ls /sys/kernel/debug/gpio` for
+`ov8856_pwdn`.
 
 ### 5.2 Cellular (modem)
 
@@ -1036,14 +1063,100 @@ cgps -s        # or gpsmon
 The first fix is slow (cold start, almanac and ephemeris from scratch); the NMEA stream appearing at
 all is the milestone.
 
-If `/dev/gnss0` never appears: the `pm_gnss` -> `gnss_pipe0` channel is modelled under the **pmsys**
-SIPC link in the mainline dtsi, and pmsys needs `pm_bootcode.bin` and `pm_sys.bin`. Neither is
-packaged; both come from `pm_sys_a` (p30), but how that partition splits into the two files is not
-known yet. The SIPC framework may create the channel device without the pmsys remote running - if it
-does not, that split is the next step.
+The `pm_gnss` -> `gnss_pipe0` channel is modelled under the **pmsys** SIPC link in the mainline
+dtsi, so the GNSS device only exists once the pmsys co-processor is running. That is now wired up:
+
+- `sprd/pm_bootcode.bin` is packaged (firmware pkgrel 6). It is the `bootcode` word list from the
+  vendor's `proprietary/vendor/etc/modem_sp_info.xml`, not a partition; the driver copies it into
+  the 4 KB window at 0x62010000.
+- `sprd/pm_sys.bin` is the phone's own `pm_sys_a` partition (1 MB), copied out by
+  `x6525-pmsys.service` at boot. It is not published.
+- `sprd_pmsys` is blacklisted from coldplug: it requests both files during probe and does not retry,
+  so the service loads it after the copy.
+
+Check it after boot:
+
+```sh
+systemctl status x6525-pmsys
+journalctl -u x6525-pmsys -b
+ls -l /lib/firmware/sprd/pm_*.bin
+cat /sys/class/remoteproc/remoteproc*/state    # expect "running"
+ls /sys/bus/iio/devices                       # the sensor hub creates these
+ls -l /dev/gnss0
+```
+
+Reading the result:
+
+- `no pm_sys_a partition` or a short/zero file: the partition name or layout differs; the service is
+  harmless but pmsys then fails its firmware load.
+- `bootcode firmware too large` / `pmsys firmware too large`: the files are not the ones this driver
+  expects (it allows 4 KB and 0x2c0000).
+- `state` stays `offline` or the driver never appears in `dmesg`: `modprobe sprd_pmsys` and read
+  `dmesg | grep -iE 'pmsys|firmware|remoteproc'`. If the bootcode is rejected, the next step is to
+  compare it with `modem_sp_info.xml` again; a different `bootcode` attribute means a different
+  board revision.
+- pmsys runs but no `/dev/gnss0`: the GNSS child is under `&wcn`; check `sprd_wcn` loaded and
+  `dmesg | grep -iE 'gnss|wcn'`. The GNSS firmware is `sprd/gnssmodem.bin`, already packaged.
 
 Nothing GNSS-related is installed by default; Plasma's location stack uses geoclue, which can read
-from gpsd.
+from gpsd. `apk add gpsd gpsd-clients` and run `gpsd -n /dev/gnss0`.
+
+### 5.4 Sensors (the sensor hub and the VL53L0X)
+
+The accelerometer, gyroscope, light, magnetometer/compass and proximity sensors are not on the AP's
+I2C buses: the stock system reads them through the PM co-processor's sensor hub. The mainline
+`sprd_shub` stack exposes them as IIO devices, and its `pm_shub` channel is under the same pmsys
+link as GNSS - so **pmsys has to be running first** (5.3). The IIO drivers are modules and autoload
+when the channel appears.
+
+```sh
+# pmsys first: its state gates everything below
+systemctl status x6525-pmsys
+cat /sys/class/remoteproc/remoteproc*/state
+
+# what the hub exposed
+ls /sys/bus/iio/devices
+for d in /sys/bus/iio/devices/iio:device*; do
+    echo "$d: $(cat "$d/name" 2>/dev/null)"
+done
+# a reading; the exact channels depend on the part
+cat /sys/bus/iio/devices/iio:device*/in_accel_*_raw 2>/dev/null
+cat /sys/bus/iio/devices/iio:device*/in_illuminance_raw 2>/dev/null
+
+# why it did not come up
+sudo dmesg | grep -iE 'shub|sensor|pmsys'
+lsmod | grep -i shub
+```
+
+Reading the result:
+
+- no `iio:device*` at all: pmsys is not running (see 5.3) or its firmware did not announce
+  `pm_shub`; the SIPC channel is declared in the dtsi, so a running pmsys with no channel is the
+  interesting failure.
+- `iio:device*` appear but no `in_*_raw` channels: the hub answered but this unit's sensor parts are
+  not the ones the driver expects; send the names and `dmesg`.
+- which parts are fitted is not known yet - the vendor tree's sensor configuration is not the
+  board's own. Do not assume a magnetometer or a gyroscope exists until it shows up.
+
+The time-of-flight proximity sensor is separate and on the AP's I2C: the board DTS has
+`proximity@29` on `&i2c4`, `st,vl53l0x`, with XSHUT on ap_gpio 168 and the interrupt on 169. The
+stock node used `reg = <0x52>` (the 8-bit form) and a vendor driver, and the stock kernel bound no
+driver at 7-bit 0x52, so this node is unverified in both address and pinout.
+
+```sh
+apk add i2c-tools
+sudo i2cdetect -y 4                 # is anything at 0x29 (or 0x52)?
+sudo dmesg | grep -iE 'vl53|i2c4'
+ls /sys/bus/iio/devices | grep -i prox
+cat /sys/bus/iio/devices/iio:device*/in_proximity_raw 2>/dev/null
+```
+
+If nothing answers at 0x29, power the XSHUT line high and re-probe, or try `reg = <0x52>`: the
+vendor stack may leave the part at its alternative address. The gpio-hog mechanism used for the
+front camera is the model for holding XSHUT.
+
+The fingerprint reader (Goodix on the stock system) has no mainline driver and is not part of this
+phase.
 
 ## 6. Waydroid (Android container)
 

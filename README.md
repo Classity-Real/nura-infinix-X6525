@@ -33,7 +33,9 @@ mainline port uses them, and the workflow that built that kernel has been remove
 
 `tools/audit-features.sh` reports which features the tree completes, is partial on, or is missing by
 design; with `--image <artifact>` it also checks a downloaded image (packaging, the built config, the
-modules in the initramfs, and the documented login).
+modules in the initramfs, and the documented login). [ROADMAP.md](ROADMAP.md) is the inventory of
+what is still missing and why (cameras, GNSS/sensors, modem, flash/autofocus, userspace, deferred
+performance work).
 
 ## Quick start
 
@@ -71,7 +73,8 @@ ip rule add from 172.16.42.0/24 lookup main pref 100
 ssh user@172.16.42.1        # password: x6525pmos
 ```
 
-**5. Give the phone internet.** It has no WiFi driver, so it uses the host's connection.
+**5. Give the phone internet.** Wi-Fi works on this port (checklist 2), but until it is configured
+the phone uses the host's connection over the USB link.
 
 ```sh
 # A01 Core, as root. usb0 = the name from step 3. First check the host is online
