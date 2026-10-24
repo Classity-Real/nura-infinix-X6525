@@ -729,33 +729,16 @@ The kernel side is ready: the dtsi has an `&gpu` node (our DTS sets `mali-supply
 aarch64 Mesa contains both the panfrost Gallium driver (`mesa-dri-gallium`, already pulled in by
 `postmarketos-base-mesa`) and panvk (`mesa-vulkan-panfrost`, now a device dependency).
 
-The missing piece is the GPU firmware, **`mali_csffw.bin`**, which Panfrost loads for a Valhall
-(G57) GPU. It must come off the stock system; publishing the blob is a licensing decision, so it
-may need to stay local rather than be fetched by CI:
+**No firmware is needed.** The stock vendor module is the Mali **G57 job-manager** driver
+(`mali_kbase.ko`, built from `kernel5.4/gpu/natt/mali`, strings `Mali-G57`), and mainline Panfrost
+matches Valhall JM as `arm,mali-valhall-jm`. `mali_csffw.bin` belongs to Arm's newer CSF GPUs
+(G610 and up), not this one - an earlier revision of this note wrongly expected it.
 
-```sh
-# stock system, as root (or adb root + adb pull)
-ls -l /vendor/firmware /vendor/firmware_mnt/image | grep -i mali
-dmesg | grep -iE 'mali|gpu|bifrost|valhall' > mali-dmesg.txt
-ls -l /vendor/lib/modules | grep -i mali > mali-modules.txt
-```
+What is needed is already in the tree: `sprd_drm` probing (so the panel/drm device exists), the
+renderer no longer pinned to pixman (wlroots tries GLES2 through Panfrost, then Vulkan, then pixman),
+and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus `mesa-vulkan-panfrost`.
 
-If Android still boots from `super` after restoring the stock `boot_a` backup, the blob can be
-pulled without downloading a multi-GB firmware package (`/vendor` files are normally readable by
-the `shell` user; `adb root` is not needed if they are):
-
-```sh
-adb shell ls -l /vendor/firmware | grep -i mali
-adb pull /vendor/firmware/mali_csffw.bin     # adjust the path to what the listing shows
-adb pull /vendor/firmware_mnt/image          # modem firmware, for the cellular work
-adb pull /vendor/etc/camera                  # camera configs, for the camera work
-```
-
-Then reflash the pmOS `boot_a` and continue.
-
-Once it is packaged under `/lib/firmware/mali_csffw.bin`, no session change is needed: the greetd
-drop-in no longer pins a renderer, and wlroots tries GLES2 (panfrost) first, then Vulkan, then falls
-back to pixman. Checks:
+Checks after booting an image with the display switch:
 
 ```sh
 sudo dmesg | grep -iE 'panfrost|mali'

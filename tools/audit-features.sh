@@ -175,13 +175,15 @@ need "wifi_board_config.bin is packaged"         grep -q 'sprd/wifi_board_config
 need "the modules are loaded at boot"            grep -q 'sc23xx_wlan_sipc' "$DPKG/APKBUILD"
 finish
 
-feature "GPU (Mali-G57, Panfrost)"
+feature "GPU (Mali-G57, Panfrost job-manager path)"
+# G57 is Valhall with a job manager; mainline panfrost matches it as
+# arm,mali-valhall-jm and needs no firmware. mali_csffw.bin belongs to the
+# newer CSF GPUs (G610+), not this one.
 need "CONFIG_DRM_PANFROST=m"                     cfg DRM_PANFROST "$CFG"
 need "CONFIG_PM_OPP=y (GPU operating points)"    cfg PM_OPP "$CFG"
 need "the GPU node is enabled in the DTS"        grep -q '&gpu {' "$DTS"
 need "the GPU supply is set"                     grep -q 'mali-supply' "$DTS"
 need "Mesa panfrost Vulkan is a dependency"      grep -q 'mesa-vulkan-panfrost' "$DPKG/APKBUILD"
-need "mali_csffw.bin is packaged"                grep -q 'mali_csffw.bin' "$FWPKG/APKBUILD"
 finish
 
 feature "Bluetooth (btsprdsipc over the WCN SIPC link)"
