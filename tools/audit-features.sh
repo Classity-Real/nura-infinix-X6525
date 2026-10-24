@@ -272,9 +272,12 @@ if [ -n "$IMAGE" ]; then
 	trap 'rm -rf "$TMP"' EXIT
 	# the two filesystems, by label - no loop device needed. Newer rom.yml
 	# uploads them split already; use those instead of copying the 1.3 GB disk.
+	# Symlinked, not copied: debugfs reads through the link, and a copy of the
+	# 2.4 GB root image is both slow and, on a CI runner, the largest thing in
+	# this check (rom.yml runs this script as a gate on every artifact).
 	if [ -f pmos-boot-fs.img ] && [ -f pmos-root-fs.img ]; then
-		cp pmos-boot-fs.img "$TMP/boot.img"
-		cp pmos-root-fs.img "$TMP/root.img"
+		ln -s "$IMGDIR/pmos-boot-fs.img" "$TMP/boot.img"
+		ln -s "$IMGDIR/pmos-root-fs.img" "$TMP/root.img"
 		ok "the artifact already carries pmOS_boot and pmOS_root"
 	elif python3 -I "$ROOT/tools/split-disk-image.py" infinix-x6525.img \
 			"$TMP/boot.img" "$TMP/root.img" >/dev/null 2>&1; then
