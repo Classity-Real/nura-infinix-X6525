@@ -12,11 +12,7 @@ filesystem image and a root filesystem image, no partition table), which are fla
 partitions (`cache` and `userdata` - the route in
 FIRST_BOOT.md). A local *unsplit* install can also write the whole disk image to a microSD card.
 `pmbootstrap flasher flash_rootfs` must not be run: it writes the root filesystem image into
-`super`, which U-Boot does not read and which belongs to Android. **UFS and UFS units:** the
-X6525 also shipped with UFS, and the image boots both - U-Boot scans UFS right after UFS (see
-FIRST_BOOT.md, "Storage variants"). `NOTES.md` is the record
-behind it: every value taken from the stock system or from the running device's own device tree, with
-its source.
+`super`, which U-Boot does not read and which belongs to Android. **UFS and eMMc units:**
 
 An earlier attempt used the stock 5.4 "Helix" kernel instead. Its files (`linux-infinix-x6525/`,
 `device-infinix-x6525/`, `build-kernel.sh`, `repack.sh`) are kept for reference; nothing in the
