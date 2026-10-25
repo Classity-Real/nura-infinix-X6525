@@ -159,6 +159,14 @@ changes nothing a user does:
   `bootflow scan -lb mmc; bootflow scan -lb scsi` - the first bootable entry wins, wherever it
   lives. The kernel side was already there (`CONFIG_SCSI_UFS_SPRD=y`); the kernel DTS now
   enables `&ufs` with the eMMC's core rail.
+- **The boot filesystem needs 4096-byte blocks.** A UFS LUN has 4096-byte logical blocks, and
+  U-Boot's ext4 driver (like Linux) cannot read a filesystem whose blocks are smaller than the
+  device's. pmbootstrap makes the small boot filesystem with 1024-byte blocks; on a UFS unit
+  U-Boot then finds the `cache` partition but prints `Read outside partition 92233720368547758xx`
+  and boots nothing. The `rom` job rebuilds `pmos-boot-fs.img` with 4096-byte blocks
+  (`tools/reblock-boot-fs.sh`: label and UUID kept, contents compared) and fails the build if either
+  image has smaller blocks. 4096-byte blocks read fine on eMMC too. To check an image you already
+  have: `dumpe2fs -h pmos-boot-fs.img | grep 'Block size'`.
 - On an eMMC unit the UFS controller probes, finds nothing and drops out; on a UFS unit the
   eMMC scan sees just the microSD slot. `bootflow scan` continues past a medium whose storage
   it cannot read, so neither path blocks the other.

@@ -400,10 +400,57 @@ jobs:
           bc=$((bc + 8 * 1048576 / bs))
           resize2fs "$B" "$bc"
           truncate -s $((bs * bc)) "$B"
+          # pmbootstrap makes this small filesystem with 1024-byte blocks. A UFS unit's
+          # LUN has 4096-byte blocks, and U-Boot (and Linux) cannot read a filesystem
+          # whose blocks are smaller than the device's: U-Boot prints "Read outside
+          # partition 9223372036854775808" on the UFS `cache` partition. 4096-byte
+          # blocks read fine on eMMC too, so rebuild it that way (label and UUID kept).
+          sh tools/reblock-boot-fs.sh "$B" 4096
           e2fsck -fn "$B"
           ls -l "$B"
           python3 -I tools/check-boot-fs.py /tmp/rom-out/pmos-boot-fs.img || echo "::warning::boot fs check failed"
           ls -la /tmp/rom-out/
+
+      - name: Check the images for the two known first-boot problems
+        env:
+          UI: ${{ inputs.ui || 'phosh' }}
+        run: |
+          B=/tmp/rom-out/pmos-boot-fs.img
+          R=/tmp/rom-out/pmos-root-fs.img
+          fail=0
+          bsz() { dumpe2fs -h "$1" 2>/dev/null | awk '/^Block size:/{print $3}'; }
+          # 1. both filesystems must be readable on a UFS unit (4096-byte blocks)
+          for f in "$B" "$R"; do
+            bs=$(bsz "$f")
+            if [ "${bs:-0}" -ge 4096 ]; then
+              echo "ok: $(basename "$f") has $bs-byte blocks"
+            else
+              echo "::error::$(basename "$f") has ${bs:-unknown}-byte blocks; a UFS unit (4096-byte blocks) cannot read it"
+              fail=1
+            fi
+          done
+          # 2. the session must be pinned to software rendering. Hardware GLES through
+          #    Panfrost is what leaves the screen black on this board, so the drop-in
+          #    that selects pixman (phoc) / QPainter (KWin) has to be in the image.
+          want() { # file pattern
+            if debugfs -R "cat $1" "$R" 2>/dev/null | grep -q "$2"; then
+              echo "ok: $1 sets $2"
+            else
+              echo "::error::$1 is missing or does not set $2"
+              fail=1
+            fi
+          }
+          case "$UI" in
+            phosh)
+              want /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf '^Environment=WLR_RENDERER=pixman'
+              want /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf '^Environment=LIBGL_ALWAYS_SOFTWARE=1' ;;
+            plasma-mobile)
+              want /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf '^Environment=KWIN_COMPOSE=Q'
+              want /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf '^Environment=LIBGL_ALWAYS_SOFTWARE=1' ;;
+          esac
+          debugfs -R "stat /usr/bin/x6525-display-report" "$R" 2>/dev/null | grep -q . ||
+            { echo "::error::/usr/bin/x6525-display-report is not in the image"; fail=1; }
+          [ "$fail" = 0 ] || exit 1
 
       - name: Upload it
         uses: actions/upload-artifact@v4

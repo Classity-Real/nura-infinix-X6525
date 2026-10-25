@@ -688,14 +688,25 @@ route.
 ### 3.3 Switch the UI and build
 
 the `rom` job's `ui` input defaults to `phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
-defaults to systemd and uses greetd with the `greetd-phrog` greeter). Because there is no GPU
-firmware, the device package installs the software-renderer drop-in:
+defaults to systemd and uses greetd with the `greetd-phrog` greeter). The device package installs a
+software-renderer drop-in, because the GPU path (phoc/wlroots trying GLES2 through Panfrost first)
+booted to a black screen with the session running and SSH working:
 
 ```ini
-# /etc/systemd/system/greetd.service.d/10-x6525-software.conf
+# /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf
 [Service]
 Environment=WLR_RENDERER=pixman
+Environment=LIBGL_ALWAYS_SOFTWARE=1
+Environment=GSK_RENDERER=cairo
 ```
+
+`pixman` makes phoc compose on the CPU, `LIBGL_ALWAYS_SOFTWARE` sends Mesa clients to llvmpipe (a pixman
+compositor offers no dmabuf, so a GPU client would have nothing to share buffers with), and
+`GSK_RENDERER=cairo` makes GTK4 apps draw without GL. Plasma Mobile gets the same idea in
+`plasma-mobile.service.d/20-x6525-software-render.conf` (`KWIN_COMPOSE=Q`, `QT_QUICK_BACKEND=software`,
+`LIBGL_ALWAYS_SOFTWARE=1`). To try the GPU again, delete that one file and reboot; section 7 is the test.
+Whatever the screen does, run `sudo x6525-display-report` over SSH: it prints the DRM cards, panel and
+backlight state, GPU messages, the session's drop-ins and its journal in one go.
 
 Build, flash `cache` and `userdata` from the same run, and boot. On a working `simpledrm` the Phosh
 shell comes up on greetd; if phoc fails instead, SSH still works and its log says why - then go to
@@ -1086,9 +1097,10 @@ matches Valhall JM as `arm,mali-valhall-jm`. `mali_csffw.bin` belongs to Arm's n
 (G610 and up), not this one - an earlier revision of this note wrongly expected it.
 
 What is needed is already in the tree: `sprd_drm` probing (so the panel/drm device exists), the
-renderer no longer pinned to pixman (phoc/wlroots and KWin both try GLES2 through Panfrost, then
-Vulkan, then software), and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus
-`mesa-vulkan-panfrost`.
+Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus `mesa-vulkan-panfrost`. The session
+renderer is pinned to software again for now (3.3): with it unpinned, phoc/wlroots and KWin try GLES2
+through Panfrost first, and that left the screen black on this board. To test the GPU, delete
+`20-x6525-software-render.conf` (3.3), reboot, and use `sudo x6525-display-report` if the screen goes black.
 
 The GPU now also has a DVFS table, taken from the stock kernel's `operating-points` for this part:
 384 MHz at 0.70 V, 512 and 614.4 MHz at 0.75 V, 768 MHz at 0.80 V. Panfrost's devfreq scales through

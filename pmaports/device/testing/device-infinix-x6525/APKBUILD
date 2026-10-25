@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=20
+pkgrel=21
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -298,9 +298,14 @@ EOF
 	# simpledrm. Only the panel driver registers the DCS backlight and reports
 	# the 68x152 mm size that gives the 2x output scale. simpledrm stays as the
 	# console fallback; the symlink the drop-in names is created by a udev rule
-	# only when a sprd-drm card exists. The renderer is deliberately not
-	# pinned: wlroots tries GLES2 (panfrost, which needs no firmware on this
-	# Valhall job-manager GPU), then Vulkan, then pixman.
+	# only when a sprd-drm card exists.
+	#
+	# The renderer is pinned to software in a separate drop-in (20-x6525-
+	# software-render.conf, below). Left unpinned, wlroots tries GLES2 through
+	# Panfrost first, and on this board that leaves the screen black once the
+	# session starts (the session is up and SSH works, but nothing is drawn).
+	# Delete that one file to try the GPU again; this one is the display
+	# choice and stays.
 	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/10-x6525-software.conf <<'EOF'
 [Service]
 # Drive the real panel (sprd-drm), not the bootloader's simpledrm: only the
@@ -308,9 +313,92 @@ EOF
 # that gives the 2x scale. simpledrm stays as the console fallback; the
 # symlink is created below only when a sprd-drm card exists.
 Environment=WLR_DRM_DEVICES=/dev/dri/x6525-primary
-# The renderer is deliberately not pinned. wlroots tries GLES2 first (Mesa
-# panfrost; this Valhall job-manager GPU needs no firmware), then Vulkan, and
-# falls back to pixman.
+# The renderer is chosen in 20-x6525-software-render.conf.
+EOF
+
+	# Software rendering for the phosh session. Three layers, because each one
+	# picks its own renderer:
+	#   WLR_RENDERER=pixman       phoc (wlroots) composes on the CPU instead of
+	#                             through Panfrost GLES2/Vulkan;
+	#   LIBGL_ALWAYS_SOFTWARE=1   Mesa clients (GL/GLES/EGL apps) use llvmpipe.
+	#                             Needed together with the line above: a pixman
+	#                             compositor offers no linux-dmabuf, so a client
+	#                             that picked the GPU would have nothing to
+	#                             share its buffers with;
+	#   GSK_RENDERER=cairo        GTK4 apps (phosh itself, the greeter, most of
+	#                             the GNOME mobile apps) draw with cairo rather
+	#                             than going through GL at all.
+	# To use the GPU again: rm /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf
+	# and reboot.
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/20-x6525-software-render.conf <<'EOF'
+[Service]
+Environment=WLR_RENDERER=pixman
+Environment=LIBGL_ALWAYS_SOFTWARE=1
+Environment=GSK_RENDERER=cairo
+EOF
+	# The same variables for the user's systemd services and anything started
+	# outside the greetd session (environment.d is read by systemd --user).
+	install -Dm644 /dev/stdin "$pkgdir"/etc/environment.d/20-x6525-software-render.conf <<'EOF'
+LIBGL_ALWAYS_SOFTWARE=1
+GSK_RENDERER=cairo
+EOF
+
+	# One command that gathers what is needed to tell a black screen's causes
+	# apart, written to a file so it can be read over SSH or sent back as it is.
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-display-report <<'EOF'
+#!/bin/sh
+# x6525-display-report: why is the screen black? Run as root (sudo), over SSH.
+# Writes /tmp/x6525-display-report.txt and prints it.
+out=/tmp/x6525-display-report.txt
+{
+	echo "== date / kernel / cmdline"
+	date; uname -a; cat /proc/cmdline
+	echo
+	echo "== DRM cards and the panel driver's symlink"
+	ls -l /dev/dri/ 2>&1
+	for c in /sys/class/drm/card*; do
+		[ -e "$c" ] || continue
+		echo "$c -> $(readlink -f "$c")"
+	done
+	for c in /sys/class/drm/card*-*; do
+		[ -e "$c" ] || continue
+		echo "$c: status=$(cat "$c"/status 2>/dev/null) enabled=$(cat "$c"/enabled 2>/dev/null) modes=$(tr '\n' ' ' < "$c"/modes 2>/dev/null)"
+	done
+	echo
+	echo "== backlight"
+	for b in /sys/class/backlight/*; do
+		[ -e "$b" ] || continue
+		echo "$b: brightness=$(cat "$b"/brightness) max=$(cat "$b"/max_brightness)"
+	done
+	echo
+	echo "== GPU"
+	dmesg | grep -iE 'panfrost|mali' | tail -20
+	for d in /sys/class/devfreq/*; do
+		[ -e "$d" ] || continue
+		echo "$d: cur=$(cat "$d"/cur_freq 2>/dev/null) governor=$(cat "$d"/governor 2>/dev/null)"
+	done
+	echo
+	echo "== display stack in dmesg"
+	dmesg | grep -iE 'sprd.?drm|dsi|dpu|td4160|panel|simpledrm|drm' | tail -60
+	echo
+	echo "== session units"
+	systemctl --no-pager --lines=0 status greetd plasma-mobile plasmalogin 2>&1 | grep -E '●|Active:|Loaded:'
+	echo
+	echo "== session drop-ins"
+	for f in /etc/systemd/system/greetd.service.d/*.conf /etc/systemd/system/plasma-mobile.service.d/*.conf; do
+		[ -e "$f" ] || continue
+		echo "--- $f"; cat "$f"
+	done
+	echo
+	echo "== session log (this boot)"
+	journalctl -b --no-pager -u greetd -u plasma-mobile -u plasmalogin 2>&1 | tail -80
+	echo
+	echo "== compositor and shell processes"
+	ps -eo pid,user,args | grep -E 'phoc|phosh|greetd|kwin|plasma' | grep -v grep
+} > "$out" 2>&1
+cat "$out"
+echo
+echo "saved to $out"
 EOF
 
 	# Plasma Mobile: plasma-mobile.service runs /usr/bin/startplasmamobile,
@@ -326,6 +414,17 @@ EOF
 			"$pkgdir"/etc/systemd/system/$unit.service.d/10-x6525-drm.conf <<'EOF'
 [Service]
 Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
+EOF
+		# Software rendering, as for phosh above: KWin composes with QPainter
+		# (KWIN_COMPOSE=Q) instead of GLES through Panfrost, Qt Quick uses its
+		# software scene graph, and Mesa clients use llvmpipe. Delete this file
+		# to try the GPU again.
+		install -Dm644 /dev/stdin \
+			"$pkgdir"/etc/systemd/system/$unit.service.d/20-x6525-software-render.conf <<'EOF'
+[Service]
+Environment=KWIN_COMPOSE=Q
+Environment=QT_QUICK_BACKEND=software
+Environment=LIBGL_ALWAYS_SOFTWARE=1
 EOF
 	done
 

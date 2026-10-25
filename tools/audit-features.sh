@@ -437,7 +437,9 @@ if [ -n "$IMAGE" ]; then
 				bad "the phosh image has no phosh shell (/usr/bin/phosh or /usr/libexec/phosh)"
 			fi
 			for f in /usr/bin/phosh-session /usr/bin/phoc /usr/bin/greetd \
-				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf; do
+				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf \
+				 /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf \
+				 /usr/bin/x6525-display-report; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the phosh image has $f" ||
 					bad "the phosh image has no $f"
@@ -455,7 +457,8 @@ if [ -n "$IMAGE" ]; then
 				 /usr/bin/kwin_wayland /usr/bin/plasmashell \
 				 /usr/share/wayland-sessions/plasma-mobile.desktop \
 				 /usr/lib/systemd/system/plasma-mobile.service \
-				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf; do
+				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf \
+				 /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the plasma image has $f" ||
 					bad "the plasma image has no $f"
