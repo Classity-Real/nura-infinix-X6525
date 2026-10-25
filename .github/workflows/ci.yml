@@ -229,7 +229,7 @@ jobs:
           echo "the ROM's kernel config takes all six"
       - name: Upload what was built
         if: always()
-        uses: namespace-actions/upload-artifact@v4
+        uses: namespace-actions/upload-artifact@v1
         with:
           name: x6525-build
           path: |
@@ -247,7 +247,7 @@ jobs:
       UBOOT_REPO: https://codeberg.org/ums9230-mainline/u-boot
     steps:
       - name: Checkout the port
-        uses: actions/checkout@v4
+        uses: actions/checkout@
       - name: Checkout the U-Boot fork
         run: git clone --depth 1 --branch ums9230 "$UBOOT_REPO" uboot-src
       - name: Host packages
@@ -263,7 +263,7 @@ jobs:
           ls -l uboot-src/u-boot.bin uboot-src/u-boot
       - name: Upload u-boot.bin
         if: always()
-        uses: namespace-actions/upload-artifact@v4
+        uses: namespace-actions/upload-artifact@v1
         with:
           name: x6525-uboot
           path: uboot-src/u-boot.bin
@@ -444,7 +444,7 @@ jobs:
           [ "$fail" = 0 ] || exit 1
 
       - name: Upload it
-        uses: namespace-actions/upload-artifact@v4
+        uses: namespace-actions/upload-artifact@v1
         with:
           name: x6525-rom
           path: /tmp/rom-out/
