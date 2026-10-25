@@ -737,6 +737,33 @@ but SSH over USB works and the backlight is on. The kernel is running and the sp
 the trouble is that no client drives the panel (or the client that does is rejected). The kernel
 console stays on `simpledrm`, which the panel is not scanning, so it is invisible.
 
+**The boot flow on this phone, observed 2026-10-24**, is exactly that handoff:
+
+1. U-Boot logs on screen.
+2. Black where the kernel logs should be: the kernel is running, but its console is on
+   `simpledrm` and the panel is not scanning that memory yet.
+3. The pmOS/logo appears: `simpledrm`/fbcon is now on the panel. This proves the panel and the
+   bootloader framebuffer path work.
+4. Black again after that logo: the session switches to the sprd DRM card (`card1`) and Plasma.
+   On the image tested, the panel driver still preferred 90 Hz, so KWin's first modeset is the
+   prime suspect; the temporary udev rule fixes the handoff but cannot change the mode.
+
+So "no kernel logs on screen" is not evidence that the kernel failed. SSH, `dmesg`,
+`/dev/dri/card1`, the backlight and pmsys all working are the evidence that it did not. After the
+pmOS logo, collect:
+
+```sh
+ls -l /dev/dri/x6525-primary
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager _UID=10000 | tail -100
+```
+
+- symlink missing: the DEVPATH rule did not match; fix the rule (the new ROM uses
+  `DEVPATH=*/display-subsystem/drm/card*`).
+- symlink present and the screen still black: the handoff worked and KWin's modeset or Plasma
+  itself failed; the `_UID=10000` journal has the reason, and a build with patch 0023 (60 Hz
+  preferred) is the next test.
+
 Two things have caused this on this port. Check the first before rebuilding:
 
 1. **The compositor never gets the sprd-drm card.** The image points Plasma (and phoc) at

@@ -41,6 +41,12 @@ fastboot flash boot_a diagnostics/boot-no-preboot.img
 
 ## If SSH works: the kernel runs, the display does not
 
+The phone's observed boot flow is U-Boot logs -> black where the kernel logs should be -> the
+pmOS/logo -> black again. That is the framebuffer handoff, not a kernel hang: the kernel console is
+on `simpledrm` (invisible to the panel until later), the logo proves the panel path works, and the
+second black is the switch to the sprd DRM card and Plasma. SSH, `dmesg`, `card1` and the backlight
+working are the evidence that the kernel is fine.
+
 Check the compositor's DRM hand-off first. The image points Plasma/phoc at
 `/dev/dri/x6525-primary`, created by a udev rule. The card device has **no `DRIVERS` property**
 (confirmed on the phone: `udevadm info -q property -n /dev/dri/card1` shows only `DEVNAME`), so a
@@ -83,6 +89,19 @@ journalctl -b --no-pager _UID=10000 | tail -80
 
 Reboot after creating the link by hand rather than only restarting `plasma-mobile`: KWin runs in the
 user session and can survive the unit restart, and the old image still prefers 90 Hz.
+
+After the reboot:
+
+```sh
+ls -l /dev/dri/x6525-primary
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager _UID=10000 | tail -100
+```
+
+- symlink missing: the rule did not match; the new build matches the card's `DEVPATH`.
+- symlink present, screen still black after the pmOS/logo: the compositor handoff worked and the
+  failure is KWin's modeset or Plasma itself; the `_UID=10000` journal has it. The 60 Hz build is
+  the next test because the old image prefers 90 Hz.
 
 The other display change is the 90 Hz mode, which the panel driver marked as preferred. If that
 timing is not accepted by this DSI/DPU path, DRM picks it and the modeset fails; once sprd_drm has
