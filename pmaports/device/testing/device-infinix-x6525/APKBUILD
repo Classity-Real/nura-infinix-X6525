@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=25
+pkgrel=26
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -391,6 +391,13 @@ EOF
 			"$pkgdir"/etc/systemd/system/$unit.service.d/10-x6525-drm.conf <<'EOF'
 [Service]
 Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
+# The udev rule below sometimes misses the boot-time add event for the sprd
+# card, so KWin started with no DRM device and the panel stayed on the last
+# console frame (observed 2026-10-25). Re-fire the event and wait for the
+# symlink. "-" ignores failure; "+" runs as root even if the unit runs as user.
+ExecStartPre=-+/usr/bin/udevadm trigger --action=add --subsystem-match=drm --sysname-match=card*
+ExecStartPre=-+/usr/bin/udevadm settle --timeout=10
+ExecStartPre=-+/usr/bin/udevadm wait --timeout=10 /dev/dri/x6525-primary
 EOF
 	done
 
