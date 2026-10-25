@@ -19,6 +19,10 @@ on:
         description: "also run the firmware release job"
         type: boolean
         default: false
+      rom_only:
+        description: "only build the postmarketOS ROM image (skip checks and uboot)"
+        type: boolean
+        default: false
       ui:
         description: "UI for the ROM: phosh = mobile UI (default), plasma-mobile = KDE, buffyboard = console"
         required: false
@@ -58,6 +62,7 @@ jobs:
   build:
     runs-on: namespace-profile-pmos-smart
     timeout-minutes: 60
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rom_only != 'true' && github.event.inputs.rom_only != true)
     steps:
       - name: Checkout the port
         uses: actions/checkout@v4
@@ -243,6 +248,7 @@ jobs:
   uboot:
     runs-on: namespace-profile-pmos-smart
     timeout-minutes: 30
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rom_only != 'true' && github.event.inputs.rom_only != true)
     env:
       UBOOT_REPO: https://codeberg.org/ums9230-mainline/u-boot
     steps:
@@ -270,7 +276,7 @@ jobs:
           if-no-files-found: warn
 
   rom:
-    runs-on: namespace-profile-pmos-smart
+    runs-on: namespace-profile-pmos-smart;container.privileged=true
     timeout-minutes: 240
     if: github.event_name == 'workflow_dispatch'
     steps:
@@ -478,7 +484,7 @@ jobs:
           tag="${{ github.event.inputs.tag || 'firmware-v1' }}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release $tag already exists here, nothing to do"
-            exit 0
+            exit 1
           fi
           gh release create "$tag" --target "$GITHUB_REF_NAME" \
             --title "X6525 touch firmware (hdl_firmware_01.img)" \
