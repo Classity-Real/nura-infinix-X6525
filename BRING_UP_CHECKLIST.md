@@ -855,6 +855,106 @@ fastboot flash cache pmos-boot-fs.img
 That only affects the kernel's fbdev mode; if the compositor is not using the sprd card at all, it
 cannot help.
 
+### 3.6 Deep Diagnostic: If the Screen Still Fails (Black Screen)
+
+If the screen is still black after applying patches 0023 (60 Hz mode default), 0024 (delays and AVDD/AVEE GPIOs), and 0025 (LP command tx and boot handoff), use this systematic triage over SSH:
+
+#### Step 1: Identify the symptom category
+
+| Category | Visible Symptom | Likely Cause |
+|---|---|---|
+| **A** | Backlight is OFF (screen pitch black, even under a flashlight) | Backlight power/PWM (`bl_power` or GPIO/regulator off) |
+| **B** | Backlight is ON, but screen remains completely blank from boot | Panel reset/power rails (AVDD/AVEE) or DSI LP command timeout |
+| **C** | Bootloader logo freezes and never changes | Kernel `sprd-drm` driver failed to bind or stalled before mode handoff |
+| **D** | Bootloader logo shows, then turns black when Plasma starts | DRM symlink mismatch (`/dev/dri/x6525-primary`), or KWin/Panfrost crash |
+
+#### Step 2: Check Power Rails, Reset, and Clocks
+
+Verify that the panel power GPIOs and DPU clocks are energized:
+
+```sh
+# 1. Check panel power & control GPIOs:
+sudo cat /sys/kernel/debug/gpio | grep -E 'avdd|avee|reset|te|td4160|panel'
+# Expected:
+#   avdd-gpios (ap_gpio 54): out hi (1)
+#   avee-gpios (ap_gpio 55): out hi (1)
+#   reset-gpios (ap_gpio 53): out hi (1)
+
+# 2. Check backlight status:
+cat /sys/class/backlight/td4160/brightness
+cat /sys/class/backlight/td4160/bl_power
+# Force backlight full on for testing:
+echo 0 | sudo tee /sys/class/backlight/td4160/bl_power
+echo 255 | sudo tee /sys/class/backlight/td4160/brightness
+
+# 3. Check DPU & DPI clocks:
+sudo cat /sys/kernel/debug/clk/clk_summary | grep -E 'dispc|dpi|twpll'
+# Expected: CLK_DISPC0 running at ~384 MHz, CLK_DISPC0_DPI running at ~153.6 MHz
+```
+
+#### Step 3: Inspect MIPI DSI & DRM Driver Errors
+
+Check for communication timeouts or DSI bus errors in dmesg:
+
+```sh
+sudo dmesg | grep -iE 'td4160|sprd[-_]drm|dsi|dpu|dispc|panel' | tail -100
+```
+
+Look for:
+- `panel-td4160-hx ...: attached to dsi host`: panel bound successfully.
+- `dsi cmd timeout` or `transfer failed`: command mode / LP transmission failed.
+- `wait frame done timeout`: DPI video stream or vertical blanking timing mismatch.
+
+#### Step 4: Bypass the Compositor — Test DRM Hardware Directly with `modetest`
+
+To determine whether the issue is in the kernel DRM driver or in KWin/Wayland user-space, test direct scanout using `modetest`:
+
+```sh
+# 1. Stop the graphical environment to release the DRM master:
+sudo systemctl stop plasma-mobile   # or greetd if running Phosh
+
+# 2. Inspect connector ID and CRTC ID on the sprd card:
+modetest -M sprd -c
+modetest -M sprd -p
+
+# 3. Drive an SMPTE test pattern directly to DSI-1 (replace <connector_id> with the ID from above, e.g. 33):
+sudo modetest -M sprd -s <connector_id>:720x1612@60
+```
+
+- **If the color bars appear on screen**: The kernel DRM driver, DSI bus, DPU, and panel are completely functional! The issue is solely inside KWin, Mesa/Panfrost, or user session permissions.
+- **If `modetest` errors out or produces a black screen**: The issue is at the kernel/hardware level (panel init commands, timing parameters, or clock gating).
+
+#### Step 5: Isolate KWin & Panfrost GPU (If `modetest` works)
+
+If `modetest` shows a test pattern but Plasma Mobile displays a black screen:
+
+```sh
+# 1. Verify the DRM primary symlink:
+ls -l /dev/dri/x6525-primary
+# Should point to /dev/dri/card1 (the sprd-drm card)
+
+# 2. Check if Panfrost or KWin crashed:
+journalctl -b --no-pager | grep -iE 'kwin|panfrost|mali|drm|failed to open' | tail -80
+journalctl -b --no-pager _UID=10000 | tail -80
+
+# 3. Test running KWin with software rendering (bypass Panfrost GPU):
+echo "KWIN_COMPOSE=QPainter" | sudo tee -a /etc/environment
+sudo systemctl restart plasma-mobile
+```
+
+#### Step 6: Visual Recovery Fallback — Boot with `simpledrm`
+
+If you need a working screen immediately for debugging and want to bypass `sprd-drm`:
+Add `initcall_blacklist=sprd_drm_init` to the kernel command line:
+
+```sh
+# On host:
+sh tools/patch-cmdline.sh pmos-boot-fs.img "initcall_blacklist=sprd_drm_init"
+fastboot flash cache pmos-boot-fs.img
+```
+
+With `sprd_drm` blacklisted, the kernel does not unbind the bootloader's simple framebuffer, and `simpledrm` provides a guaranteed text console and fbcon display at `0x9e000000`.
+
 ## 4. Audio
 
 The SC2730 codec, the SPRD platform/machine drivers and the simple amplifier are all modules; the
