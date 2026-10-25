@@ -1,0 +1,65 @@
+From 9553107184a44e6b2566d897f4fdaf9325acbfaa Mon Sep 17 00:00:00 2001
+From: Mountain <314678130+Classity-Real@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 01:36:03 +0000
+Subject: [PATCH] arm64: dts: sprd: boot the X6525's UFS units too
+
+Some X6525 units ship UFS instead of the eMMC on sdio3. Enable the UFS controller with the eMMC core rail as vcc, and note the alternate storage in the aliases and sdio0 comments.
+
+Signed-off-by: Mountain <314678130+Classity-Real@users.noreply.github.com>
+---
+ .../boot/dts/sprd/ums9230-infinix-x6525.dts   | 25 ++++++++++++++++---
+ 1 file changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 1528ac6f7..e6fe8fdef 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -43,9 +43,10 @@ / {
+ 	aliases {
+ 		serial0 = &uart0;
+ 		serial1 = &uart1;		/* ttyS1 [T: console=ttyS1,115200n8] */
+-		/* the internal storage is the eMMC, so it is the first mmc
+-		 * device: sprdboot.flash=emmc and androidboot.boot_devices=
+-		 * .../201d0000.sdio, sdio0 is the microSD slot */
++		/* this unit's internal storage is the eMMC, so it is the first
++		 * mmc device: sprdboot.flash=emmc and androidboot.boot_devices=
++		 * .../201d0000.sdio, sdio0 is the microSD slot; a UFS unit names
++		 * the UFS controller (androidboot.boot_devices=...20200000.ufs) */
+ 		mmc0 = &sdio3;
+ 		i2c0 = &i2c0;
+ 		i2c1 = &i2c1;
+@@ -202,7 +203,9 @@ bat: battery {
+  * (sprdboot.flash=emmc) on sdio3 (androidboot.boot_devices=.../201d0000.sdio),
+  * while sdio0 is the microSD slot (downstream 1h10-go adds a card-detect to it).
+  * The reeder is the opposite way round: UFS internally, sdio0 for the card, so
+- * its storage nodes cannot be copied.
++ * its storage-node values cannot be copied. The X6525 also shipped with UFS
++ * units: they boot the same image with the &ufs node at the end of this
++ * section.
+  */
+ &sdio0 {
+ 	/* microSD slot, the rescue boot path. The timing values are the running
+@@ -262,6 +265,20 @@ &sdio3 {
+ 	status = "okay";
+ };
+ 
++/*
++ * UFS - the alternate internal storage. Some X6525 units shipped with a UFS
++ * part instead of the eMMC above; they boot the same image with just this
++ * node (the cmdline names its controller, androidboot.boot_devices=
++ * ...20200000.ufs). vcc is the same core rail the eMMC runs on, and the
++ * kernel already carries CONFIG_SCSI_UFS_SPRD. This mirrors the reeder's
++ * board dts; on an eMMC unit the controller probes, finds nothing and
++ * drops out.
++ */
++&ufs {
++	vcc-supply = <&vddemmccore>;
++	status = "okay";
++};
++
+ /* ---- USB ----------------------------------------------------------------
+  * The SoC USB controller is MUSB (sprd,ums9230-musb) - same as the reeder, and
+  * the reason USB_MUSB_HDRC/SPRD must be built in for pmOS USB networking.
+-- 
+2.34.1
+
