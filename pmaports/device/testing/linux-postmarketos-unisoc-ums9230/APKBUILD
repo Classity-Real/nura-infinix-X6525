@@ -1,4 +1,4 @@
-# Staging for the Infinix X6525: the twenty-three patches below add this board
+# Staging for the Infinix X6525: the twenty-five patches below add this board
 # (device tree, panel, touch, charger and camera sensor drivers, the bindings
 # they need, two binding fixes, a watchdog fix, a Bluetooth fallback and the
 # charger's OTG boost regulator) and are cut against the same tag this package
@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=21
+pkgrel=22
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -65,6 +65,8 @@ source="
 	0021-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
 	0022-mmc-sdhci-sprd-opt-in-hs200-override.patch
 	0023-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+	0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+	0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
 "
 builddir="$srcdir/linux"
 
@@ -119,4 +121,6 @@ b6c5bdc731f65a333ae033ebae91267c8741808eae4447d04656df94dd863ad7b1e05a703ad51dc8
 0c7732e27b71b61b92fcfa565c089cbd9cb9ea765b1b0a42c1319a91878219b0040a232f92dcc438a6500aa9682b35aa0eb1dfb388e1e81b561f091e2d24bd90  0021-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
 dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc81ade1ffcf0f8a8ecd4a0c9edd5598a52cef909d552670ed  0022-mmc-sdhci-sprd-opt-in-hs200-override.patch
 60e4e778d5a05e54c01c3e56f3e998eba5dce9cb560c259e736f78ec2f1567430f5b35b33573d83dd43758e4d723ee47bc6d8464e274da1d7ee5fd6ae5a6c4d7  0023-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+6a5ce154560745a1764ea954f17abde9fa03c6019719da0ee0e91820cf37c45bb9009851de738a9567c85577c1e378ec879bf62f2deaab9cc53cf8cb3371ede1  0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+5e827f6204b700725d2fcd4b201d27f3fc8fa421dea9b2935181dc8c4c147dc928e7acbc396bba175551e8c316f4d689acd431a59695466470185d7bc887db05  0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
 "

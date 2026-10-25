@@ -1,6 +1,6 @@
 # Kernel patches for the ums9230-mainline tree
 
-Twenty-three patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
+Twenty-five patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
 to apply **in this order** to a clean checkout of it, producing byte-identical files to `dts/`,
 `drivers/` and `bindings/` — i.e. to what CI compiles.
 
@@ -29,6 +29,8 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 21 | `arm64: dts: sprd: throttle the X6525's GPU at the SoC's thermal point` | the ums9230 tree, with patch 3 |
 | 22 | `mmc: sdhci-sprd: add an opt-in override for the HS200 quirk` | **bring-up only, not for submission** - a boot-time knob for the eMMC link |
 | 23 | `drm/panel: td4160-hx: keep the stock 60 Hz mode preferred` | the ums9230 tree, later drm-misc with 4 and 19 |
+| 24 | `drm/panel: td4160-hx: fix post-command delays and power gpios` | the ums9230 tree, later drm-misc with 4, 19 and 23 |
+| 25 | `drm/sprd: enable LP cmd tx and clean boot handoff` | the ums9230 tree, later drm-misc |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
 14 and 15 add the rear camera, which patch 3 does not describe, and 20 adds the front one, a
