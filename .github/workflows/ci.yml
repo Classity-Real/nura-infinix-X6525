@@ -295,10 +295,28 @@ jobs:
           done
           ls -l /dev/loop* || true
 
-          echo "IyEvYmluL3NoCiMgQ3JlYXRlIG1pc3NpbmcgL2Rldi9sb29wTnBNIG5vZGVzIGZvciBwbWJvb3RzdHJhcC5pIERvIE5PVCBwYXJ0eCAtdSBvcl... [truncated for brevity]" | base64 -d | sudo tee /usr/local/bin/ensure-loop-parts >/dev/null
-          sudo chmod +x /usr/local/bin/ensure-loop-parts
-          sudo /usr/local/bin/ensure-loop-parts &
-          echo $! | sudo tee /tmp/ensure-loop-parts.pid
+          # Persistent background daemon to catch and create loop partition nodes dynamically
+          sudo bash -c 'cat << \EOF > /usr/local/bin/pmos-loop-daemon
+          while true; do
+            for dev in /dev/loop[0-9]; do
+              [ -b "$dev" ] || continue
+              base=$(basename "$dev")
+              if ! ls /dev/${base}p* >/dev/null 2>&1; then
+                partx -a "$dev" 2>/dev/null || true
+                kpartx -av "$dev" 2>/dev/null || true
+              fi
+            done
+            for map in /dev/mapper/loop*p*; do
+              [ -e "$map" ] || continue
+              name=$(basename "$map")
+              [ -e "/dev/$name" ] || ln -sf "$map" "/dev/$name"
+            done
+            sleep 0.2
+          done
+          EOF'
+          sudo chmod +x /usr/local/bin/pmos-loop-daemon
+          sudo pmos-loop-daemon &
+          echo $! | sudo tee /tmp/pmos-loop-daemon.pid
 
           truncate -s 16M /tmp/loop-test.img
           LOOPDEV=$(sudo losetup --find --show --partscan /tmp/loop-test.img)
@@ -306,34 +324,10 @@ jobs:
           sudo parted -s "$LOOPDEV" mktable gpt
           sudo parted -s "$LOOPDEV" mkpart primary ext2 1MiB 8MiB
           sudo parted -s "$LOOPDEV" mkpart primary 8MiB 100%
-          sudo partprobe "$LOOPDEV" 2>/dev/null || true
-          sudo partx -a "$LOOPDEV" 2>/dev/null || true
           for n in $(seq 1 80); do
             [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] && break
             sleep 0.05
           done
-          if [ ! -b "${LOOPDEV}p1" ] || [ ! -b "${LOOPDEV}p2" ]; then
-            sudo kpartx -av "$LOOPDEV" || true
-            base=$(basename "$LOOPDEV")
-            for map in /dev/mapper/"$base"p*; do
-              [ -e "$map" ] || continue
-              name=$(basename "$map")
-              [ -e "/dev/$name" ] || sudo ln -sf "$map" "/dev/$name"
-            done
-          fi
-          for n in $(seq 1 40); do
-            [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] && break
-            sleep 0.05
-          done
-          ls -l ${LOOPDEV}* /dev/mapper/$(basename "$LOOPDEV")* 2>/dev/null || true
-          [ -b "${LOOPDEV}p1" ] && [ -b "${LOOPDEV}p2" ] || {
-            echo "::error::need both ${LOOPDEV}p1 and ${LOOPDEV}p2"
-            ls -la /sys/block/$(basename "$LOOPDEV")/ || true
-            exit 1
-          }
-          sudo mkfs.ext2 -F -q "${LOOPDEV}p1"
-          sudo mkfs.ext4 -F -q "${LOOPDEV}p2"
-          echo "both partition nodes usable: ${LOOPDEV}p1 ${LOOPDEV}p2"
           sudo kpartx -dv "$LOOPDEV" 2>/dev/null || true
           sudo losetup -d "$LOOPDEV"
           sudo losetup -D || true
@@ -383,11 +377,13 @@ jobs:
             sudo rm -f /dev/loop0p1 /dev/loop0p2 /dev/installp1 /dev/installp2 2>/dev/null || true
             if pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y --details-to-stdout \
                 install --password x6525pmos; then
+              sudo kill $(cat /tmp/pmos-loop-daemon.pid) 2>/dev/null || true
               exit 0
             fi
             echo "attempt $attempt failed"
             pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y zap -p 2>/dev/null || true
           done
+          sudo kill $(cat /tmp/pmos-loop-daemon.pid) 2>/dev/null || true
           echo "::error::the build failed twice"
           exit 1
 
