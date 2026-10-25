@@ -270,7 +270,7 @@ jobs:
           if-no-files-found: warn
 
   rom:
-    runs-on: namespace-profile-pmos-smart;container.privileged=true
+    runs-on: namespace-profile-pmos-smart
     timeout-minutes: 240
     if: github.event_name == 'workflow_dispatch'
     steps:
