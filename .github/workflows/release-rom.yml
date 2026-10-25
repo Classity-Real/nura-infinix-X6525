@@ -3,9 +3,6 @@ name: Release ROM
 # Downloads the x6525-rom artifact from a Build PMOS run, packs it into a
 # single zip, and publishes that as a GitHub Release.
 #
-# If the zip is still >= 2 GiB (GitHub asset limit), only the zip is split
-# into 1900 MiB parts. Reassemble: cat x6525-rom.zip.part* > x6525-rom.zip
-#
 # Usage: Actions → Release ROM → Run workflow
 
 on:
@@ -82,11 +79,9 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ steps.run.outputs.run_id }}
 
-      - name: Zip artifact (split zip only if over 2 GiB)
+      - name: Zip artifact
         run: |
           set -euo pipefail
-          LIMIT=$((2 * 1024 * 1024 * 1024))
-          CHUNK=$((1900 * 1024 * 1024))
           mkdir -p upload
 
           echo "Source files:"
@@ -96,22 +91,11 @@ jobs:
             exit 1
           }
 
-          # One zip of the whole tree (store only: .img rarely shrinks, saves time)
           echo "Creating x6525-rom.zip ..."
           (cd rom-out && zip -r -0 -q ../upload/x6525-rom.zip .)
-          ZSIZE=$(stat -c%s upload/x6525-rom.zip)
-          echo "x6525-rom.zip is $ZSIZE bytes"
-
-          if [ "$ZSIZE" -ge "$LIMIT" ]; then
-            echo "Zip exceeds 2 GiB; splitting into $((CHUNK / 1024 / 1024)) MiB parts"
-            split -b "$CHUNK" -d -a 2 upload/x6525-rom.zip upload/x6525-rom.zip.part
-            rm -f upload/x6525-rom.zip
-            echo "split" > /tmp/was-split
-            find upload -name 'x6525-rom.zip.part*' -printf '%p\t%s bytes\n' | sort
-          else
-            echo "single" > /tmp/was-split
-            ls -l upload/x6525-rom.zip
-          fi
+          
+          echo "Zip created successfully:"
+          ls -lh upload/x6525-rom.zip
 
       - name: Create tagged release and upload assets
         env:
@@ -131,12 +115,7 @@ jobs:
           mapfile -t FILES < <(find upload -type f | sort)
           echo "Uploading ${#FILES[@]} file(s) to tag $TAG"
 
-          NOTES="postmarketOS image for Infinix X6525 (nura). Built by Build PMOS (run ${RUN_ID})."
-          if [ "$(cat /tmp/was-split)" = "split" ]; then
-            NOTES="${NOTES} Packaged as x6525-rom.zip, split into 1900 MiB parts under the GitHub 2 GiB asset limit. Reassemble: cat x6525-rom.zip.part* > x6525-rom.zip && unzip x6525-rom.zip"
-          else
-            NOTES="${NOTES} Download x6525-rom.zip and unzip it."
-          fi
+          NOTES="postmarketOS image for Infinix X6525 (nura). Built by Build PMOS (run ${RUN_ID}). Download x6525-rom.zip and unzip it."
 
           if [ "$PRE" = "true" ]; then
             gh release create "$TAG" \
