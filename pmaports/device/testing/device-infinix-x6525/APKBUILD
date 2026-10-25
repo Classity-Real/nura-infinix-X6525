@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=24
+pkgrel=25
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -287,12 +287,14 @@ EOF
 Description=Disable the eMMC write cache (power-loss safety)
 DefaultDependencies=no
 After=systemd-udevd.service
-Before=sysinit.target
+Before=local-fs-pre.target systemd-remount-fs.service sysinit.target
 ConditionPathExists=/dev/mmcblk0
 
 [Service]
 Type=oneshot
-ExecStartPre=-/usr/bin/mmc cache flush /dev/mmcblk0
+ExecStartPre=-/bin/sync
+ExecStartPre=-/sbin/blockdev --flushbufs /dev/mmcblk0
+ExecStartPre=-/usr/bin/mmc extcsd write 32 1 /dev/mmcblk0
 ExecStart=-/usr/bin/mmc cache disable /dev/mmcblk0
 RemainAfterExit=yes
 
@@ -320,7 +322,10 @@ ConditionPathExists=/dev/mmcblk0
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/true
-ExecStop=-/usr/bin/mmc cache flush /dev/mmcblk0
+ExecStop=-/bin/sync
+ExecStop=-/sbin/blockdev --flushbufs /dev/mmcblk0
+ExecStop=-/usr/bin/mmc extcsd write 32 1 /dev/mmcblk0
+ExecStop=-/usr/bin/mmc cache disable /dev/mmcblk0
 
 [Install]
 WantedBy=multi-user.target

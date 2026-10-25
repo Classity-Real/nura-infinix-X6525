@@ -215,7 +215,10 @@ jobs:
 
           # A root filesystem that came out of the image build corrupted would
           # survive the upload unnoticed, and show as the "Inode N seems to
-          # contain garbage" boot this port has already had once. Warn only.
+          # contain garbage" boot this port has already had once. Run a full
+          # repair/check pass first so any uninitialised or dirty metadata is
+          # committed cleanly in the exported image.
+          e2fsck -fy /tmp/rom-out/pmos-root-fs.img || [ $? -le 1 ]
           e2fsck -fn /tmp/rom-out/pmos-root-fs.img \
             || echo "::warning::pmos-root-fs.img does not pass a read-only fsck (see above)"
 
