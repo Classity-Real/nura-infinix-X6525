@@ -198,6 +198,35 @@ they are. `proprietary/vendor/etc/modem_sp_info.xml` (public `Bocchi-The-Dev/ven
 (blacklisted from coldplug for the same reason as `sprd_modem`). The bootcode is shipped in the
 firmware package. Nothing per-unit is published.
 
+# Why the Phosh build displayed and the Plasma one does not (2026-10-25)
+
+The last build the user reported as displaying was the software-rendered Phosh one (`e7a41f8`,
+2026-10-21). Its cmdline carried `initcall_blacklist=sprd_drm_init`, the greetd drop-in set
+`WLR_RENDERER=pixman`, and `pmos.debug-shell` was on: the picture was the **bootloader framebuffer
+through simpledrm**, not the real panel. Brightness could not work in that state - the DCS backlight
+is registered by the panel driver that was blacklisted. That is the brightness error; the camera
+DTS/drivers and the Bluetooth configuration blobs did not exist yet either.
+
+The display path changed on 2026-10-24:
+
+- `3d5c6d3` enabled `sprd_drm` for the DCS brightness and the DPI (removed the blacklist);
+- `bc8bf21` pointed the session at `/dev/dri/x6525-primary`; its udev rule matched
+  `DRIVERS=="sprd-drm"`, which never matches (the card has no DRIVERS property), fixed on
+  2026-10-25 to match the card's `DEVPATH`;
+- `dcdedec` switched the ROM UI from Phosh to Plasma Mobile (KWin).
+
+The current ROM (`40143165207`) therefore boots a path the Phosh build never exercised: card1,
+DPU/DSI, the TD4160 driver and KWin. The black screen after the pmOS/logo is that path's bring-up,
+not a regression in the simpledrm path. Fixes on 2026-10-24/25: patch 0023 makes the stock 60 Hz
+(timing0/`native-mode`) preferred again (0019 had made 90 Hz preferred), and the udev rule matches
+the card by `DEVPATH`.
+
+Feature-wise the current build has 23 kernel patches against 12 then. Newer than the Phosh build:
+the rear S5K3L6 and front OV8856 drivers and nodes, the Bluetooth config blobs and the prodnv MAC
+preboot, the GPU DVFS table and GPU thermal cooling, the pmsys/GNSS/modem extraction services, and
+the HS200 opt-in. The current dmesg's `btsprdsipc ... failed to create endpoint (-12)` is a separate
+Bluetooth issue, not something the Phosh build had.
+
 # Public forks (what pmaports can fetch)
 
 Both trees are published as forks of the GitHub mirrors of the Codeberg repos, each with an `x6525`
