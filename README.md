@@ -3,27 +3,17 @@
 Configured Nura port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
 (`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
 
-**Status: it boots and it is usable.** U-Boot loads the kernel from the eMMC, the root filesystem
-comes up, SSH over the USB link works, the touchscreen drives the on-screen keyboard, Wi-Fi is
-functional (verified 2026-10-21 with `ping google.com`, `apk update`/`upgrade` and a package
-install), and the GUI image boots. The Build PMOS workflow's `ui` input picks the image's
-interface: `phosh` (the default mobile UI), `plasma-mobile` (KDE) or `buffyboard` (a console with
-an on-screen keyboard); the device package carries the drop-ins for all three sessions. Bluetooth
-was never reaching a controller: the
-transport was
-missing its two configuration blobs, and the BD address U-Boot writes is all zeros because its
-`bdaddr` environment variable is unset; both are fixed in the tree (firmware pkgrel 3 and kernel
-patch 0013) but not yet exercised on the phone -
-BRING_UP_CHECKLIST.md 2.1 has the checks.
+**Status: UFS Working and boots** U-Boot loads the kernel from the UFS, the root filesystem
+comes up, SSH is denying, Everything else need more testing.
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
 how to build the image either here or on GitHub. The `rom` workflow builds a *split* install (a boot
-filesystem image and a root filesystem image, no partition table), which are flashed into real eMMC
+filesystem image and a root filesystem image, no partition table), which are flashed into real UFS
 partitions (`cache` and `userdata` - the route in
 FIRST_BOOT.md). A local *unsplit* install can also write the whole disk image to a microSD card.
 `pmbootstrap flasher flash_rootfs` must not be run: it writes the root filesystem image into
-`super`, which U-Boot does not read and which belongs to Android. **eMMC and UFS units:** the
-X6525 also shipped with UFS, and the image boots both - U-Boot scans UFS right after eMMC (see
+`super`, which U-Boot does not read and which belongs to Android. **UFS and UFS units:** the
+X6525 also shipped with UFS, and the image boots both - U-Boot scans UFS right after UFS (see
 FIRST_BOOT.md, "Storage variants"). `NOTES.md` is the record
 behind it: every value taken from the stock system or from the running device's own device tree, with
 its source.
