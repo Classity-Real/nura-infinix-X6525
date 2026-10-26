@@ -559,14 +559,16 @@ and `btsprdsipc` loaded and still showed no controller; two separate causes were
    older shipped only the Wi-Fi/remoteproc blobs.
 2. **The BD address was never set.** The dtsi's `bluetooth@10` node has
    `local-bd-address = [00 00 00 00 00 00]` with the comment "filled in by bootloader". U-Boot's
-   `ft_board_setup()` does fill it in, from its `bdaddr` environment variable - but that variable is
-   unset in this board's default environment (the common `ums9230.env` reads it from a UFS `prodnv`
-   partition, which this eMMC board does not have), so the property is written all-zero. The HCI
-   core rejects that: it skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the
-   driver sends the two config blobs and enables the controller. Patch 0013 falls back to a random,
+   `ft_board_setup()` does fill it in, from its `bdaddr` environment variable. The board environment
+   now reads that variable from `/btmac.txt` on the eMMC `prodnv` partition (and `/wifimac.txt` for
+   the WLAN MAC), the same files the common UFS environment reads; the loads are guarded, so if the
+   files are absent the variables stay unset and the property is written all-zero. The HCI core
+   rejects all-zero: it skips `set_bdaddr()` (`net/bluetooth/hci_sync.c`), which is where the driver
+   sends the two config blobs and enables the controller. Patch 0013 falls back to a random,
    locally administered address in that case, so the adapter works but its address - and with it the
-   pairings - changes on every boot until the bootloader reads a real one (the `prodnv` partition is
-   the likely place) or a per-device DTS provides it.
+   pairings - changes on every boot. A stable address therefore depends on `prodnv` actually holding
+   those two files; check `bdaddr` in the U-Boot environment (`printenv bdaddr`) and, if it is
+   empty, the partition's contents. This path has not been seen on hardware yet.
 
 On an image built from this tree, check:
 
@@ -632,11 +634,11 @@ cat /sys/class/backlight/td4160/brightness
 The panel itself has two modes, both from the stock board tree and both at the same 153.6 MHz pixel
 clock, so switching between them is only a change of blanking:
 
-- 720x1612 at **90.05 Hz** (timing1: 933x1828 totals) - the driver marks this one preferred;
-- 720x1612 at 60.03 Hz (timing0: 959x2668 totals) - keeps working, for anything that asks for it.
+- 720x1612 at **60.03 Hz** (timing0: 959x2668 totals) - the board DT's `native-mode`, and the
+  driver's preferred mode, matching what the stock system boots;
+- 720x1612 at 90.05 Hz (timing1: 933x1828 totals) - listed as an option, not preferred.
 
-A compositor that takes the preferred mode (KWin does) should come up at 90 Hz. Check it, and pick
-the other mode if it does not:
+A compositor that takes the preferred mode (KWin does) comes up at 60 Hz. Check both modes:
 
 ```sh
 cat /sys/class/drm/card*-DSI-*/modes     # the second column is the refresh rate
@@ -644,8 +646,10 @@ kscreen-doctor -o                        # Plasma: current mode and refresh
 # or System Settings -> Display & Monitor -> Refresh Rate
 ```
 
-If it stays at 60 Hz, choose 90 Hz in the display settings; no other change is needed because the
-DSI bit clock is unchanged. The mode is 90.05 Hz, not exactly 90.
+90 Hz is selectable in the display settings; the DSI bit clock is unchanged, only the blanking
+differs. The mode is 90.05 Hz, not exactly 90. Do not make it the default again until it has been
+seen on hardware: with 90 Hz preferred, a rejected modeset leaves the bootloader logo on screen
+while the kernel runs.
 
 ### 3.1 Test the compositor live, before a build
 
@@ -737,6 +741,231 @@ still whatever the connected hotspot provides.
 Once the GUI is stable, remove them one at a time, re-testing each: first `cpuidle.off=1` and
 `cpufreq.off=1` (find which one stalls the CPUs; see FIRST_BOOT.md), then
 `initcall_debug`/`ignore_loglevel`.
+
+### 3.5 Black screen after U-Boot: the panel is not being driven
+
+Symptom: after U-Boot the screen either keeps the logo or goes black; no kernel console and no UI,
+but SSH over USB works and the backlight is on. The kernel is running and the sprd DRM stack probes;
+the trouble is that no client drives the panel (or the client that does is rejected). The kernel
+console stays on `simpledrm`, which the panel is not scanning, so it is invisible.
+
+**The boot flow on this phone, observed 2026-10-24**, is exactly that handoff:
+
+1. U-Boot logs on screen.
+2. Black where the kernel logs should be: the kernel is running, but its console is on
+   `simpledrm` and the panel is not scanning that memory yet.
+3. The pmOS/logo appears: `simpledrm`/fbcon is now on the panel. This proves the panel and the
+   bootloader framebuffer path work.
+4. Black again after that logo: the session switches to the sprd DRM card (`card1`) and Plasma.
+   On the image tested, the panel driver still preferred 90 Hz, so KWin's first modeset is the
+   prime suspect; the temporary udev rule fixes the handoff but cannot change the mode.
+
+So "no kernel logs on screen" is not evidence that the kernel failed. SSH, `dmesg`,
+`/dev/dri/card1`, the backlight and pmsys all working are the evidence that it did not. After the
+pmOS logo, collect:
+
+```sh
+ls -l /dev/dri/x6525-primary
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager _UID=10000 | tail -100
+```
+
+- symlink missing: the DEVPATH rule did not match; fix the rule (the new ROM uses
+  `DEVPATH=*/display-subsystem/drm/card*`).
+- symlink present and the screen still black: the handoff worked and KWin's modeset or Plasma
+  itself failed; the `_UID=10000` journal has the reason, and a build with patch 0024 (60 Hz
+  preferred) is the next test.
+
+Two things have caused this on this port. Check the first before rebuilding:
+
+1. **The compositor never gets the sprd-drm card.** The image points Plasma (and phoc) at
+   `/dev/dri/x6525-primary`, created by
+   `/usr/lib/udev/rules.d/90-x6525-drm-primary.rules`. The first rule matched
+   `DRIVERS=="sprd-drm"`, and the later attempt matched `DRIVERS=="sprd-drm*"`; **neither can
+   match**, because the DRM card device has no `DRIVERS` property at all. Confirmed on the phone
+   2026-10-24: `udevadm info -q property -n /dev/dri/card1` prints only `DEVNAME`, and the symlink
+   is absent while `/dev/dri/card1` and `/dev/dri/by-path/platform-display-subsystem-card` exist.
+   The rule now matches the card's parent path instead:
+   `DEVPATH=="*/display-subsystem/drm/card[0-9]*"`. Without the link, KWin/phoc is started with a
+   nonexistent device and the panel is never modeset.
+2. **The 90 Hz mode is preferred.** The board DT's `native-mode` is timing0 (60 Hz). Patch 0019
+   made timing1 (90 Hz) preferred; patch 0024 restores 60 Hz and keeps 90 Hz selectable. On this
+   DSI/DPU path a rejected 90 Hz modeset also leaves the bootloader logo in place.
+
+Collect this first (works over SSH):
+
+```sh
+ls -l /dev/dri /dev/dri/by-path /dev/dri/x6525-primary 2>&1
+ls -l /sys/class/drm
+cat /proc/fb
+udevadm info -q property -n /dev/dri/card1 | grep -E 'DEVNAME|DRIVERS'
+cat /sys/class/backlight/td4160/brightness \
+    /sys/class/backlight/td4160/actual_brightness \
+    /sys/class/backlight/td4160/bl_power
+cat /proc/cmdline
+systemctl status plasma-mobile --no-pager
+journalctl -u plasma-mobile -b --no-pager | tail -60
+sudo dmesg | grep -iE 'sprd-drm|td4160|dsi|dpu|panel|backlight|connector|drm' | tail -100
+```
+
+What the result means:
+
+| What you see | Meaning | Next |
+|---|---|---|
+| `/dev/dri/card1` exists, `/dev/dri/x6525-primary` missing | the udev rule did not match (the card has no `DRIVERS`; match its `DEVPATH` instead) | create the link by hand (below); the port needs the rule fixed |
+| no `/dev/dri/card1`, although dmesg says `Initialized sprd ... on minor 1` | the sprd DRM card is not registered (or was removed after init) | send the full `dmesg` from that line and `ls -l /dev/dri`; do not chase the compositor yet |
+| symlink exists, `journalctl -u plasma-mobile` shows a DRM/device error | compositor/modeset failure | send the journal; with the 0024 build also try `video=DSI-1:720x1612@60` for one boot |
+| `bl_power` is 1 or `brightness` is 0 | backlight off, not necessarily a DRM failure | set `brightness` to `max_brightness` and check the panel init in `dmesg` |
+
+Manual hand-off test, if `card1` exists but the symlink does not:
+
+```sh
+sudo ln -sf /dev/dri/card1 /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+journalctl -u plasma-mobile -b --no-pager | tail -60
+```
+
+If the panel lights up, the udev rule is the bug; the port matches the card's
+`DEVPATH=*/display-subsystem/drm/card*` now. If the screen is still black, the symlink is not the
+remaining problem. The by-path link `/dev/dri/by-path/platform-display-subsystem-card` exists
+whether or not the custom one does, so it can stand in for the test (point
+`KWIN_DRM_DEVICES`/`WLR_DRM_DEVICES` at it and restart the session).
+
+On an image built before the fix, the DEVPATH rule can also be tried without flashing:
+
+```sh
+echo 'ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DEVPATH=="*/display-subsystem/drm/card[0-9]*", SYMLINK+="dri/x6525-primary"' |
+    sudo tee /etc/udev/rules.d/99-x6525-test.rules
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=drm --action=add
+ls -l /dev/dri/x6525-primary
+sudo systemctl restart plasma-mobile
+```
+
+KWin runs in the user session, not in `plasma-mobile.service`'s cgroup, so the system unit's journal
+can look healthy while the compositor has already failed. Look there too:
+
+```sh
+systemctl show plasma-mobile -p Environment
+ps aux | grep -iE 'kwin|plasmashell|startplasma'
+journalctl -b --no-pager | grep -iE 'kwin|plasma|drm|no drm|primary' | tail -80
+journalctl -b --no-pager _UID=10000 | tail -80
+```
+
+A reboot is the reliable retry after creating the link by hand: KWin lives in the user session and
+can survive a restart of the system unit. If KWin exits with a mode/modeset error, the image still
+has 90 Hz preferred; use a build with patch 0024 (60 Hz preferred) before chasing the compositor
+further. The manual symlink alone cannot fix a rejected 90 Hz mode on the old image.
+
+The 60 Hz test on an older image, for the second cause:
+
+```sh
+sh tools/patch-cmdline.sh pmos-boot-fs.img "video=DSI-1:720x1612@60"
+fastboot flash cache pmos-boot-fs.img
+```
+
+That only affects the kernel's fbdev mode; if the compositor is not using the sprd card at all, it
+cannot help.
+
+### 3.6 Deep Diagnostic: If the Screen Still Fails (Black Screen)
+
+If the screen is still black after applying patches 0024 (60 Hz mode default), 0025 (delays and AVDD/AVEE GPIOs), and 0026 (LP command tx and boot handoff), use this systematic triage over SSH:
+
+#### Step 1: Identify the symptom category
+
+| Category | Visible Symptom | Likely Cause |
+|---|---|---|
+| **A** | Backlight is OFF (screen pitch black, even under a flashlight) | Backlight power/PWM (`bl_power` or GPIO/regulator off) |
+| **B** | Backlight is ON, but screen remains completely blank from boot | Panel reset/power rails (AVDD/AVEE) or DSI LP command timeout |
+| **C** | Bootloader logo freezes and never changes | Kernel `sprd-drm` driver failed to bind or stalled before mode handoff |
+| **D** | Bootloader logo shows, then turns black when Plasma starts | DRM symlink mismatch (`/dev/dri/x6525-primary`), or KWin/Panfrost crash |
+
+#### Step 2: Check Power Rails, Reset, and Clocks
+
+Verify that the panel power GPIOs and DPU clocks are energized:
+
+```sh
+# 1. Check panel power & control GPIOs:
+sudo cat /sys/kernel/debug/gpio | grep -E 'avdd|avee|reset|te|td4160|panel'
+# Expected:
+#   avdd-gpios (ap_gpio 54): out hi (1)
+#   avee-gpios (ap_gpio 55): out hi (1)
+#   reset-gpios (ap_gpio 53): out hi (1)
+
+# 2. Check backlight status:
+cat /sys/class/backlight/td4160/brightness
+cat /sys/class/backlight/td4160/bl_power
+# Force backlight full on for testing:
+echo 0 | sudo tee /sys/class/backlight/td4160/bl_power
+echo 255 | sudo tee /sys/class/backlight/td4160/brightness
+
+# 3. Check DPU & DPI clocks:
+sudo cat /sys/kernel/debug/clk/clk_summary | grep -E 'dispc|dpi|twpll'
+# Expected: CLK_DISPC0 running at ~384 MHz, CLK_DISPC0_DPI running at ~153.6 MHz
+```
+
+#### Step 3: Inspect MIPI DSI & DRM Driver Errors
+
+Check for communication timeouts or DSI bus errors in dmesg:
+
+```sh
+sudo dmesg | grep -iE 'td4160|sprd[-_]drm|dsi|dpu|dispc|panel' | tail -100
+```
+
+Look for:
+- `panel-td4160-hx ...: attached to dsi host`: panel bound successfully.
+- `dsi cmd timeout` or `transfer failed`: command mode / LP transmission failed.
+- `wait frame done timeout`: DPI video stream or vertical blanking timing mismatch.
+
+#### Step 4: Bypass the Compositor — Test DRM Hardware Directly with `modetest`
+
+To determine whether the issue is in the kernel DRM driver or in KWin/Wayland user-space, test direct scanout using `modetest`:
+
+```sh
+# 1. Stop the graphical environment to release the DRM master:
+sudo systemctl stop plasma-mobile   # or greetd if running Phosh
+
+# 2. Inspect connector ID and CRTC ID on the sprd card:
+modetest -M sprd -c
+modetest -M sprd -p
+
+# 3. Drive an SMPTE test pattern directly to DSI-1 (replace <connector_id> with the ID from above, e.g. 33):
+sudo modetest -M sprd -s <connector_id>:720x1612@60
+```
+
+- **If the color bars appear on screen**: The kernel DRM driver, DSI bus, DPU, and panel are completely functional! The issue is solely inside KWin, Mesa/Panfrost, or user session permissions.
+- **If `modetest` errors out or produces a black screen**: The issue is at the kernel/hardware level (panel init commands, timing parameters, or clock gating).
+
+#### Step 5: Isolate KWin & Panfrost GPU (If `modetest` works)
+
+If `modetest` shows a test pattern but Plasma Mobile displays a black screen:
+
+```sh
+# 1. Verify the DRM primary symlink:
+ls -l /dev/dri/x6525-primary
+# Should point to /dev/dri/card1 (the sprd-drm card)
+
+# 2. Check if Panfrost or KWin crashed:
+journalctl -b --no-pager | grep -iE 'kwin|panfrost|mali|drm|failed to open' | tail -80
+journalctl -b --no-pager _UID=10000 | tail -80
+
+# 3. Test running KWin with software rendering (bypass Panfrost GPU):
+echo "KWIN_COMPOSE=QPainter" | sudo tee -a /etc/environment
+sudo systemctl restart plasma-mobile
+```
+
+#### Step 6: Visual Recovery Fallback — Boot with `simpledrm`
+
+If you need a working screen immediately for debugging and want to bypass `sprd-drm`:
+Add `initcall_blacklist=sprd_drm_init` to the kernel command line:
+
+```sh
+# On host:
+sh tools/patch-cmdline.sh pmos-boot-fs.img "initcall_blacklist=sprd_drm_init"
+fastboot flash cache pmos-boot-fs.img
+```
+
+With `sprd_drm` blacklisted, the kernel does not unbind the bootloader's simple framebuffer, and `simpledrm` provides a guaranteed text console and fbcon display at `0x9e000000`.
 
 ## 4. Audio
 
@@ -873,6 +1102,18 @@ The port now describes the rear camera and builds a driver for it:
   and the vddcamio/vddcama1/vddcamd1 rails.
 - `CONFIG_VIDEO_S5K3L6=m` is in the ROM's kernel config.
 
+The front camera is now described too:
+
+- `patches/upstream/0021-*` adds `camera@10` on `&i2c0` for the front OV8856, plus the two-lane
+  `CAMSYS_CSI_M` port. It uses the mainline `ov8856` driver at 19.2 MHz on `CLK_SENSOR0`
+  (`TWPLL_96M` parent) and the `vddcamio`/`vddcama0`/`vddcamd0` rails.
+- the vendor library (`libsensor_ov8856_front.so`) runs the part at 24 MHz, but the mainline driver
+  has register tables only for 19.2 MHz and the SoC clock can supply that, so the node asks for
+  19.2 MHz. If the sensor probes but does not stream, the clock/PLL tables are the first suspect.
+- the mainline driver has no power-down handling, so a gpio-hog holds `ap_gpio 46` low; the pins are
+  not otherwise driven by the driver.
+- `CONFIG_VIDEO_OV8856=m` is in the ROM's kernel config.
+
 Mainline support, from the ROM's kernel config:
 
 | sensor | driver | ROM config |
@@ -910,12 +1151,27 @@ There is no camera application yet: the mainline sprd stack exposes raw Bayer ca
 blocks through V4L2, but libcamera has no sprd pipeline handler and there is no 3A. The first
 milestone is frames from the sensor, then a userspace pipeline.
 
-The front OV8856 is not described yet. The live tree says it is in `sensor-main`: i2c0 at 7-bit 0x10,
-`phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/vddcamd0/
-vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its clock
-needs to come from `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear
-sensor is on `CLK_SENSOR1`, so the two do not conflict. If the mainline driver's address set does not
-match (it knows 0x10 and 0x36), 0x10 is the one to use.
+The front OV8856 is described by patch 0021. The live tree puts it in `sensor-main`: i2c0 at 7-bit
+0x10, `phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/
+vddcamd0/vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its
+clock is `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear sensor is on
+`CLK_SENSOR1`, so the two do not conflict. The pin the driver leaves alone (power-down) is held low
+by a gpio-hog in the board DTS.
+
+Check both sensors after boot:
+
+```sh
+sudo dmesg | grep -iE 's5k3l6|ov8856|i2c|camsys'
+media-ctl -p -d /dev/media0
+v4l2-ctl --list-devices
+# the front sensor's controls (test pattern first, as above)
+v4l2-ctl -d /dev/v4l-subdev1 --list-ctrls
+```
+
+A probe with no `i2c` error means the address, rails and reset pin are right. No probe at all on
+i2c0 usually means the power-down hog or the 19.2 MHz clock: check `dmesg` for
+`ov8856 0-0010: failed to get xvclk` / `unsupported clock rate` and `ls /sys/kernel/debug/gpio` for
+`ov8856_pwdn`.
 
 ### 5.2 Cellular (modem)
 
@@ -1048,14 +1304,103 @@ cgps -s        # or gpsmon
 The first fix is slow (cold start, almanac and ephemeris from scratch); the NMEA stream appearing at
 all is the milestone.
 
-If `/dev/gnss0` never appears: the `pm_gnss` -> `gnss_pipe0` channel is modelled under the **pmsys**
-SIPC link in the mainline dtsi, and pmsys needs `pm_bootcode.bin` and `pm_sys.bin`. Neither is
-packaged; both come from `pm_sys_a` (p30), but how that partition splits into the two files is not
-known yet. The SIPC framework may create the channel device without the pmsys remote running - if it
-does not, that split is the next step.
+The `pm_gnss` -> `gnss_pipe0` channel is modelled under the **pmsys** SIPC link in the mainline
+dtsi, so the GNSS device only exists once the pmsys co-processor is running. That is now wired up:
+
+- `sprd/pm_bootcode.bin` is packaged (firmware pkgrel 6). It is the `bootcode` word list from the
+  vendor's `proprietary/vendor/etc/modem_sp_info.xml`, not a partition; the driver copies it into
+  the 4 KB window at 0x62010000.
+- `sprd/pm_sys.bin` is the phone's own `pm_sys_a` partition (1 MB), copied out by
+  `x6525-pmsys.service` at boot. It is not published.
+- `sprd_pmsys` is blacklisted from coldplug: it requests both files during probe and does not retry,
+  so the service loads it after the copy.
+
+Check it after boot:
+
+```sh
+systemctl status x6525-pmsys
+journalctl -u x6525-pmsys -b
+ls -l /lib/firmware/sprd/pm_*.bin
+cat /sys/class/remoteproc/remoteproc*/state    # expect "running"
+ls /sys/bus/iio/devices                       # the sensor hub creates these
+ls -l /dev/gnss0
+```
+
+Reading the result:
+
+- `no pm_sys_a partition` or a short/zero file: the partition name or layout differs; the service is
+  harmless but pmsys then fails its firmware load.
+- `bootcode firmware too large` / `pmsys firmware too large`: the files are not the ones this driver
+  expects (it allows 4 KB and 0x2c0000).
+- `state` stays `offline` or the driver never appears in `dmesg`: `modprobe sprd_pmsys` and read
+  `dmesg | grep -iE 'pmsys|firmware|remoteproc'`. If the bootcode is rejected, the next step is to
+  compare it with `modem_sp_info.xml` again; a different `bootcode` attribute means a different
+  board revision.
+- pmsys runs but no `/dev/gnss0`: the GNSS child is under `&wcn`; check `sprd_wcn` loaded and
+  `dmesg | grep -iE 'gnss|wcn'`. The GNSS firmware is `sprd/gnssmodem.bin`, already packaged.
 
 Nothing GNSS-related is installed by default; Plasma's location stack uses geoclue, which can read
-from gpsd.
+from gpsd. `apk add gpsd gpsd-clients` and run `gpsd -n /dev/gnss0`.
+
+### 5.4 Sensors (the sensor hub and the VL53L0X)
+
+The accelerometer, gyroscope, light, magnetometer/compass and proximity sensors are not on the AP's
+I2C buses: the stock system reads them through the PM co-processor's sensor hub. The mainline
+`sprd_shub` stack exposes them as IIO devices, and its `pm_shub` channel is under the same pmsys
+link as GNSS - so **pmsys has to be running first** (5.3). The IIO drivers are modules and autoload
+when the channel appears.
+
+```sh
+# pmsys first: its state gates everything below
+systemctl status x6525-pmsys
+cat /sys/class/remoteproc/remoteproc*/state
+
+# what the hub exposed
+ls /sys/bus/iio/devices
+for d in /sys/bus/iio/devices/iio:device*; do
+    echo "$d: $(cat "$d/name" 2>/dev/null)"
+done
+# a reading; the exact channels depend on the part
+cat /sys/bus/iio/devices/iio:device*/in_accel_*_raw 2>/dev/null
+cat /sys/bus/iio/devices/iio:device*/in_illuminance_raw 2>/dev/null
+
+# why it did not come up
+sudo dmesg | grep -iE 'shub|sensor|pmsys'
+lsmod | grep -i shub
+```
+
+Reading the result:
+
+- no `iio:device*` at all: pmsys is not running (see 5.3) or its firmware did not announce
+  `pm_shub`; the SIPC channel is declared in the dtsi, so a running pmsys with no channel is the
+  interesting failure.
+- `iio:device*` appear but no `in_*_raw` channels: the hub answered but this unit's sensor parts are
+  not the ones the driver expects; send the names and `dmesg`.
+- the parts are named in the pmsys image itself (the `pm_sys_a` copy): **SC7A20E** accelerometer,
+  **MMC5603** magnetometer, **LS9801** light/proximity. There is no physical gyroscope - the
+  firmware exposes a virtual one derived from the others, so a gyro may or may not register. The
+  stock system's calibration data lives in `persist` and is not wired up here; readings may be
+  uncalibrated until it is.
+
+The time-of-flight proximity sensor is separate and on the AP's I2C: the board DTS has
+`proximity@29` on `&i2c4`, `st,vl53l0x`, with XSHUT on ap_gpio 168 and the interrupt on 169. The
+stock node used `reg = <0x52>` (the 8-bit form) and a vendor driver, and the stock kernel bound no
+driver at 7-bit 0x52, so this node is unverified in both address and pinout.
+
+```sh
+apk add i2c-tools
+sudo i2cdetect -y 4                 # is anything at 0x29 (or 0x52)?
+sudo dmesg | grep -iE 'vl53|i2c4'
+ls /sys/bus/iio/devices | grep -i prox
+cat /sys/bus/iio/devices/iio:device*/in_proximity_raw 2>/dev/null
+```
+
+If nothing answers at 0x29, power the XSHUT line high and re-probe, or try `reg = <0x52>`: the
+vendor stack may leave the part at its alternative address. The gpio-hog mechanism used for the
+front camera is the model for holding XSHUT.
+
+The fingerprint reader (Goodix on the stock system) has no mainline driver and is not part of this
+phase.
 
 ## 6. Waydroid (Android container)
 
@@ -1105,8 +1450,9 @@ through Panfrost first, and that left the screen black on this board. To test th
 The GPU now also has a DVFS table, taken from the stock kernel's `operating-points` for this part:
 384 MHz at 0.70 V, 512 and 614.4 MHz at 0.75 V, 768 MHz at 0.80 V. Panfrost's devfreq scales through
 those; without it the GPU runs at whatever rate the bootloader left and never changes. The stock
-table's 850 MHz at 0.80 V is left out for now: the mainline GPU clock has fixed parents only up to
-768 MHz, and reaching 850 needs the GPU PLL programmed.
+table's 850 MHz at 0.80 V is left out for now: the mainline composite GPU clock does not propagate
+rate requests to GPLL (it stays at its 750 MHz default), and GPLL also feeds the aux clocks through
+`/20`, so 850 MHz needs clock-tree work and hardware testing (see ROADMAP.md).
 
 Checks after booting an image with the display switch:
 
@@ -1124,6 +1470,75 @@ apk add glmark2 mesa-demos vulkan-tools
 glmark2-es2-wayland --benchmark
 vulkaninfo --summary
 ```
+
+### 7.1 GPU thermal throttling
+
+Patch 0022 gives the SoC's `gpu-thermal` zone a 70 C passive trip and a devfreq cooling map to the
+GPU (Panfrost registers the cooling device). Before it, the zone only reported. Check the zone and
+that the GPU rate moves when the trip is crossed:
+
+```sh
+for z in /sys/class/thermal/thermal_zone*; do
+    printf '%s %s %s\n' "$z" "$(cat "$z/type")" "$(cat "$z/temp")"
+done
+cat /sys/class/thermal/thermal_zone*/trip_point_*_type 2>/dev/null
+cat /sys/class/thermal/thermal_zone*/trip_point_*_temp 2>/dev/null
+# while glmark2 (above) runs in another shell:
+watch -n 1 'cat /sys/class/devfreq/*/cur_freq'
+```
+
+- The `gpu-thermal` zone must be present, with a passive trip at 70000 and a cooling device. If the
+  zone is missing, `ap_thm2` did not probe; send `dmesg | grep -i thm`.
+- The GPU rate should drop below its current OPP once the zone crosses 70 C and return after it
+  cools. If it never moves, the cooling device did not register; check
+  `ls /sys/class/thermal/cooling_device*` and their `type`.
+
+### 7.2 eMMC HS200/HS400 (opt-in test)
+
+The mainline driver marks HS200 broken for every `sprd,sdhci-r11` controller, so the eMMC link comes
+up at DDR52 even though the stock kernel runs the same part at HS400. Patch 0023 adds a boot-time
+override; it is deliberately **off** by default because the eMMC is the root filesystem.
+
+On the host, add the option to the boot image before flashing (or to an already-extracted image):
+
+```sh
+sh tools/patch-cmdline.sh pmos-boot-fs.img sdhci_sprd.enable_hs200=1
+```
+
+Then flash `pmos-boot-fs.img` to `cache` and boot. To undo, use `--remove` with the same option.
+Keep the microSD image or a debug shell path available: if the link trains badly, the rootfs may not
+mount, and the fix is to remove the option from the extlinux `append` line (or reflash the boot
+image).
+
+Checks:
+
+```sh
+sudo dmesg | grep -iE 'mmc0|sdhci|hs200|hs400|ddr52'
+cat /sys/kernel/debug/mmc0/ios 2>/dev/null
+# throughput, both at DDR52 and with the override
+apk add hdparm
+sudo hdparm -t /dev/mmcblk0
+dd if=/dev/mmcblk0 of=/dev/null bs=1M count=512 iflag=direct
+```
+
+- `dmesg` should show a higher speed mode (`HS200`/`HS400`) and the card should still enumerate with
+  its full capacity.
+- If it floods `mmc0: error -84` / tuning errors, or the rootfs does not mount, remove the option
+  and report the `dmesg` lines. That result is the evidence needed to narrow the quirk.
+
+### 7.3 Suspend
+
+The firmware's PSCI is 0.2, which has no SYSTEM_SUSPEND; the vendor suspends through the PM
+co-processor and mainline has no driver for that path. Check what the kernel offers:
+
+```sh
+cat /sys/power/state
+systemctl suspend
+journalctl -b --no-pager | grep -iE 'suspend|psci|s2ram' | tail -20
+```
+
+`freeze` alone is expected at most; `mem` should not be offered. A failed `systemctl suspend` here is
+a missing driver, not a configuration error. Do not treat it as a regression.
 
 ## What to send when asking for help
 

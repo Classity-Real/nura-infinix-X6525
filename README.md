@@ -20,7 +20,9 @@ mainline port uses them, and the workflow that built that kernel has been remove
 
 `tools/audit-features.sh` reports which features the tree completes, is partial on, or is missing by
 design; with `--image <artifact>` it also checks a downloaded image (packaging, the built config, the
-modules in the initramfs, and the documented login).
+modules in the initramfs, and the documented login). [ROADMAP.md](ROADMAP.md) is the inventory of
+what is still missing and why (cameras, GNSS/sensors, modem, flash/autofocus, userspace, deferred
+performance work).
 
 ## Quick start
 
@@ -58,7 +60,8 @@ ip rule add from 172.16.42.0/24 lookup main pref 100
 ssh user@172.16.42.1        # password: x6525pmos
 ```
 
-**5. Give the phone internet.** It has no WiFi driver, so it uses the host's connection.
+**5. Give the phone internet.** Wi-Fi works on this port (checklist 2), but until it is configured
+the phone uses the host's connection over the USB link.
 
 ```sh
 # A01 Core, as root. usb0 = the name from step 3. First check the host is online
@@ -222,10 +225,10 @@ in the **pmaports** kernel config — the one the ROM is actually built with. Th
 | `dts/`, `drivers/` | the device tree and the three drivers (panel, touch, charger) to send upstream |
 | `bindings/` | new DT bindings (the board/vendor entries are in `patches/`) |
 | `patches/` | build glue for the pinned kernel tag: kernel tree entries, the panel/touchscreen/charger Kconfig and Makefile entries, and the gpio binding fix |
-| `patches/upstream/` | the eleven `git am`-able patches for submission, plus notes on where each goes |
+| `patches/upstream/` | the twenty-seven `git am`-able patches for submission, plus notes on where each goes |
 | `uboot/` | the X6525 U-Boot board: a defconfig and a device tree, no board directory |
-| `patches/upstream-uboot/` | the three U-Boot board patches for submission (device tree, defconfig, environment) |
-| `pmaports/` | the four packages to copy into pmaports: the device, the kernel (this port's eleven patches and its config), U-Boot, and the touch firmware |
+| `patches/upstream-uboot/` | the eight U-Boot board patches for submission (device tree, defconfig, environment, pstore, pmicwdt, UFS scan, MAC preboot) |
+| `pmaports/` | the four packages to copy into pmaports: the device, the kernel (this port's twenty-seven patches and its config), U-Boot, and the touch firmware |
 | `firmware/` | the touch HDL image off the device, the upload tarball and its hashes |
 | `tools/` | dtbo/dtb extraction, the live device-tree dumper, the HDL image checker, the vendor-sequence converter, the boot-image and boot-fs checks, and `audit-features.sh` |
 | `linux-infinix-x6525/`, `device-infinix-x6525/`, `build-kernel.sh`, `repack.sh` | the earlier downstream 5.4 approach, kept for reference |

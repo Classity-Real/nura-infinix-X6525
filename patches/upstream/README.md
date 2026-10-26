@@ -1,6 +1,6 @@
 # Kernel patches for the ums9230-mainline tree
 
-Nineteen patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
+Twenty-seven patches, cut against `v7.2-rc6-ums9230-0` (the tag the pmaports kernel package pins) and verified
 to apply **in this order** to a clean checkout of it, producing byte-identical files to `dts/`,
 `drivers/` and `bindings/` — i.e. to what CI compiles.
 
@@ -25,17 +25,38 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 17 | `arm64: dts: sprd: give the X6525's charger an OTG boost regulator` | the ums9230 tree, with patch 3 |
 | 18 | `arm64: dts: sprd: give the X6525's GPU its stock DVFS table` | the ums9230 tree, with patch 3 |
 | 19 | `drm/panel: td4160-hx: add the panel's 90 Hz mode` | the ums9230 tree, later drm-misc with 4 |
+| 20 | `arm64: dts: sprd: boot the X6525's UFS units too` | **bring-up only, not for submission** - the alternate UFS storage some X6525 units shipped with |
+| 21 | `arm64: dts: sprd: add the front camera to the Infinix X6525` | the ums9230 tree, with patch 3 |
+| 22 | `arm64: dts: sprd: throttle the X6525's GPU at the SoC's thermal point` | the ums9230 tree, with patch 3 |
+| 23 | `mmc: sdhci-sprd: add an opt-in override for the HS200 quirk` | **bring-up only, not for submission** - a boot-time knob for the eMMC link |
+| 24 | `drm/panel: td4160-hx: keep the stock 60 Hz mode preferred` | the ums9230 tree, later drm-misc with 4 and 19 |
+| 25 | `drm/panel: td4160-hx: fix post-command delays and power gpios` | the ums9230 tree, later drm-misc with 4, 19 and 24 |
+| 26 | `drm/sprd: enable LP cmd tx and clean boot handoff` | the ums9230 tree, later drm-misc |
+| 27 | `mmc: core: disable volatile eMMC cache by default and flush on shutdown` | **bring-up only, not for submission** - power-loss safety for the eMMC root |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
-14 and 15 add the rear camera, which patch 3 does not describe; 16 adds a regulator to the charger
-driver and 17 wires it into the board. The series is only consistent once all nineteen are applied, which is what the verification below checks.
+14 and 15 add the rear camera, which patch 3 does not describe, and 21 adds the front one, a
+gpio-hog for its power-down pin and the two-lane camsys port; 16 adds a regulator to the charger
+driver and 17 wires it into the board; 22 adds GPU devfreq cooling to the SoC's existing gpu-thermal
+zone. 23 is deliberately not upstream material: the driver marks HS200 broken for every r11
+controller, and the X6525's eMMC is the root filesystem, so the override is opt-in via
+`sdhci_sprd.enable_hs200=1` until it has run on hardware. 24 restores the panel's stock default:
+the board DT's native-mode is timing0 (60 Hz), so 19's 90 Hz mode stays available but is no longer
+preferred; 25 and 26 fix the panel's post-command delays, AVDD/AVEE power GPIOs and the SPRD DRM
+LP-command/boot handoff. 27 stops the kernel enabling the eMMC's volatile cache by default (opt-in
+with `mmc_core.enable_cache=1`) and flushes it on shutdown, because a forced power-off could
+otherwise leave ext4 metadata the journal cannot replay. 20 makes the same image boot on the UFS
+units, which have no eMMC. The series is only consistent once all twenty-seven are applied, which is
+what the verification below checks.
 Patch 3 also carries the `dtb-y` entry in `arch/arm64/boot/dts/sprd/Makefile` — the ROM's kernel
 package applies this series with `patch -p1` and then runs `dtbs_install`, so a patch 3 without that
 hunk builds no DTB for this board and the image build fails in boot-deploy looking for
 `sprd/ums9230-infinix-x6525.dtb`. Regenerate it with that hunk in place; CI now greps for it.
-The build inputs CI applies are separate: `../0001-x6525-build-glue.patch` and
-`../0002-x6525-touch-glue.patch`, `../0003-x6525-charger-glue.patch` and `../0004-x6525-gpio-hog-glue.patch` (the same hunks as 1, 2, 4, 5/6's Kconfig and Makefile entries, so a
-local build and CI put the same thing in the tree).
+The build inputs CI applies are separate: `../0001-*.patch` through `../0011-*.patch` carry the
+build glue for the pinned tag - the `dtb-y` entry, the panel/touchscreen/charger Kconfig and Makefile
+entries, the binding fixes, the HS200 knob, the SPRD DRM fix and the eMMC cache change. The
+submission series in `upstream/` carries the board and driver changes themselves, so a local overlay
+build and CI put the same thing in the tree.
 
 ```sh
 git clone --depth 1 --branch v7.2-rc6-ums9230-0 https://codeberg.org/ums9230-mainline/linux
@@ -69,7 +90,7 @@ git -C linux am "$PWD"/patches/upstream/0*.patch
 
 ## Not included
 
-Cameras (no mainline driver work started), the WiFi/Bluetooth firmware package (`firmware-infinix-x6525-wcn`),
-the USB **source** role (mainline's bq2415x exposes no regulator for the charger's boost, so the port
-can only be a device for now). The U-Boot
-board and the touch driver are separate series: `../upstream-uboot/` and patches 5/6 here.
+The camera flash controller and focus motor (no mainline drivers), the WiFi/Bluetooth/GNSS/pmsys
+firmware and their extraction services (packages, not kernel changes), and the camera userspace.
+The U-Boot board and the touch driver are separate series: `../upstream-uboot/` and patches 5/6
+here.

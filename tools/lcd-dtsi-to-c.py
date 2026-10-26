@@ -15,9 +15,9 @@ Two input forms are supported.
 
   Both use the same packet layout: [data type][vc][ack][len][payload x len].
   One vendor quirk has to be handled: for `--stream`, packets with data type
-  0x13 carry a *delay in milliseconds in the vc byte* and then a command in the
-  payload, which is how the sleep-out/sleep-in timing is stored (e.g.
-  `13 78 00 01 11` = wait 120 ms, then DCS 0x11).
+  0x13 carry a *delay in milliseconds in the vc byte* executed after the
+  command in the payload, which is how the sleep-out/sleep-in timing is stored
+  (e.g. `13 78 00 01 11` = DCS 0x11, then wait 120 ms).
 
 Delays are otherwise not reconstructed - check the original node for explicit
 waits and insert mipi_dsi_msleep() where needed.
@@ -68,10 +68,10 @@ def do_stream(tokens):
         i += length
         idx += 1
         if dt == DELAY_OPCODE:
+            emit(payload, f"opcode 0x13, delay {vc}ms")
             if vc:
                 print(f"\tmipi_dsi_msleep(&dsi_ctx, {vc});\t/* vendor delay */")
                 delays += 1
-            emit(payload, f"opcode 0x13, delay {vc}ms")
         else:
             emit_packet(dt, vc, payload, idx)
     print(f"/* {idx} packets, {delays} delays, {len(tokens)} bytes */", file=sys.stderr)
@@ -100,9 +100,9 @@ def do_lines():
         if length != len(payload):
             print(f"\t/* length says {length} but {len(payload)} bytes follow */")
         if dt == DELAY_OPCODE:
+            emit(payload, f"opcode 0x13, delay {vc}ms")
             if vc:
                 print(f"\tmipi_dsi_msleep(&dsi_ctx, {vc});\t/* vendor delay */")
-            emit(payload, f"opcode 0x13, delay {vc}ms")
         else:
             emit_packet(dt, vc, payload, 0)
 

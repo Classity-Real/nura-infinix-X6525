@@ -29,7 +29,7 @@ pmbootstrap install
 pmbootstrap export        # writes /tmp/postmarketOS-export/
 ```
 
-`linux-postmarketos-unisoc-ums9230/` here is the kernel package with this port's nineteen patches in
+`linux-postmarketos-unisoc-ums9230/` here is the kernel package with this port's twenty-seven patches in
 `source=` and its five config symbols added (the reasoning is in `pmaports/README.md`), and the
 u-boot package builds from the port's fork, so the `boot.img` in the export is already this board's.
 

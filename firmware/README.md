@@ -121,16 +121,19 @@ The package installs them as `/lib/firmware/sprd/...`, which is the path the dri
 
 The dtsi's `bluetooth@10` node has `local-bd-address = [00 00 00 00 00 00]` with the comment
 "filled in by bootloader". This port chainloads U-Boot from `boot_a`, and U-Boot's `ft_board_setup()`
-does fill the property in - from its `bdaddr` environment variable. That variable is unset in this
-board's default environment (the common `ums9230.env` reads it from a UFS `prodnv` partition, which
-this eMMC board does not have), and `string_to_enetaddr(NULL)` zero-fills, so the property ends up
-all-zero anyway. The HCI core rejects that: it leaves `public_addr` zero and skips `set_bdaddr()` -
-the function that sends the two config blobs - so the controller would register but never be
-initialised. Patch 0013 in `patches/upstream/` makes the driver fall back to a random, locally
-administered address in that case, so Bluetooth works, but the address (and with it pairing records)
-changes on every boot. A stable address needs U-Boot to read one (the device's `prodnv` partition is
-the likely source) or a per-device DTS to supply one; until then this is a known limitation, not a
-configuration error.
+fills the property in from its `bdaddr` environment variable. The common environment reads that
+variable from `/btmac.txt` on a UFS `prodnv` partition; this eMMC board's environment now does the
+same with `load mmc 0#prodnv ... /btmac.txt`, and reads `/wifimac.txt` for the WLAN MAC
+(`board/unisoc/ums9230/infinix-x6525.env`). Both loads are guarded: if the files are absent, the
+variables stay unset.
+
+When `bdaddr` is unset, `string_to_enetaddr(NULL)` zero-fills, so the property ends up all-zero. The
+HCI core rejects that: it leaves `public_addr` zero and skips `set_bdaddr()` - the function that
+sends the two config blobs - so the controller would register but never be initialised. Patch 0013
+in `patches/upstream/` makes the driver fall back to a random, locally administered address in that
+case, so Bluetooth works, but the address (and with it pairing records) changes on every boot. With
+the prodnv files present the address is stable. Which of the two paths this unit takes has not been
+seen on hardware yet; `btmac.txt`/`wifimac.txt` are the first thing to check if it is still random.
 
 # Modem firmware
 
@@ -154,11 +157,49 @@ It comes from the phone's own vendor tree: `proprietary/odm/firmware/gnssmodem.b
 `Bocchi-The-Dev/vendor_X6525` repository (the stock `/odm/firmware` copy). 195500 bytes.
 
 The GNSS SIPC channel is modelled under the `pmsys` link in the mainline `ums9230.dtsi`
-(`pm_gnss` -> `gnss_pipe0`); whether the channel device appears without the pmsys remoteproc running
-is not known yet - if `/dev/gnss0` never appears, the pmsys firmware (`pm_bootcode.bin` and
-`pm_sys.bin`, from the `pm_sys_a` partition) is the next thing to look at.
+(`pm_gnss` -> `gnss_pipe0`), so it only appears once the pmsys co-processor is running - see the
+next section.
 
 ```
 144461 bytes
 sha512  016cd42c7f9911f684f5a4242d0f4d6c4fcc0b73b71d2acd93da418c9677c000fdbe1ea7ac2345793f8ec58d97744e74d498b678faf54a3a14401798bf06cbd8
+```
+
+# pmsys firmware
+
+The power-management co-processor needs two images, and they come from different places.
+
+`pm_bootcode.bin` (124 bytes, 31 words) is packaged here in
+`firmware-infinix-x6525-pmsys-1.tar.gz`. It is not a partition: it is the `bootcode` attribute of
+the `pm_sys_bootcode` entry in the vendor tree's
+`proprietary/vendor/etc/modem_sp_info.xml` (`Bocchi-The-Dev/vendor_X6525`), converted to
+little-endian 32-bit words. That is the same conversion the Jolla C2 BSP's `convert_bootcode.py`
+performs for its own package. `sprd_pmsys` copies the result into the 4 KB window at 0x62010000;
+the code there programs two PM registers and jumps to 0x10040000, the co-processor's view of
+0x88040000.
+
+Regenerate it from the XML (the same `/vendor/etc/modem_sp_info.xml` path on the stock system):
+
+```sh
+python3 tools/pm-bootcode-from-xml.py modem_sp_info.xml pm_bootcode.bin
+# 31 words (124 bytes) from pm_sys_bootcode
+```
+
+`pm_sys.bin` is the `pm_sys_a` partition itself (1 MB; the vendor XML gives it 0x200000 at
+0x88040000). It is generic firmware for this SoC, but it is not in the public vendor tree and is not
+published here. `x6525-pmsys.service` copies it out of the partition at boot, the same way the modem
+images are handled, and then loads `sprd_pmsys` (the driver is blacklisted from coldplug because it
+requests both files during probe and does not retry).
+
+Package it the same way as the others:
+
+```sh
+mkdir /tmp/pmsys-stage/sprd -p && cp pm_bootcode.bin /tmp/pmsys-stage/sprd/
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' -C /tmp/pmsys-stage -cf - sprd \
+    | gzip -n -9 > firmware-infinix-x6525-pmsys-1.tar.gz
+```
+
+```
+270 bytes
+sha512  57066459b87cec02df11bf8c2f0fa73a67fd71887f680b2d5e0d1527e4f813fde0db784338a7eede9af97c406ee9829afdb03bf32f86079337c2bb32e75a815c
 ```

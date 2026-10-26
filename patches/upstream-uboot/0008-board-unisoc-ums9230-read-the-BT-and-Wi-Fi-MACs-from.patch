@@ -1,0 +1,40 @@
+From 9d0c79af0eb4949b4db448b074ebe18f7fbb8163 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sat, 24 Oct 2026 13:36:39 +0000
+Subject: [PATCH] board: infinix-x6525: read the BT and Wi-Fi MACs from prodnv
+
+The eMMC prodnv partition holds btmac.txt and wifimac.txt, the same
+files the common UFS preboot reads. Without them ft_board_setup()
+writes a zero BD address (the kernel then falls back to a random one
+every boot) and a zero WLAN MAC.
+
+Use the named-partition load syntax and set each variable only when the
+load succeeds; if the files are absent the previous zero/random
+behaviour remains. ft_board_setup() reverses the BD address for the DT
+binding, exactly as the UFS path does.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+---
+ board/unisoc/ums9230/infinix-x6525.env | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/board/unisoc/ums9230/infinix-x6525.env b/board/unisoc/ums9230/infinix-x6525.env
+index 7fdc2b3..7020eb2 100644
+--- a/board/unisoc/ums9230/infinix-x6525.env
++++ b/board/unisoc/ums9230/infinix-x6525.env
+@@ -1,3 +1,12 @@
++preboot=
++ if load mmc 0#prodnv 0x9c000000 /btmac.txt 0x11; then
++  mw.b 0x9c000011 0;
++  setexpr.s bdaddr *0x9c000000;
++ fi;
++ if load mmc 0#prodnv 0x9c000000 /wifimac.txt 0x11; then
++  mw.b 0x9c000011 0;
++  setexpr.s wifiaddr *0x9c000000;
++ fi
+ bootcmd=pmicwdt stop; sleep 5; pstore display console; pstore display dump; sleep 15; bootflow scan -lb mmc; bootflow scan -lb scsi; echo === no bootflow: the cache partition ===; part number mmc 0 cache cachenum; echo cache is partition ${cachenum}; ls mmc 0:${cachenum} /; ls mmc 0:${cachenum} /extlinux; echo === no bootflow on scsi: the cache partition ===; part number scsi 0 cache cachenum; echo cache is partition ${cachenum}; ls scsi 0:${cachenum} /; ls scsi 0:${cachenum} /extlinux
+ fdt_addr_r=0x9df00000
+ kernel_addr_r=0x80080000
+-- 
+2.34.1
+

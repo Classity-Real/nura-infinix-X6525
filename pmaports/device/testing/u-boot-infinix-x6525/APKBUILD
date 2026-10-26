@@ -18,7 +18,7 @@ pkgname=u-boot-infinix-x6525
 # the patch chain in patches/upstream-uboot/. The tarball hash stays as is -
 # keep it the first sha512sums line.
 pkgver=2025.07_git20261017
-pkgrel=4
+pkgrel=5
 pkgdesc="U-Boot bootloader for the Infinix X6525"
 url="https://github.com/Seuj09/ums9230-mainline-u-boot"
 arch="aarch64"
@@ -63,5 +63,5 @@ sha512sums="
 7aefacc983b9cb41c17e961278a911fd4604b4b5483ef85f09ebff3bce44b1411298d1464c3ad0abbb513514f49213c0a20a9906cb749ff47371d28a7b28b051  $pkgname-$pkgver.tar.gz
 510dfbe9dd089e98d3ff852022a8be832e346d3ef0b1d721ea19618366e1ba91eeebc721379408ff1764e30bbf0e68d8eedca5e2d22b1ec543afc2b8e70f8bc8  infinix-x6525_defconfig
 808cfe2bffc0450c05ffcc272ddbf8497520b3fc483d64244264a0702486fef11516ffaf5d9d94016e08a82da6d38034b53cdcf02e4edbd1f62e1642719f55ac  ums9230-infinix-x6525.dts
-7dc911a5c77c65d8dcb516b8555cee1118b5867674beb22767937acad27b84c8eaee8649581117421a12dd673150aa78a002f1c224c01ac257a6e946e7f5713a  infinix-x6525.env
+81369b45610e14ee43e566949c6d83c0a59ef5f4be632d05f680f956880f57cf0bdda8e99acdab9cac2a4797451e51c35b0d94c88c7b2a9840e54a728e2ea78e  infinix-x6525.env
 "

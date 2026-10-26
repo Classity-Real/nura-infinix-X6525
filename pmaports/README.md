@@ -11,7 +11,7 @@ marks `fate = "obsolete"`.
    `linux-postmarketos-unisoc-ums9230` from a *tarball at a tag*, so `deviceinfo_dtb` cannot resolve
    until a tree at that tag contains `sprd/ums9230-infinix-x6525.dtb`. Two routes, and the first
    works today: `device/testing/linux-postmarketos-unisoc-ums9230/` here is that package with the
-   nineteen patches from `../patches/upstream/` added to `source=` - `default_prepare`, which the package
+   twenty-seven patches from `../patches/upstream/` added to `source=` - `default_prepare`, which the package
    already calls, applies them with `patch -p1`, verified against the same tag it builds from - plus
    the six config symbols below. Copy it in beside the device package and the ROM builds. Once the
    series is merged instead, drop that directory, bump `KERNEL_TAG` in
@@ -50,12 +50,12 @@ marks `fate = "obsolete"`.
 
 3. **A `u-boot-infinix-x6525` package.** The deviceinfo chainloads U-Boot from `boot_a`, so without it
    nothing boots. The package is complete, and it builds from the port's own fork of the U-Boot tree -
-   branch `x6525` in `ums9230-mainline-u-boot`, which is that fork's `ums9230` plus the three board
-   commits this repo carries in `../uboot/` and `../patches/upstream-uboot/` - so it waits on nothing.
+   branch `x6525` in `ums9230-mainline-u-boot`, which is that fork's `ums9230` plus the board files
+   this repo carries in `../uboot/` and `../patches/upstream-uboot/` - so it waits on nothing.
    `_commit` and the `sha512` are the fork's tip; point both back at `codeberg.org/ums9230-mainline/u-boot`
-   once the board is merged there. The UFS enablement is newer than that tip, so the three board
-   files are staged next to the APKBUILD as well and `prepare()` copies them over the tarball's
-   copies. The X6525 boots from eMMC on `sdio3` or from UFS (the reeder exercises the UFS path),
+   once the board is merged there. The UFS scan and the prodnv MAC preboot are newer than that tip,
+   so the three board files are staged next to the APKBUILD as well and `prepare()` copies them over
+   the tarball's copies. The X6525 boots from eMMC on `sdio3` or from UFS (the reeder exercises the UFS path),
    and CI builds `u-boot.bin` from the same files on every push.
 
 ## The touch firmware

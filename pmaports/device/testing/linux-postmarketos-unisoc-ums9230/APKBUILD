@@ -1,4 +1,4 @@
-# Staging for the Infinix X6525: the nineteen patches below add this board
+# Staging for the Infinix X6525: the twenty-seven patches below add this board
 # (device tree, panel, touch, charger and camera sensor drivers, the bindings
 # they need, two binding fixes, a watchdog fix, a Bluetooth fallback and the
 # charger's OTG boost regulator) and are cut against the same tag this package
@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=18
+pkgrel=19
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -62,6 +62,13 @@ source="
 	0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 	0019-drm-panel-td4160-hx-90hz.patch
 	0020-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch
+	0021-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
+	0022-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
+	0023-mmc-sdhci-sprd-opt-in-hs200-override.patch
+	0024-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+	0025-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+	0026-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
+	0027-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
 "
 builddir="$srcdir/linux"
 
@@ -113,4 +120,11 @@ debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d4067
 a87ce58e4df4d5bb2d930c6d296fad130553ba6bdb15d2d50a11871b2ec70c5717a4fa3f44232bb2b172a77e021e978f215d202e7759adc8a775caa539d13ae8  0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 b6c5bdc731f65a333ae033ebae91267c8741808eae4447d04656df94dd863ad7b1e05a703ad51dc899c660817617965f796d0f7103c5fa97943d883de05e143a  0019-drm-panel-td4160-hx-90hz.patch
 4dfffa8cf1d7265da87f7a607ab13fa2a8d316e32a8c9f90989c21632ce521f73b82f8b8d24363f8c2e3aeba82c1a4debe9bae517c41edd222f4f32733365df5  0020-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch
+740eb1bb4c93fe99e73cc11d5e618a2c14779389c0e47f62a0948af6438c87353849f054063c455ca43c91a9a8309f0323676f8f880d0e53e29de3a9bec75063  0021-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
+0c7732e27b71b61b92fcfa565c089cbd9cb9ea765b1b0a42c1319a91878219b0040a232f92dcc438a6500aa9682b35aa0eb1dfb388e1e81b561f091e2d24bd90  0022-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
+dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc81ade1ffcf0f8a8ecd4a0c9edd5598a52cef909d552670ed  0023-mmc-sdhci-sprd-opt-in-hs200-override.patch
+60e4e778d5a05e54c01c3e56f3e998eba5dce9cb560c259e736f78ec2f1567430f5b35b33573d83dd43758e4d723ee47bc6d8464e274da1d7ee5fd6ae5a6c4d7  0024-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+6a5ce154560745a1764ea954f17abde9fa03c6019719da0ee0e91820cf37c45bb9009851de738a9567c85577c1e378ec879bf62f2deaab9cc53cf8cb3371ede1  0025-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+5e827f6204b700725d2fcd4b201d27f3fc8fa421dea9b2935181dc8c4c147dc928e7acbc396bba175551e8c316f4d689acd431a59695466470185d7bc887db05  0026-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
+1886e7d291d7beb115000d315649f1352ecdce472fb268da824dd39bf0a85511dd463d371266157195749020f9fb1a850c3f6b706cc5e6f4d8f1992d1a8abad6  0027-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
 "

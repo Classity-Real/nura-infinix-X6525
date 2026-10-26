@@ -57,6 +57,8 @@ struct td4160_panel {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset;
+	struct gpio_desc *avdd;
+	struct gpio_desc *avee;
 	struct backlight_device *backlight;
 	/* The DSI host's clock only runs between pre_enable and post_disable, so
 	 * a DCS write outside that window (a brightness write from user space
@@ -149,23 +151,23 @@ static int td4160_panel_on(struct td4160_panel *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x51, 0x00, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x53, 0x24);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x55, 0x03);
-	mipi_dsi_msleep(&dsi_ctx, 120);	/* vendor delay */
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x11);	/* opcode 0x13, delay 120ms */
-	mipi_dsi_msleep(&dsi_ctx, 20);	/* vendor delay */
+	mipi_dsi_msleep(&dsi_ctx, 120);	/* vendor delay */
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x29);	/* opcode 0x13, delay 20ms */
+	mipi_dsi_msleep(&dsi_ctx, 20);	/* vendor delay */
 
 	return dsi_ctx.accum_err;
 }
 
-/* sprd,sleep-in-command = [13 14 00 01 28 13 78 00 01 10]: delay, then command */
+/* sprd,sleep-in-command = [13 14 00 01 28 13 78 00 01 10]: command, then delay */
 static int td4160_panel_off(struct td4160_panel *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
 
-	mipi_dsi_msleep(&dsi_ctx, 20);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x28);
-	mipi_dsi_msleep(&dsi_ctx, 120);
+	mipi_dsi_msleep(&dsi_ctx, 20);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x10);
+	mipi_dsi_msleep(&dsi_ctx, 120);
 
 	return dsi_ctx.accum_err;
 }
@@ -175,12 +177,25 @@ static int td4160_panel_prepare(struct drm_panel *panel)
 	struct td4160_panel *ctx = to_td4160_panel(panel);
 	int ret;
 
+	if (ctx->avdd) {
+		gpiod_set_value_cansleep(ctx->avdd, 1);
+		msleep(5);
+	}
+	if (ctx->avee) {
+		gpiod_set_value_cansleep(ctx->avee, 1);
+		msleep(5);
+	}
+
 	td4160_panel_reset(ctx);
 
 	ret = td4160_panel_on(ctx);
 	if (ret < 0) {
 		dev_err(&ctx->dsi->dev, "Failed to initialize panel: %d\n", ret);
 		gpiod_set_value_cansleep(ctx->reset, 0);
+		if (ctx->avee)
+			gpiod_set_value_cansleep(ctx->avee, 0);
+		if (ctx->avdd)
+			gpiod_set_value_cansleep(ctx->avdd, 0);
 		return ret;
 	}
 
@@ -211,15 +226,24 @@ static int td4160_panel_unprepare(struct drm_panel *panel)
 	gpiod_set_value_cansleep(ctx->reset, 0);
 	msleep(5);
 
+	if (ctx->avee) {
+		gpiod_set_value_cansleep(ctx->avee, 0);
+		msleep(5);
+	}
+	if (ctx->avdd) {
+		gpiod_set_value_cansleep(ctx->avdd, 0);
+		msleep(5);
+	}
+
 	return 0;
 }
 
 /*
  * display-timings/timing1 from the board DT: the panel's 90 Hz mode. The pixel
  * clock is the same as the 60 Hz mode; only the blanking differs, 933 x 1828
- * totals at 153.6 MHz = 90.05 Hz. It is the preferred mode, so a compositor
- * that just takes the preferred mode gets 90 Hz; the 60 Hz mode stays
- * available for anything that asks for it.
+ * totals at 153.6 MHz = 90.05 Hz. It stays an option, not the preferred mode:
+ * the stock board DT's native-mode is timing0 (60 Hz), and the 90 Hz timing
+ * has not been accepted by this mainline DSI/DPU path on hardware yet.
  */
 static const struct drm_display_mode td4160_panel_mode_90 = {
 	.clock = 153600,
@@ -233,13 +257,14 @@ static const struct drm_display_mode td4160_panel_mode_90 = {
 	.vtotal = 1612 + 180 + 4 + 32,		/* vback-porch 0x20 */
 	.width_mm = 68,				/* sprd,width-mm 0x44 */
 	.height_mm = 152,			/* sprd,height-mm 0x98 */
-	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+	.type = DRM_MODE_TYPE_DRIVER,
 };
 
 /*
- * display-timings/timing0: the panel's 60 Hz mode. The blanking looks odd
- * (vfront is 1020 lines) but the totals are self-consistent: 959 x 2668 at
- * 153.6 MHz is 60.03 Hz.
+ * display-timings/timing0: the panel's 60 Hz mode and the board DT's
+ * native-mode. The blanking looks odd (vfront is 1020 lines) but the totals
+ * are self-consistent: 959 x 2668 at 153.6 MHz is 60.03 Hz. Keep it preferred:
+ * the stock system boots this mode, and the 90 Hz timing is an alternative.
  */
 static const struct drm_display_mode td4160_panel_mode_60 = {
 	.clock = 153600,
@@ -253,7 +278,7 @@ static const struct drm_display_mode td4160_panel_mode_60 = {
 	.vtotal = 1612 + 1020 + 4 + 32,		/* vback-porch 0x20 */
 	.width_mm = 68,				/* sprd,width-mm 0x44 */
 	.height_mm = 152,			/* sprd,height-mm 0x98 */
-	.type = DRM_MODE_TYPE_DRIVER,
+	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 };
 
 static int td4160_panel_get_modes(struct drm_panel *panel,
@@ -312,6 +337,16 @@ static int td4160_panel_probe(struct mipi_dsi_device *dsi)
 		return dev_err_probe(&dsi->dev, PTR_ERR(ctx->reset),
 				     "Failed to get reset GPIO\n");
 
+	ctx->avdd = devm_gpiod_get_optional(&dsi->dev, "avdd", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->avdd))
+		return dev_err_probe(&dsi->dev, PTR_ERR(ctx->avdd),
+				     "Failed to get avdd GPIO\n");
+
+	ctx->avee = devm_gpiod_get_optional(&dsi->dev, "avee", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->avee))
+		return dev_err_probe(&dsi->dev, PTR_ERR(ctx->avee),
+				     "Failed to get avee GPIO\n");
+
 	ret = devm_mutex_init(&dsi->dev, &ctx->bl_lock);
 	if (ret)
 		return ret;
@@ -329,7 +364,8 @@ static int td4160_panel_probe(struct mipi_dsi_device *dsi)
 	ctx->panel.prepare_prev_first = true;
 	drm_panel_add(&ctx->panel);
 
-	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST;
+	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
+			  MIPI_DSI_MODE_LPM;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->lanes = 4;
 	/* from the board DT: sprd,phy-bit-clock = 0xf6180 kbps,
