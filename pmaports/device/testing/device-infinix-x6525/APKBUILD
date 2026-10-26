@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=27
+pkgrel=28
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -431,6 +431,20 @@ Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
 ExecStartPre=-+/usr/libexec/x6525-wait-drm
 EOF
 	done
+
+	# GPU experiment (2026-10-27), kept in its own drop-in so it can be removed
+	# alone (`sudo rm /etc/systemd/system/greetd.service.d/30-x6525-gpu.conf`).
+	# The panel is on sprd-drm (card1, no render node) and the GPU is Panfrost
+	# (card0 / renderD128), so wlroots has to be told, or be able to work out,
+	# which device renders. WLR_RENDER_DRM_DEVICE names it: phoc then renders
+	# on Panfrost and hands buffers to the sprd card. The renderer itself stays
+	# unpinned, so if this fails wlroots still falls back to pixman rather than
+	# giving a black screen. Check which one it chose with:
+	#   journalctl -b -u greetd | grep -iE 'renderer|gles|pixman|egl'
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/30-x6525-gpu.conf <<'EOF'
+[Service]
+Environment=WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128
+EOF
 
 	# Same wait for the phosh session: greetd starts phoc with
 	# WLR_DRM_DEVICES=/dev/dri/x6525-primary, so it needs the symlink too.
