@@ -422,7 +422,7 @@ jobs:
           sh tools/reblock-boot-fs.sh "$B" 4096
           e2fsck -fn "$B"
           ls -l "$B"
-          python3 -I tools/check-boot-fs.py /tmp/rom-out/pmos-boot-fs.img || echo "::warning::boot fs check failed"
+          python3 -I tools/check-boot-fs.py /tmp/rom-out/pmos-boot-fs.img
           ls -la /tmp/rom-out/
 
       - name: Check the images for the two known first-boot problems

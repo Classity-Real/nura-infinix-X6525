@@ -120,9 +120,10 @@ dd if=<out>/infinix-x6525.img of=/dev/sdX bs=4M conv=fsync    # /dev/sdX = the c
 
 - The card is written **whole**, because the image carries its own partition table: an extended-boot
   partition holding `/extlinux/extlinux.conf`, `/vmlinuz`, `/initramfs` and the DTB, and the root
-  filesystem. The initramfs finds both by the filesystem UUIDs baked into the extlinux command line
-  (`pmos_boot_uuid`/`pmos_root_uuid`, written by boot-deploy from the image's own fstab), and those
-  travel with a copied image, so it boots the same way from the card as it would from anything else.
+  filesystem. The initramfs finds both by the `pmOS_boot`/`pmOS_root` labels: the device package's
+  boot-deploy hook rewrites `/etc/fstab` so boot-deploy puts no `pmos_*_uuid` on the extlinux command
+  line, and the initramfs falls back to the labels. Labels travel with a copied image, so it boots the
+  same way from the card as it would from anything else.
 - Both routes write the same bytes: `--sdcard` puts on the card exactly what `dd`-ing the exported
   image would, and `flasher flash_kernel` is the same `fastboot flash boot_a boot.img`.
 - Do **not** run `pmbootstrap flasher flash_rootfs`. It would write the whole 1.36 GB disk image into
@@ -213,8 +214,10 @@ fastboot flash userdata <out>/pmos-root-fs.img    # pmOS_root
   `uboot_a`, `sml`, `trustos`) is never written, so Spreadtrum download mode with `spd_dump` still works.
 - fastboot splits a large raw image into chunks by itself, so the 1.3 GB root image needs no `sparse`
   conversion on your side.
-- The filesystems keep their UUIDs and labels, so the extlinux command line (`pmos_boot_uuid`,
-  `pmos_root_uuid`) finds them wherever they were written. Check with `file -s` on the two images: they must
+- The filesystems keep their labels, which is what the extlinux command line uses (`pmOS_boot`,
+  `pmOS_root`), so a cache-only flash finds the rootfs already on the phone. The older UUID-based
+  command line needed both images from one run; the initramfs hooks-cleanup script also migrates an
+  older rootfs's `/etc/fstab` to labels at boot. Check with `file -s` on the two images: they must
   be ext2/4 filesystems, not a disk with a table.
 - **Measured on this phone** (`/proc/partitions` + `/dev/block/by-name`): `cache` is `mmcblk0p47`, **64 MiB**;
   `userdata` is `mmcblk0p73`, about 110 GiB. The workflow shrinks the boot filesystem to its minimum plus

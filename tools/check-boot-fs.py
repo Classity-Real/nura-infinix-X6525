@@ -10,6 +10,14 @@ U-Boot's default fdtfile point, a missing initramfs - ends at the prompt with a 
 on a screen nobody is looking at. This reads the filesystem with debugfs (no root, no
 loop device) and fails if any named file is missing. The second argument is U-Boot's
 CONFIG_DEFAULT_FDT_FILE, used when the config says `fdtdir` instead of `fdt`.
+
+It also fails if the append line pins `pmos_root_uuid=`: that makes the initramfs
+accept only one rootfs filesystem UUID, so a boot filesystem flashed over an older
+rootfs stops at "Waiting for root partition". The X6525 device package installs a
+boot-deploy hook that rewrites / and /boot to labels, so the generated append line
+has no UUID and the initramfs uses its pmOS_root label fallback. Pass
+--allow-root-uuid for a build where pinning is intentional (e.g. full disk
+encryption, where boot-deploy takes the UUID from /etc/crypttab).
 """
 import re
 import subprocess
@@ -26,10 +34,13 @@ def exists(img, path):
 
 
 def main():
-    if len(sys.argv) not in (2, 3):
+    argv = sys.argv[1:]
+    allow_root_uuid = "--allow-root-uuid" in argv
+    argv = [a for a in argv if a != "--allow-root-uuid"]
+    if len(argv) not in (1, 2):
         sys.exit(__doc__)
-    img = sys.argv[1]
-    fdtfile = sys.argv[2] if len(sys.argv) == 3 else "sprd/ums9230-infinix-x6525.dtb"
+    img = argv[0]
+    fdtfile = argv[1] if len(argv) == 2 else "sprd/ums9230-infinix-x6525.dtb"
     conf = dbg(img, "cat /extlinux/extlinux.conf")
     if "label" not in conf.lower() and "linux" not in conf.lower() and "kernel" not in conf.lower():
         print(f"FAIL: no usable /extlinux/extlinux.conf in {img}")
@@ -53,6 +64,17 @@ def main():
         elif k == "fdtdir":
             fdtdir = v
     bad = 0
+
+    if "pmos_root_uuid=" in conf:
+        if allow_root_uuid:
+            print("WARN: pmos_root_uuid is pinned (allowed)")
+        else:
+            print("FAIL: the append line pins pmos_root_uuid; a cache-only flash")
+            print("      over an older rootfs will stop at 'Waiting for root partition'.")
+            print("      Check the device package's boot-deploy root-label hook.")
+            bad += 1
+    else:
+        print("ok  : no pmos_root_uuid; the initramfs uses the pmOS_root label fallback")
 
     def need(what, path):
         nonlocal bad

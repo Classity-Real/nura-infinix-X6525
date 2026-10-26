@@ -121,32 +121,38 @@ ssh user@172.16.42.1            # password x6525pmos
 If SSH does not answer a minute after `pmos_continue_boot`, it is a real boot failure: capture the
 last screen lines (a photo is fine) and, if available, the UART output on `ttyS1` (115200 8N1).
 
-**`cache` and `userdata` must come from the same run.** `extlinux.conf` on `cache` carries
-`pmos_root_uuid`, and the initramfs mounts the root only by that UUID. A cache-only flash (the usual
-way to try a new kernel) points at a filesystem UUID that is not on the phone, and the boot stops
-right after the console handover with no further error on screen. Flash the matching rootfs:
+**Why "Waiting for root partition" happens, and why a cache-only flash is safe now.** The
+initramfs mounts the root by `pmos_root_uuid` when extlinux passes one. Builds made with this tree's
+device package leave it out: a boot-deploy hook rewrites `/etc/fstab` to name `/` and `/boot` by
+label, so extlinux carries no `pmos_*_uuid` and the initramfs uses its built-in `pmOS_root` /
+`pmOS_boot` label fallback. Labels are the same in every build, so a cache-only flash (the usual way to
+try a new kernel or display change) boots on top of the rootfs already on the phone. The initramfs
+also rewrites an older rootfs's `/etc/fstab` from UUIDs to labels before `switch_root`, so systemd
+does not trip over stale `UUID=` entries.
+
+A cache image built **before** this change still names one exact rootfs UUID. A cache-only flash then
+stops at `Waiting for root partition`; flash the `userdata` image from the same artifact:
 
 ```sh
-fastboot flash userdata pmos-root-fs.img   # same run as the cache you flashed
+fastboot flash userdata pmos-root-fs.img   # only needed for a pre-label cache
 ```
 
-The same applies in reverse: a new userdata with an old cache has a UUID the old extlinux does not
-name. Both files come out of one ROM artifact; flash them together.
-
-Check it in the debug shell before continuing. The boot filesystem is not mounted there, but the
-UUIDs U-Boot got from extlinux are in the kernel command line:
+Check which case you are in from the debug shell. The boot filesystem is not mounted there, but the
+UUIDs U-Boot got from extlinux are on the kernel command line:
 
 ```sh
 tr ' ' '\n' < /proc/cmdline | grep -E 'pmos_(root|boot)_uuid'
-blkid
+blkid -L pmOS_root   # the partition the label path would mount
+blkid                # filesystem UUIDs, to compare with the line above
 ```
 
-The `pmos_root_uuid` value must appear in `blkid`'s output (on `mmcblk0p73`, the `userdata`
-partition). If it does not, the rootfs on the phone is from a different build, and
-`pmos_continue_boot` has nothing to mount. To read extlinux itself, mount the boot filesystem by
-its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt; cat /mnt/extlinux/extlinux.conf`.
+No `pmos_root_uuid` line means the new label path, and `blkid -L pmOS_root` names the userdata
+partition. A `pmos_root_uuid` value that `blkid` does not list means the boot filesystem
+and rootfs are from different pre-label builds; reflash the matching rootfs. To read extlinux itself,
+mount the boot filesystem by its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt;
+cat /mnt/extlinux/extlinux.conf`.
 
-If the UUIDs match and the boot still stops, walk the same steps by hand. Each prints, so the one
+If root is found and the boot still stops, walk the same steps by hand. Each prints, so the one
 that errors or never returns is the step `pmos_continue_boot` dies in:
 
 ```sh
@@ -172,11 +178,13 @@ same image you are flashing, then flash it:
 ```sh
 sh tools/patch-cmdline.sh --remove pmos-boot-fs.img pmos.debug-shell
 fastboot flash cache pmos-boot-fs.img
-fastboot flash userdata pmos-root-fs.img   # only if the phone's userdata is another run's
+fastboot flash userdata pmos-root-fs.img   # old, pre-label cache only
 ```
 
-Both files must come from one ROM run; check before flashing that the rootfs UUID is the one the
-patched extlinux names:
+For a label-based cache (the one this tree builds) that is all: extlinux names the `pmOS_root` label,
+so the rootfs already on the phone is found, and the initramfs migrates its fstab on first boot. For
+a pre-label cache that still pins `pmos_root_uuid`, flash the matching userdata and check that its
+UUID is the one extlinux names:
 
 ```sh
 blkid -p pmos-root-fs.img                    # UUID= must match...
@@ -222,7 +230,7 @@ on a mounted filesystem. The clean recovery is to reflash `userdata` from the sa
 the first boot finish:
 
 ```sh
-fastboot flash userdata pmos-root-fs.img   # same run as the cache
+fastboot flash userdata pmos-root-fs.img   # same artifact as the cache
 ```
 
 If it keeps happening without power cuts, collect the storage-side evidence:
@@ -712,9 +720,10 @@ compositor offers no dmabuf, so a GPU client would have nothing to share buffers
 Whatever the screen does, run `sudo x6525-display-report` over SSH: it prints the DRM cards, panel and
 backlight state, GPU messages, the session's drop-ins and its journal in one go.
 
-Build, flash `cache` and `userdata` from the same run, and boot. On a working `simpledrm` the Phosh
-shell comes up on greetd; if phoc fails instead, SSH still works and its log says why - then go to
-3.2 (enable `sprd_drm`).
+For a first install, build and flash `cache` and `userdata` from the same run, and boot. Once a
+label-based rootfs is on the phone, later kernel/display changes need only a new `cache`. On a working
+`simpledrm` the Phosh shell comes up on greetd; if phoc fails instead, SSH still works and its log
+says why - then go to 3.2 (enable `sprd_drm`).
 
 What the image gives, and what it will not: greetd-phrog is itself Phosh-based, so the first screen
 is a Phosh-style login asking for `user` / `x6525pmos` with the on-screen keyboard. After that:

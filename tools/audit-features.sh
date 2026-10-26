@@ -180,8 +180,8 @@ feature "on-screen keyboard / UI service"
 # shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
 # plasma-mobile.service. All three have their own service-manager defaults,
 # so the Build PMOS rom job (ci.yml) pins them and its ui input picks which.
-need "rom.yml records a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
-need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
+need "the rom job records a known UI"            grep -Eq "inputs\.ui \|\| '(buffyboard|phosh|plasma-mobile)'" "$ROOT/.github/workflows/ci.yml"
+need "the rom job pins the service manager"      grep -q "'service_manager = systemd'" "$ROOT/.github/workflows/ci.yml"
 need "Build PMOS's rom job writes a ui line"     grep -Fq 'ui = ${{ inputs.ui' "$ROOT/.github/workflows/ci.yml"
 need "the ui input defaults to phosh"            grep -Fq "inputs.ui || 'phosh'" "$ROOT/.github/workflows/ci.yml"
 need "the ui input offers plasma-mobile"         grep -qE '^[[:space:]]*-[[:space:]]*plasma-mobile$' "$ROOT/.github/workflows/ci.yml"
@@ -269,6 +269,9 @@ need "U-Boot board device tree"                  test -f "$ROOT/uboot/dts/ums923
 need "deviceinfo builds the U-Boot boot image"   grep -q 'generate_bootimg="true"' "$DPKG/deviceinfo"
 need "deviceinfo builds the extlinux config"     grep -q 'generate_extlinux_config="true"' "$DPKG/deviceinfo"
 need "the u-boot package installs u-boot.bin"    grep -q 'share/u-boot/infinix-x6525' "$UPKG/APKBUILD"
+need "boot/root are found by label, not UUID"    test -f "$DPKG/boot-deploy-root-label.sh"
+need "the device package installs the label hook" grep -q 'boot-deploy/hooks/50-x6525-root-label' "$DPKG/APKBUILD"
+need "an old rootfs's fstab is migrated at boot"  grep -q 'hooks-cleanup/50-x6525-fstab-labels.sh' "$DPKG/APKBUILD"
 finish
 
 feature "cameras (rear S5K3L6, front OV8856)"
@@ -374,6 +377,11 @@ if [ -n "$IMAGE" ]; then
 		done
 		grep -q 'loglevel=7' "$TMP/extlinux.conf" || bad "the cmdline has no loglevel=7"
 		grep -q 'console=ttyS1' "$TMP/extlinux.conf" || bad "the cmdline has no console=ttyS1"
+		if grep -q 'pmos_root_uuid=' "$TMP/extlinux.conf"; then
+			bad "extlinux pins pmos_root_uuid: a cache-only flash stops at root"
+		else
+			ok "extlinux leaves root to the pmOS_root label (cache-only flash works)"
+		fi
 		ok "the boot filesystem holds what extlinux names, with loglevel and the UART console"
 
 		# the effective kernel config is the one in the boot filesystem
