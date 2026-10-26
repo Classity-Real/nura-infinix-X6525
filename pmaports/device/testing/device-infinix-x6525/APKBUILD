@@ -1,1 +1,52 @@
-# see next
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="Seuj09 <jeus110310@gmail.com>"
+pkgname=device-infinix-x6525
+pkgdesc="Infinix X6525"
+pkgver=1
+pkgrel=23
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	android-tools
+	bluez
+	firmware-infinix-x6525
+	iw
+	linux-postmarketos-unisoc-ums9230
+	mesa-vulkan-panfrost
+	mmc-utils
+	networkmanager-wifi
+	postmarketos-base
+	soc-unisoc-ums9230
+	u-boot-infinix-x6525
+	wireless-regdb
+	wpa_supplicant
+"
+makedepends="devicepkg-dev"
+source="
+	deviceinfo
+	kernel-cmdline.conf
+	modules-initfs
+	boot-deploy-root-label.sh
+	initfs-fstab-labels.sh
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+	fallocate -l 4k dummy-initramfs
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+	echo "INCOMPLETE RESTORE - see following commit" >&2
+	exit 1
+}
+
+sha512sums="
+43f28cd8c79d244762b3d79f7ca6737edccf25546d001300ef7c34f912581a20be376c1adf4cb5ea311633aecf9e8a493d2fee611aa5ffb9d33cb9c8d158dff9  deviceinfo
+13b1c3f56f29e9b16034f47550ca39ecaac1828012533f213c2144cd4a44d9c2bc27c6ec81b60ef31f14d42f7c80d109236c831a7c7c01743ce52c4223dcb59a  kernel-cmdline.conf
+c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
+feb8eea6ea7f832beb750851c41e8c1cab2fc80d5381c3b0dae210db75b9d2f9307d78ada3c669108c0bc4712f86fd6392e43551f1f17b22c19286e500bf0d49  boot-deploy-root-label.sh
+ef0db31b942f8a45f2bd1d5ba2f19670b2e857d36e0cae0ad09ae9fc3a5394ccfaf99a65fadb39698b9f717518243ac98916c8599466aa9e3c818318a2aeb913  initfs-fstab-labels.sh
+"
