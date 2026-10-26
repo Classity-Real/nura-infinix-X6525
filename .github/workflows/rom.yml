@@ -135,7 +135,12 @@ jobs:
           # sprd-drm card through KWIN_DRM_DEVICES drop-ins (panel backlight
           # and the 2x scale come from that driver). Phosh is still supported
           # by the device package's greetd drop-in if this is set back.
-          ui = plasma-mobile
+          # Switched back to phosh on 2026-10-27: Plasma Mobile's on-screen
+          # keyboard (Maliit / plasma-keyboard) misbehaved on this panel, and
+          # phosh brings phosh-osk-stub with the shell. Set this back to
+          # plasma-mobile to build the KDE session; the device package keeps
+          # drop-ins for both.
+          ui = phosh
           # Pin the init system: it must not change as a side effect of the UI
           # package's APKBUILD options. plasma-mobile supports systemd (its
           # -systemd subpackage and the systemd extra repo), and systemd is
