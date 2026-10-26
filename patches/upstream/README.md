@@ -31,6 +31,7 @@ to apply **in this order** to a clean checkout of it, producing byte-identical f
 | 23 | `drm/panel: td4160-hx: keep the stock 60 Hz mode preferred` | the ums9230 tree, later drm-misc with 4 and 19 |
 | 24 | `drm/panel: td4160-hx: fix post-command delays and power gpios` | the ums9230 tree, later drm-misc with 4, 19 and 23 |
 | 25 | `drm/sprd: enable LP cmd tx and clean boot handoff` | the ums9230 tree, later drm-misc |
+| 27 | `Bluetooth: btsprdsipc: reject a pskey config shorter than the BD address offset` | the ums9230 tree; hardens patch 13's neighbour code, small enough to send with it |
 
 Patch 3 adds the touch node together with the rest of the board, and 5 and 6 document and drive it;
 14 and 15 add the rear camera, which patch 3 does not describe, and 20 adds the front one, a
