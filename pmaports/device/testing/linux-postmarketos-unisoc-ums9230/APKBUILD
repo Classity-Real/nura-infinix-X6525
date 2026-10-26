@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=23
+pkgrel=24
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -68,6 +68,7 @@ source="
 	0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
 	0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
 	0026-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+	0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 "
 builddir="$srcdir/linux"
 
@@ -125,4 +126,5 @@ dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc
 6a5ce154560745a1764ea954f17abde9fa03c6019719da0ee0e91820cf37c45bb9009851de738a9567c85577c1e378ec879bf62f2deaab9cc53cf8cb3371ede1  0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
 5e827f6204b700725d2fcd4b201d27f3fc8fa421dea9b2935181dc8c4c147dc928e7acbc396bba175551e8c316f4d689acd431a59695466470185d7bc887db05  0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
 1886e7d291d7beb115000d315649f1352ecdce472fb268da824dd39bf0a85511dd463d371266157195749020f9fb1a850c3f6b706cc5e6f4d8f1992d1a8abad6  0026-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+2225ccd1488e9412ca7c9464002d726cc73fe4acda228bef6fb9cd63eed320ebdc8d12720457886cd35b4e1b737607db388b691bb24649e1866219ddcfc90732  0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 "
