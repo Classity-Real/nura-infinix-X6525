@@ -116,7 +116,7 @@ index 47399030b..25022174f 100644
 +			spin_unlock_irqrestore(&sbuf->buffer_sdev_lock, flags);
 +			/* rpmsg_register_device calls put_device on error */
 +			continue;
- 		}
++		}
  	}
  
  	ret = sipc_sbuf_create_ctrldev(sbuf);
