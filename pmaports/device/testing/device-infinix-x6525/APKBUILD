@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=28
+pkgrel=29
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -368,6 +368,17 @@ EOF
 	install -Dm755 /dev/stdin "$pkgdir"/usr/libexec/x6525-wait-drm <<'EOF'
 #!/bin/sh
 link=/dev/dri/x6525-primary
+# Panfrost is a module; make sure it is loaded and its render node exists
+# before the compositor starts, or wlroots/KWin fall back to software
+# rendering (the same coldplug race the display card had). Never fatal.
+/sbin/modprobe panfrost 2>/dev/null
+r=0
+while [ "$r" -lt 15 ] && [ ! -c /dev/dri/renderD128 ]; do
+	sleep 1
+	r=$((r + 1))
+done
+[ -c /dev/dri/renderD128 ] ||
+	echo "x6525-wait-drm: no /dev/dri/renderD128 after 15 s" >&2
 i=0
 while [ "$i" -lt 40 ]; do
 	for c in /sys/class/drm/card[0-9]*; do
