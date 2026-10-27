@@ -111,14 +111,18 @@ jobs:
             sudo kpartx -dv /dev/loop0 2>/dev/null || true
             sudo losetup -D 2>/dev/null || true
             sudo rm -f /dev/loop0p1 /dev/loop0p2 /dev/installp1 /dev/installp2 2>/dev/null || true
-            if pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports --details-to-stdout install --filesystem ext4 --sdcard /dev/install; then
+            if pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y --details-to-stdout \
+                install --password x6525pmos; then
+              sudo kill $(cat /tmp/pmos-loop-daemon.pid) 2>/dev/null || true
               echo "install ok on attempt $attempt"
-              break
+              exit 0
             fi
             echo "attempt $attempt failed"
-            [ "$attempt" = 2 ] && { echo "::error::the build failed twice"; exit 1; }
-            sleep 2
+            pmbootstrap -c /tmp/pmb.cfg --aports /tmp/pmaports -y zap -p 2>/dev/null || true
           done
+          sudo kill $(cat /tmp/pmos-loop-daemon.pid) 2>/dev/null || true
+          echo "::error::the build failed twice"
+          exit 1
 
       - name: Export what to flash
         run: |
