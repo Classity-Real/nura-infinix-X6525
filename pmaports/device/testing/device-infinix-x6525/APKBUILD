@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=29
+pkgrel=30
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -101,6 +101,20 @@ package() {
 	mkdir -p "$pkgdir"/usr/lib/modules-load.d
 	printf '%s\n' sprd_wcn sc23xx_wlan sc23xx_wlan_sipc btsprdsipc \
 		> "$pkgdir"/usr/lib/modules-load.d/x6525-wifi.conf
+
+	# Wi-Fi that works and then goes silent until a reconnect is the classic
+	# power-save pattern on this kind of vendor cfg80211 driver (set_power_mgmt
+	# is forwarded to the firmware, which can stop receiving between beacons).
+	# Turn NetworkManager's power save off (2 = disable) and keep scans on the
+	# real MAC so the AP does not see a new client on every scan. Delete the
+	# file to go back to the defaults.
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-wifi.conf <<'EOF'
+[connection]
+wifi.powersave=2
+
+[device]
+wifi.scan-rand-mac-address=no
+EOF
 
 	# Start BlueZ on boot. The image's 90-base.preset enables bluetooth.service
 	# and so does 90-infinix-x6525.preset below; this symlink is belt and
