@@ -34,7 +34,6 @@ source="
 	nm-x6525-wifi.conf
 	nm-x6525-usb-never-default.conf
 	modules-x6525-camera.conf
-	x6525-package-extra.sh
 "
 
 build() {
@@ -57,23 +56,26 @@ package() {
 	echo "/lib/firmware/postmarketos/sprd/hdl_firmware_01.img" \
 		> "$pkgdir"/usr/share/mkinitfs/files/30-device-infinix-x6525.files
 
+	# Wi-Fi / BT modules
 	mkdir -p "$pkgdir"/usr/lib/modules-load.d
 	printf '%s\n' sprd_wcn sc23xx_wlan sc23xx_wlan_sipc btsprdsipc \
 		> "$pkgdir"/usr/lib/modules-load.d/x6525-wifi.conf
 
+	# Wi-Fi: disable powersave (DNS works, sites hang otherwise); USB must not
+	# steal the default route when wlan0 is up.
 	install -Dm644 "$srcdir"/nm-x6525-wifi.conf \
 		"$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-wifi.conf
 	install -Dm644 "$srcdir"/nm-x6525-usb-never-default.conf \
 		"$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-usb-never-default.conf
+
+	# Camera sensors (DT + drivers; ISP/userspace still partial)
 	install -Dm644 "$srcdir"/modules-x6525-camera.conf \
 		"$pkgdir"/usr/lib/modules-load.d/x6525-camera.conf
 
+	# BlueZ on boot
 	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
 	ln -s /usr/lib/systemd/system/bluetooth.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/bluetooth.service
-
-	# Modem, pmsys, MAC, eMMC, display session (full body)
-	. "$srcdir"/x6525-package-extra.sh
 }
 
 sha512sums="
@@ -85,5 +87,4 @@ ef0db31b942f8a45f2bd1d5ba2f19670b2e857d36e0cae0ad09ae9fc3a5394ccfaf99a65fadb3969
 caf3dc4c21f082eb5306c6efa65bbf02f1e9a7e0b05e31ecda5ad2494fb429da1a25fc2b9c1a50329889eff7032837cce7ddc26c32f6ceb08ba3643eaaef77ae  nm-x6525-wifi.conf
 71848e2280b8f9b3edebe654bfca6bc89fd20bb6b604acbc211ca67d08ffe903e26f9073fe7108bf88d5339eb40eefe88bc562b5a39aafcac41618ef7e73f8e9  nm-x6525-usb-never-default.conf
 43cab77dd3d969aca1e0a022de9df61e5eb5770e8010530f1c47105265d3acf95a89f218c5578966449312e2303852d3ac04da2dc936aacbb8d1f7bbad6459cd  modules-x6525-camera.conf
-ecec2a755bad21ad9160df0b30bea609bbe3312e3bb8396547a5de023678d9813922c2bba55a4dcc0ad007219cb88178b04a832fe109e0813650efac976997b3  x6525-package-extra.sh
 "
