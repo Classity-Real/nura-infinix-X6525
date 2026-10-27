@@ -224,8 +224,9 @@ the card by `DEVPATH`.
 Feature-wise the current build has 23 kernel patches against 12 then. Newer than the Phosh build:
 the rear S5K3L6 and front OV8856 drivers and nodes, the Bluetooth config blobs and the prodnv MAC
 preboot, the GPU DVFS table and GPU thermal cooling, the pmsys/GNSS/modem extraction services, and
-the HS200 opt-in. The current dmesg's `btsprdsipc ... failed to create endpoint (-12)` is a separate
-Bluetooth issue, not something the Phosh build had.
+the HS200 opt-in. The dmesg's `btsprdsipc ... failed to create endpoint (-12)` was a race
+where `sprd_sipc_sbuf.c` only published `sbuf->buffers[rx_id].sdev` after `rpmsg_register_device()`,
+failing synchronous driver probe; resolved by patches 0031 and 0032.
 
 # Public forks (what pmaports can fetch)
 
