@@ -345,20 +345,6 @@
 		output-low;
 		line-name = "charger_en";
 	};
-
-	/*
-	 * The front OV8856's power-down pin. The mainline ov8856 driver
-	 * knows reset but not power-down, so nothing would drive this line;
-	 * the vendor stack pulls it low to bring the sensor out of standby.
-	 * Hold it low for the lifetime of the system - the rails are still
-	 * switched by the driver, so this only keeps the pin from floating.
-	 */
-	ov8856-pwdn-hog {
-		gpio-hog;
-		gpios = <46 GPIO_ACTIVE_HIGH>;
-		output-low;
-		line-name = "ov8856_pwdn";
-	};
 };
 
 &i2c4 {
@@ -575,8 +561,7 @@
  * (sprd,phyid 2, so the two-lane M port). Its vendor library
  * (libsensor_ov8856_front.so) runs the part at 24 MHz, but the mainline
  * driver only has register tables for 19.2 MHz, and CLK_SENSOR0 can supply
- * either, so the node asks for 19.2 MHz. The mainline driver has no
- * power-down handling at all, so the pin is held low by a gpio-hog below.
+ * either, so the node asks for 19.2 MHz.
  * The sensor-main2 socket is the decorative second rear lens
  * ("fakeserial" in the HAL).
  */
@@ -590,12 +575,14 @@
 		compatible = "ovti,ov8856";
 		reg = <0x10>;
 		reset-gpios = <&ap_gpio 44 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&ap_gpio 46 GPIO_ACTIVE_HIGH>;
 
 		clocks = <&mm_gate CLK_MM_SENSOR0_EB>;
 		clock-names = "xvclk";
 		clock-frequency = <19200000>;
 		assigned-clocks = <&mm_clk CLK_SENSOR0>;
 		assigned-clock-parents = <&pll1 CLK_TWPLL_96M>;
+		assigned-clock-rates = <19200000>;
 
 		dovdd-supply = <&vddcamio>;
 		avdd-supply = <&vddcama0>;
@@ -800,11 +787,11 @@
 /*
  * GPU DVFS. The frequencies and voltages are the stock kernel's own table for
  * this GPU (operating-points in its gpu@23100000 node): 384 MHz @ 0.70 V,
- * 512 MHz and 614.4 MHz @ 0.75 V, 768 MHz @ 0.80 V. The stock table also has
- * 850 MHz @ 0.80 V, which the mainline GPU clock has no fixed parent for - it
- * would need the GPU PLL to be programmed - so it is left out until that path
- * is tested. Without an OPP table Panfrost runs at whatever rate the
- * bootloader left and never scales.
+ * 512 MHz and 614.4 MHz @ 0.75 V. The stock table also has 768 MHz and
+ * 850 MHz, but the stock driver disables both on T606 (the part is capped at
+ * GPLL = 650 MHz), so they are left out; 650 MHz @ 0.80 V needs GPLL to be
+ * programmed and is left out until that path is tested. Without an OPP table
+ * Panfrost runs at whatever rate the bootloader left and never scales.
  */
 / {
 	gpu_opp_table: opp-table {
@@ -824,11 +811,6 @@
 			opp-hz = /bits/ 64 <614400000>;
 			opp-microvolt = <750000>;
 		};
-
-		opp-768000000 {
-			opp-hz = /bits/ 64 <768000000>;
-			opp-microvolt = <800000>;
-		};
 	};
 };
 
@@ -836,6 +818,9 @@
 	mali-supply = <&vddgpu>;
 	operating-points-v2 = <&gpu_opp_table>;
 	#cooling-cells = <2>;
+	/* the memory clock otherwise stays on its 26 MHz reset parent */
+	assigned-clocks = <&gpu_clk CLK_GPU_MEM>;
+	assigned-clock-parents = <&pll1 CLK_TWPLL_512M>;
 	status = "okay";
 };
 
