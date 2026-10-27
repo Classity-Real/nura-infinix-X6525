@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=26
+pkgrel=29
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -358,6 +358,49 @@ enable x6525-modem-nv.service
 enable x6525-pmsys.service
 EOF
 
+	# Create /dev/dri/x6525-primary for the compositor, waiting for the sprd
+	# display card to appear (up to 40 s). The udev rule further down has been
+	# seen to miss the boot-time add event for this card, and a re-triggered
+	# `udevadm wait` was reported not to rescue it on hardware, so this does not
+	# depend on udev at all: it finds the card through sysfs (its parent is
+	# the display-subsystem platform device) and links to its /dev node.
+	# Exits 0 either way so a missing card never blocks the session unit.
+	install -Dm755 /dev/stdin "$pkgdir"/usr/libexec/x6525-wait-drm <<'EOF'
+#!/bin/sh
+link=/dev/dri/x6525-primary
+# Panfrost is a module; make sure it is loaded and its render node exists
+# before the compositor starts, or wlroots/KWin fall back to software
+# rendering (the same coldplug race the display card had). Never fatal.
+/sbin/modprobe panfrost 2>/dev/null
+r=0
+while [ "$r" -lt 15 ] && [ ! -c /dev/dri/renderD128 ]; do
+	sleep 1
+	r=$((r + 1))
+done
+[ -c /dev/dri/renderD128 ] ||
+	echo "x6525-wait-drm: no /dev/dri/renderD128 after 15 s" >&2
+i=0
+while [ "$i" -lt 40 ]; do
+	for c in /sys/class/drm/card[0-9]*; do
+		[ -e "$c" ] || continue
+		case "$(readlink -f "$c")" in
+		*/display-subsystem/drm/card[0-9]*)
+			n=${c##*/}
+			if [ -c "/dev/dri/$n" ]; then
+				ln -sf "/dev/dri/$n" "$link"
+				echo "x6525-wait-drm: $link -> /dev/dri/$n" >&2
+				exit 0
+			fi
+			;;
+		esac
+	done
+	sleep 1
+	i=$((i + 1))
+done
+echo "x6525-wait-drm: no sprd display card after 40 s" >&2
+exit 0
+EOF
+
 	# For the phosh build (the device package serves both UIs): point the
 	# session at the real panel (sprd-drm) instead of the bootloader's
 	# simpledrm. Only the panel driver registers the DCS backlight and reports
@@ -393,13 +436,33 @@ EOF
 Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
 # The udev rule below sometimes misses the boot-time add event for the sprd
 # card, so KWin started with no DRM device and the panel stayed on the last
-# console frame (observed 2026-10-25). Re-fire the event and wait for the
-# symlink. "-" ignores failure; "+" runs as root even if the unit runs as user.
-ExecStartPre=-+/usr/bin/udevadm trigger --action=add --subsystem-match=drm --sysname-match=card*
-ExecStartPre=-+/usr/bin/udevadm settle --timeout=10
-ExecStartPre=-+/usr/bin/udevadm wait --timeout=10 /dev/dri/x6525-primary
+# console frame (observed 2026-10-25). x6525-wait-drm waits for the card and
+# creates the symlink itself, without relying on udev. "-" ignores failure; "+"
+# runs as root even if the unit runs as user.
+ExecStartPre=-+/usr/libexec/x6525-wait-drm
 EOF
 	done
+
+	# GPU experiment (2026-10-27), kept in its own drop-in so it can be removed
+	# alone (`sudo rm /etc/systemd/system/greetd.service.d/30-x6525-gpu.conf`).
+	# The panel is on sprd-drm (card1, no render node) and the GPU is Panfrost
+	# (card0 / renderD128), so wlroots has to be told, or be able to work out,
+	# which device renders. WLR_RENDER_DRM_DEVICE names it: phoc then renders
+	# on Panfrost and hands buffers to the sprd card. The renderer itself stays
+	# unpinned, so if this fails wlroots still falls back to pixman rather than
+	# giving a black screen. Check which one it chose with:
+	#   journalctl -b -u greetd | grep -iE 'renderer|gles|pixman|egl'
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/30-x6525-gpu.conf <<'EOF'
+[Service]
+Environment=WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128
+EOF
+
+	# Same wait for the phosh session: greetd starts phoc with
+	# WLR_DRM_DEVICES=/dev/dri/x6525-primary, so it needs the symlink too.
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/20-x6525-wait-drm.conf <<'EOF'
+[Service]
+ExecStartPre=-+/usr/libexec/x6525-wait-drm
+EOF
 
 	# Name the sprd-drm card so the session above can point at it without
 	# guessing card0/card1. If sprd_drm failed to probe, no symlink appears,
