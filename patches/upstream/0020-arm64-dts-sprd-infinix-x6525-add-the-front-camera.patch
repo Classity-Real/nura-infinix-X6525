@@ -48,7 +48,7 @@ index 1528ac6f7..69e0a41be 100644
  };
  
  &i2c4 {
-@@ -555,10 +569,52 @@ &sc2730_fgu {
+@@ -555,10 +569,53 @@ &sc2730_fgu {
   * library (libsensor_s5k3l6.so, "s5k3l6_v1"); it runs the part at a 24 MHz
   * MCLK with four lanes and the three modes below.
   *
@@ -105,7 +105,7 @@ index 1528ac6f7..69e0a41be 100644
  &i2c1 {
  	status = "okay";
  	clock-frequency = <400000>;
-@@ -611,6 +667,16 @@ csi_4lane_ep: endpoint {
+@@ -611,6 +668,16 @@ csi_4lane_ep: endpoint {
  				remote-endpoint = <&s5k3l6_ep>;
  			};
  		};
