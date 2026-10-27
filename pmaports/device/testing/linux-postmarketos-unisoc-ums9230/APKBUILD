@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=19
+pkgrel=20
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -55,6 +55,7 @@ source="
 	0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 	0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 	0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
+	0028-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 	0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 	0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 	0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
@@ -113,6 +114,7 @@ c8d4c9191516a0bff476855d8e63dec3fb284142ee27f766d3440c0cc8d4703530dd43680a3d9114
 debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d40677c8992e35bc875acdce9d0afb363f09886830d9925ae5888  0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 775bdfac6606e64ac178376a3e056f53a75e8bb95dcbe2cf0cb1c72164e9a3c007b795185961a3cc871c6a6e713ec785c74a6d2c5d76017f8b3cd1207ed369d4  0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 2ade1accb8ed2725ed05bcc45eef32c34e7b57f456bd0b53c9ed86bfc9b613b2c24175009f12e981bcfa3b9f6a6b3972ff3cb916055e1ed30255ae33c7e92bae  0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
+2225ccd1488e9412ca7c9464002d726cc73fe4acda228bef6fb9cd63eed320ebdc8d12720457886cd35b4e1b737607db388b691bb24649e1866219ddcfc90732  0028-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 4f4166cba2d1a4c645358252fe167e51b445a1d50ccaef2078ee70bef21160a1e08adb200e90e7cb712de3f393045dd537e41b64dc9f24501e86b1a3f5bf830c  0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 4ea9574d3a164d430a5aeef6d588a71f2b7fac3b808096dfb4154cba9a54268794d17b35116dd4e587ce81eb5b94ac7340285d37a0ca44c118b22e58752ef0a0  0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 171d4e0b735fc83643761bf2419b3b7e1cdedab5327ceb837a92bbc7bc69f467cb2448085fdaefb852596d3cc82c3a3645dcc86e876f1a568a810f59a73b1333  0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
