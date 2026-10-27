@@ -3,12 +3,13 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=30
+pkgrel=31
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
 depends="
+	alsa-ucm-conf-unisoc-ums9230
 	android-tools
 	bluez
 	firmware-infinix-x6525
@@ -488,6 +489,386 @@ EOF
 	# that path instead.
 	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-drm-primary.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DEVPATH=="*/display-subsystem/drm/card[0-9]*", SYMLINK+="dri/x6525-primary"
+EOF
+
+	# ALSA UCM configuration for infinix-x6525.
+	# The sound card model in the device tree is "infinix-x6525", driven by
+	# sprd_vbc_v4, ums9230_card and sc2730 codec. Without UCM profiles, PipeWire
+	# and WirePlumber cannot configure the DPCM routes (FE_FAST_PLAYBACK, TX0 SEL,
+	# Headphone Playback Switch, and Speaker Switch on ap_gpio 113).
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/infinix-x6525
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/ums9230-card
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/infinix-x6525.conf <<'EOF'
+Syntax 7
+
+Comment "Infinix Smart 8 (X6525)"
+
+Include.pcm_split.File "/common/pcm/split.conf"
+
+Macro [
+	{
+		SplitPCM {
+			Name "ums9230_mono_in"
+			Direction Capture
+			Channels 1
+			HWChannels 2
+			HWChannelPos0 MONO
+			HWChannelPos1 MONO
+		}
+	}
+]
+
+SectionUseCase."HiFi" {
+	File "/Unisoc/ums9230/infinix-x6525/HiFi.conf"
+	Comment "Default"
+}
+
+SectionUseCase."Voice Call" {
+	File "/Unisoc/ums9230/infinix-x6525/VoiceCall.conf"
+	Comment "Voice call"
+}
+
+SectionDefaults [
+	cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	cset "name='FE_CAPTURE_DSP RX Switch' off"
+	cset "name='FE_VOICE TX Switch' off"
+	cset "name='FE_VOICE RX Switch' off"
+]
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/HiFi.conf <<'EOF'
+SectionVerb {
+	EnableSequence [
+		cset "name='TX0 SEL' IIS0"
+		cset "name='RX0 SEL' IIS1"
+
+		cset "name='FE_FAST_PLAYBACK TX Switch' on"
+		cset "name='FE_CAPTURE_DSP RX Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='FE_CAPTURE_DSP RX Switch' off"
+		cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	]
+}
+
+SectionDevice."Headphones" {
+	Comment "Headphones playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' NOT_MIX"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 300
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Speaker" {
+	Comment "Speaker playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Headphones"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+		cset "name='Speaker Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+		cset "name='Speaker Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 200
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Earpiece" {
+	Comment "Earpiece playback"
+
+	ConflictingDevices [
+		"Headphones"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Earpiece Playback Switch' on"
+		cset "name='Earpiece Volume' 11"
+	]
+
+	DisableSequence [
+		cset "name='Earpiece Volume' 0"
+		cset "name='Earpiece Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 100
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Mic" {
+	Comment "Microphone capture"
+
+	ConflictingDevices [
+		"Headset"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer MIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer MIC' off"
+	]
+
+	Value {
+		CapturePriority 200
+	}
+
+	Macro.pcm_split.SplitPCMDevice {
+		Name "ums9230_mono_in"
+		Device 1
+		Direction Capture
+		HWChannels 2
+		Channels 1
+		Channel0 0
+		ChannelPos0 MONO
+	}
+}
+
+SectionDevice."Headset" {
+	Comment "Headset capture"
+
+	ConflictingDevices [
+		"Mic"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer HPMIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer HPMIC' off"
+	]
+
+	Value {
+		CapturePriority 300
+	}
+
+	Macro.pcm_split.SplitPCMDevice {
+		Name "ums9230_mono_in"
+		Device 1
+		Direction Capture
+		HWChannels 2
+		Channels 1
+		Channel0 0
+		ChannelPos0 MONO
+	}
+}
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/VoiceCall.conf <<'EOF'
+SectionVerb {
+	EnableSequence [
+		cset "name='TX0 SEL' IIS0"
+		cset "name='RX0 SEL' IIS1"
+
+		cset "name='TX1 SEL' IIS0"
+		cset "name='RX2 SEL' IIS1"
+
+		cset "name='FE_FAST_PLAYBACK TX Switch' on"
+		cset "name='FE_VOICE TX Switch' on"
+		cset "name='FE_VOICE RX Switch' on"
+
+		cset "name='Voice Record Downlink' on"
+		cset "name='Voice Record Uplink' on"
+	]
+
+	DisableSequence [
+		cset "name='Voice Record Downlink' off"
+		cset "name='Voice Record Uplink' off"
+
+		cset "name='FE_VOICE TX Switch' off"
+		cset "name='FE_VOICE RX Switch' off"
+		cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	]
+
+	Value {
+		CaptureRate 8000
+	}
+}
+
+SectionDevice."Headphones" {
+	Comment "Headphones playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' NOT_MIX"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 300
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Speaker" {
+	Comment "Speaker playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Headphones"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+		cset "name='Speaker Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+		cset "name='Speaker Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 200
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Earpiece" {
+	Comment "Earpiece playback"
+
+	ConflictingDevices [
+		"Headphones"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Earpiece Playback Switch' on"
+		cset "name='Earpiece Volume' 11"
+	]
+
+	DisableSequence [
+		cset "name='Earpiece Volume' 0"
+		cset "name='Earpiece Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 100
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Mic" {
+	Comment "Microphone capture"
+
+	ConflictingDevices [
+		"Headset"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer MIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer MIC' off"
+	]
+
+	Value {
+		CapturePriority 200
+		CaptureChannels 1
+		CapturePCM "hw:${CardId},3"
+	}
+}
+
+SectionDevice."Headset" {
+	Comment "Headset capture"
+
+	ConflictingDevices [
+		"Mic"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer HPMIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer HPMIC' off"
+	]
+
+	Value {
+		CapturePriority 300
+		CaptureChannels 1
+		CapturePCM "hw:${CardId},3"
+	}
+}
+EOF
+
+	# UCM conf.d symlinks for card model and driver lookup
+	ln -sf ../../Unisoc/ums9230/infinix-x6525/infinix-x6525.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/conf.d/infinix-x6525/infinix-x6525.conf
+	ln -sf ../../Unisoc/ums9230/infinix-x6525/infinix-x6525.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/conf.d/ums9230-card/ums9230-card.conf
+
+	# PulseAudio daemon sample rate constraint (Unisoc DSP hardware requires 48 kHz / 8 kHz)
+	mkdir -p "$pkgdir"/etc/pulse/daemon.conf.d
+	install -Dm644 /dev/stdin "$pkgdir"/etc/pulse/daemon.conf.d/89-infinix-x6525.conf <<'EOF'
+default-sample-rate=48000
+alternate-sample-rate=8000
 EOF
 }
 
