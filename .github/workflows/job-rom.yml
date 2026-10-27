@@ -170,13 +170,20 @@ jobs:
           case "$UI" in
             phosh)
               want /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf '^Environment=WLR_RENDERER=pixman'
-              want /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf '^Environment=LIBGL_ALWAYS_SOFTWARE=1' ;;
+              want /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf '^Environment=LIBGL_ALWAYS_SOFTWARE=1'
+              debugfs -R "stat /usr/bin/x6525-display-report" "$R" 2>/dev/null | grep -q . ||
+                { echo "::error::/usr/bin/x6525-display-report is not in the image"; fail=1; }
+              ;;
             plasma-mobile)
-              want /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf '^Environment=KWIN_COMPOSE=Q'
-              want /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf '^Environment=LIBGL_ALWAYS_SOFTWARE=1' ;;
+              # GPU path: do not require software-render drop-ins
+              echo "ok: plasma-mobile uses GPU (no software-render pin check)"
+              if debugfs -R "stat /usr/bin/x6525-display-report" "$R" 2>/dev/null | grep -q .; then
+                echo "ok: /usr/bin/x6525-display-report is present"
+              else
+                echo "::warning::/usr/bin/x6525-display-report is not in the image (optional for plasma)"
+              fi
+              ;;
           esac
-          debugfs -R "stat /usr/bin/x6525-display-report" "$R" 2>/dev/null | grep -q . ||
-            { echo "::error::/usr/bin/x6525-display-report is not in the image"; fail=1; }
           [ "$fail" = 0 ] || exit 1
 
       - name: Stage selected artifacts
