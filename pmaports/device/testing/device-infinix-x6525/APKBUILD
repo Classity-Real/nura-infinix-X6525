@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=32
+pkgrel=33
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -861,17 +861,24 @@ SectionDevice."Headset" {
 }
 EOF
 
-	# UCM conf.d symlinks for card model and driver lookup
+	# UCM conf.d symlink for card model lookup (model = "infinix-x6525" in DTS)
 	ln -sf ../../Unisoc/ums9230/infinix-x6525/infinix-x6525.conf \
 		"$pkgdir"/usr/share/alsa/ucm2/conf.d/infinix-x6525/infinix-x6525.conf
-	ln -sf ../../Unisoc/ums9230/infinix-x6525/infinix-x6525.conf \
-		"$pkgdir"/usr/share/alsa/ucm2/conf.d/ums9230-card/ums9230-card.conf
 
-	# PulseAudio daemon sample rate constraint (Unisoc DSP hardware requires 48 kHz / 8 kHz)
+	# PulseAudio daemon sample rate constraint
 	mkdir -p "$pkgdir"/etc/pulse/daemon.conf.d
 	install -Dm644 /dev/stdin "$pkgdir"/etc/pulse/daemon.conf.d/89-infinix-x6525.conf <<'EOF'
 default-sample-rate=48000
-alternate-sample-rate=8000
+alternate-sample-rate=44100
+EOF
+
+	# PipeWire sample rate configuration
+	mkdir -p "$pkgdir"/usr/share/pipewire/pipewire.conf.d
+	install -Dm644 /dev/stdin "$pkgdir"/usr/share/pipewire/pipewire.conf.d/89-infinix-x6525.conf <<'EOF'
+context.properties = {
+    default.clock.rate = 48000
+    default.clock.allowed-rates = [ 48000 44100 8000 ]
+}
 EOF
 
 	# Megapixels camera configuration
