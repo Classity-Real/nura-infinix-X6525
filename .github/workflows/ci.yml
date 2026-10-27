@@ -1,1 +1,28 @@
-PLACEHOLDER_CI
+name: Build PMOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      ui:
+        description: UI to build
+        required: false
+        default: phosh
+      rom_only:
+        description: Only ROM job
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Workflow was wiped by a placeholder push
+        run: |
+          echo "::error::ci.yml was replaced with PLACEHOLDER_CI. Restore from commit 8e3064d1"
+          echo "git checkout 8e3064d143a2139b1c4cb8307d9b69b7bbc080ad -- .github/workflows/ci.yml"
+          echo "git checkout 8e3064d143a2139b1c4cb8307d9b69b7bbc080ad -- pmaports/device/testing/device-infinix-x6525/APKBUILD"
+          echo "git checkout 8e3064d143a2139b1c4cb8307d9b69b7bbc080ad -- tools/audit-features.sh"
+          exit 1
