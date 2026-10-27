@@ -1,0 +1,57 @@
+From 004c704fb0237a83f500814137b31b77278ec1c9 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Mon, 26 Oct 2026 18:04:45 +0800
+Subject: [PATCH] Bluetooth: btsprdsipc: reject a pskey config shorter than the
+ BD address offset
+
+set_bdaddr() copies the BD address into the pskey config at a fixed
+offset of 20 bytes, but the blob comes from firmware and is only
+checked for being non-empty. A short or truncated bt_config_pskey.bin
+would make that memcpy() write past the devm_kmemdup() allocation.
+Refuse blobs that cannot hold the address.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ drivers/bluetooth/btsprdsipc.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
+index 35278e6..50b1489 100644
+--- a/drivers/bluetooth/btsprdsipc.c
++++ b/drivers/bluetooth/btsprdsipc.c
+@@ -17,6 +17,9 @@
+ 
+ #include "hci_uart.h"
+ 
++/* Offset of the BD address inside the pskey config blob */
++#define BTSPRDSIPC_PSKEY_BDADDR_OFF	20
++
+ struct btsprdsipc {
+ 	struct hci_dev *hdev;
+ 	struct hci_uart hu;
+@@ -112,7 +115,7 @@ static int btsprdsipc_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
+ 	 * controller in order to actually initialize the BDADDR, so all
+ 	 * initialization is done below and not in setup().
+ 	 */
+-	memcpy(bts->pskey_cfg + 20, bdaddr, 6);
++	memcpy(bts->pskey_cfg + BTSPRDSIPC_PSKEY_BDADDR_OFF, bdaddr, sizeof(*bdaddr));
+ 	skb = __hci_cmd_sync(hdev, 0xfca0, bts->pskey_cfg_len, bts->pskey_cfg,
+ 			     HCI_INIT_TIMEOUT);
+ 	if (IS_ERR(skb))
+@@ -161,6 +164,14 @@ static int btsprdsipc_probe(struct rpmsg_device *rpdev)
+ 		return ret;
+ 	}
+ 
++	/* set_bdaddr() patches the BD address in at offset 20 */
++	if (fw->size < BTSPRDSIPC_PSKEY_BDADDR_OFF + sizeof(bdaddr_t)) {
++		dev_err(&rpdev->dev, "pskey config is too short (%zu bytes)\n",
++			fw->size);
++		release_firmware(fw);
++		return -EINVAL;
++	}
++
+ 	bts->pskey_cfg_len = fw->size;
+ 	bts->pskey_cfg = devm_kmemdup(&rpdev->dev, fw->data, fw->size, GFP_KERNEL);
+ 	release_firmware(fw);
+-- 
+2.43.0
