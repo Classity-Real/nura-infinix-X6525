@@ -81,6 +81,7 @@ source="
 	nm-x6525-wifi.conf
 	nm-x6525-usb-never-default.conf
 	modules-x6525-camera.conf
+	x6525-package-extra.sh
 "
 
 build() {
@@ -134,3 +135,17 @@ package() {
 	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
 	ln -s /usr/lib/systemd/system/bluetooth.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/bluetooth.service
+	# Modem, pmsys, MAC, eMMC, display session, etc.
+	. "$srcdir"/x6525-package-extra.sh
+}
+
+sha512sums="
+43f28cd8c79d244762b3d79f7ca6737edccf25546d001300ef7c34f912581a20be376c1adf4cb5ea311633aecf9e8a493d2fee611aa5ffb9d33cb9c8d158dff9  deviceinfo
+13b1c3f56f29e9b16034f47550ca39ecaac1828012533f213c2144cd4a44d9c2bc27c6ec81b60ef31f14d42f7c80d109236c831a7c7c01743ce52c4223dcb59a  kernel-cmdline.conf
+c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
+feb8eea6ea7f832beb750851c41e8c1cab2fc80d5381c3b0dae210db75b9d2f9307d78ada3c669108c0bc4712f86fd6392e43551f1f17b22c19286e500bf0d49  boot-deploy-root-label.sh
+ef0db31b942f8a45f2bd1d5ba2f19670b2e857d36e0cae0ad09ae9fc3a5394ccfaf99a65fadb39698b9f717518243ac98916c8599466aa9e3c818318a2aeb913  initfs-fstab-labels.sh
+caf3dc4c21f082eb5306c6efa65bbf02f1e9a7e0b05e31ecda5ad2494fb429da1a25fc2b9c1a50329889eff7032837cce7ddc26c32f6ceb08ba3643eaaef77ae  nm-x6525-wifi.conf
+71848e2280b8f9b3edebe654bfca6bc89fd20bb6b604acbc211ca67d08ffe903e26f9073fe7108bf88d5339eb40eefe88bc562b5a39aafcac41618ef7e73f8e9  nm-x6525-usb-never-default.conf
+43cab77dd3d969aca1e0a022de9df61e5eb5770e8010530f1c47105265d3acf95a89f218c5578966449312e2303852d3ac04da2dc936aacbb8d1f7bbad6459cd  modules-x6525-camera.conf
+"
