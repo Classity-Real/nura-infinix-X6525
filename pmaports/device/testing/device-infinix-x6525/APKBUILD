@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=33
+pkgrel=34
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -291,6 +291,67 @@ EOF
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/bin/x6525-wlan-mac %k"
 EOF
 
+	# Ensure persistent MACs on prodnv partition for U-Boot preboot loader
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-prodnv-mac <<'EOF'
+#!/bin/sh
+# Infinix X6525: ensure btmac.txt and wifimac.txt exist on the prodnv partition
+# so U-Boot will load them and supply stable MACs in the device tree.
+set -eu
+
+prodnv=/dev/disk/by-partlabel/prodnv
+[ -b "$prodnv" ] || exit 0
+
+mkdir -p /var/lib/x6525
+
+# Generate persistent MACs in /var/lib/x6525 if not already present
+if [ ! -s /var/lib/x6525/wlan-mac ]; then
+	od -An -N5 -tx1 /dev/urandom | awk '{printf "02:%s:%s:%s:%s:%s\n", $1,$2,$3,$4,$5}' > /var/lib/x6525/wlan-mac
+fi
+if [ ! -s /var/lib/x6525/bt-mac ]; then
+	od -An -N5 -tx1 /dev/urandom | awk '{printf "02:%s:%s:%s:%s:%s\n", $1,$2,$3,$4,$5}' > /var/lib/x6525/bt-mac
+fi
+
+mnt=$(mktemp -d)
+if mount -t ext4 -o rw "$prodnv" "$mnt" 2>/dev/null || mount "$prodnv" "$mnt" 2>/dev/null; then
+	if [ ! -s "$mnt/btmac.txt" ]; then
+		cp /var/lib/x6525/bt-mac "$mnt/btmac.txt"
+		chmod 644 "$mnt/btmac.txt"
+	fi
+	if [ ! -s "$mnt/wifimac.txt" ]; then
+		cp /var/lib/x6525/wlan-mac "$mnt/wifimac.txt"
+		chmod 644 "$mnt/wifimac.txt"
+	fi
+	umount "$mnt"
+fi
+rm -rf "$mnt"
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-prodnv-mac.service <<'EOF'
+[Unit]
+Description=Ensure persistent MAC addresses on prodnv
+After=local-fs.target
+Before=network-pre.target bluetooth.service
+ConditionPathExists=/dev/disk/by-partlabel/prodnv
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/x6525-prodnv-mac
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
+	ln -s /usr/lib/systemd/system/x6525-prodnv-mac.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-prodnv-mac.service
+
+	# Automatically unblock Bluetooth when the rfkill device appears
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-rfkill.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="rfkill", ATTR{type}=="bluetooth", ATTR{state}="1"
+EOF
+
 	# The eMMC's write-back cache is what turns a forced power-off into ext4
 	# metadata the journal cannot replay ("Inode N seems to contain garbage",
 	# then a manual fsck at boot). Disable the card's cache at the EXT_CSD
@@ -372,6 +433,7 @@ EOF
 enable x6525-emmc-cacheoff.service
 enable x6525-emmc-flush.service
 enable bluetooth.service
+enable x6525-prodnv-mac.service
 enable x6525-modem-nv.service
 enable x6525-pmsys.service
 EOF
