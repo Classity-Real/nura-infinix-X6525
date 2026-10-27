@@ -1,0 +1,44 @@
+name: job-firmware
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: false
+        type: string
+        default: "firmware-v1"
+
+jobs:
+  firmware:
+    runs-on: namespace-profile-pmos-smart
+    steps:
+      - uses: actions/checkout@v4
+      - name: The GitHub CLI
+        run: |
+          command -v gh || { sudo apt-get update && sudo apt-get install -y gh; }
+          gh --version
+      - name: Check the tarball is the image the package expects
+        run: |
+          cd firmware
+          mkdir -p /tmp/fw-committed
+          tar -xzf firmware-infinix-x6525-1.tar.gz -C /tmp/fw-committed
+          cmp /tmp/fw-committed/hdl_firmware_01.img hdl_firmware_01.img
+          echo "committed tarball contains the same hdl_firmware_01.img as the tree"
+          want=$(sed -n 's/^\([0-9a-f]\{128\}\)  .*/\1/p' ../pmaports/device/testing/firmware-infinix-x6525/APKBUILD | head -1)
+          got=$(sha512sum firmware-infinix-x6525-1.tar.gz | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "tarball sha512 $got does not match the APKBUILD's $want"; exit 1; }
+          echo "and matches the firmware APKBUILD sha512"
+          python3 -I ../tools/check-hdl-image.py hdl_firmware_01.img | tail -1
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.tag || 'firmware-v1' }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists here, nothing to do"
+            exit 1
+          fi
+          gh release create "$tag" --target "$GITHUB_REF_NAME" \
+            --title "X6525 touch firmware (hdl_firmware_01.img)" \
+            --notes "OmniVision TCM HDL image for Infinix X6525 touch controller." \
+            firmware/firmware-infinix-x6525-1.tar.gz
