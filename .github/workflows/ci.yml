@@ -1,12 +1,6 @@
 name: Build PMOS
 
-# Single workflow for the X6525 port: kernel/DTB/driver checks, U-Boot,
-# full postmarketOS image, and optional firmware release.
-#
-# ROM image build needs loop devices. Namespace runners run the job inside a
-# container whose device cgroup normally refuses block-device attach
-# (Operation not permitted). container.privileged=true lifts that so losetup
-# works; the early "Loop devices" step still verifies it.
+# Dispatcher: full job bodies live in job-*.yml (size limits on automated pushes).
 
 on:
   workflow_dispatch:
@@ -51,7 +45,7 @@ on:
       - "uboot/**"
       - "tools/**"
       - "pmaports/**"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: write
@@ -66,24 +60,22 @@ concurrency:
 
 jobs:
   build:
-    runs-on: namespace-profile-pmos-smart
-    timeout-minutes: 60
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rom_only != 'true' && github.event.inputs.rom_only != true)
-    steps:
-      - name: Checkout the port
-        uses: actions/checkout@v4
-      - name: Placeholder build job body restored from previous main — see full history
-        run: echo "Use commit 5930dc5 for full build job if this stub is still present"
+    uses: ./.github/workflows/job-build.yml
+
+  uboot:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rom_only != 'true' && github.event.inputs.rom_only != true)
+    uses: ./.github/workflows/job-uboot.yml
 
   rom:
-    runs-on: namespace-profile-pmos-smart;container.privileged=true
-    timeout-minutes: 240
     if: github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-      - name: NOTE
-        run: |
-          echo "ci.yml was truncated during an automated push."
-          echo "Restore from git: git checkout 5930dc51250eeaa1809337dad7c0dda69742ad00 -- .github/workflows/ci.yml"
-          echo "Then re-apply the artifact input (see README / chat)."
-          exit 1
+    uses: ./.github/workflows/job-rom.yml
+    with:
+      ui: ${{ inputs.ui || 'phosh' }}
+      artifact: ${{ inputs.artifact }}
+
+  firmware:
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.run_firmware == 'true' || github.event.inputs.run_firmware == true)
+    uses: ./.github/workflows/job-firmware.yml
+    with:
+      tag: ${{ inputs.tag || 'firmware-v1' }}
