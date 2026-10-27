@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=21
+pkgrel=22
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -118,7 +118,7 @@ ac2a085ea94482d1cac45d1c04c3ddd5b86e6fc4b5a3ad0ee91a97a94d7b066ab7f1903c42fbda79
 4f4166cba2d1a4c645358252fe167e51b445a1d50ccaef2078ee70bef21160a1e08adb200e90e7cb712de3f393045dd537e41b64dc9f24501e86b1a3f5bf830c  0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 4ea9574d3a164d430a5aeef6d588a71f2b7fac3b808096dfb4154cba9a54268794d17b35116dd4e587ce81eb5b94ac7340285d37a0ca44c118b22e58752ef0a0  0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 171d4e0b735fc83643761bf2419b3b7e1cdedab5327ceb837a92bbc7bc69f467cb2448085fdaefb852596d3cc82c3a3645dcc86e876f1a568a810f59a73b1333  0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
-34cb73217581a0d1300075f5a733cd5dd21353aaf5b8f7bab49ea15ea725ca01deecbbd2  0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
+34cb73217581a0d1300075f5a733cd5dd21353aaf5b8e31a89057ebf6c35c9b4de0ceb6edf849683a6a03c2d4d063fbea4b8f7bab49ea15ea725ca01deecbbd2  0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 a87ce58e4df4d5bb2d930c6d296fad130553ba6bdb15d2d50a11871b2ec70c5717a4fa3f44232bb2b172a77e021e978f215d202e7759adc8a775caa539d13ae8  0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 b6c5bdc731f65a333ae033ebae91267c8741808eae4447d04656df94dd863ad7b1e05a703ad51dc899c660817617965f796d0f7103c5fa97943d883de05e143a  0019-drm-panel-td4160-hx-90hz.patch
 4dfffa8cf1d7265da87f7a607ab13fa2a8d316e32a8c9f90989c21632ce521f73b82f8b8d24363f8c2e3aeba82c1a4debe9bae517c41edd222f4f32733365df5  0020-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch
