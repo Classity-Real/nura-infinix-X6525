@@ -1,4 +1,4 @@
-# Staging for the Infinix X6525: the twenty-nine patches below add this board
+# Staging for the Infinix X6525: the thirty patches below add this board
 # (device tree, panel, touch, charger and camera sensor drivers, the bindings
 # they need, two binding fixes, a watchdog fix, a Bluetooth fallback and the
 # charger's OTG boost regulator) and are cut against the same tag this package
@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=25
+pkgrel=26
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -71,6 +71,7 @@ source="
 	0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 	0028-clk-sprd-let-composite-clocks-switch-mux-parent.patch
 	0029-arm64-dts-sprd-infinix-x6525-gpu-clock-fixes.patch
+	0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
 "
 builddir="$srcdir/linux"
 
@@ -121,7 +122,7 @@ debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d4067
 34cb73217581a0d1300075f5a733cd5dd21353aaf5b8e31a89057ebf6c35c9b4de0ceb6edf849683a6a03c2d4d063fbea4b8f7bab49ea15ea725ca01deecbbd2  0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 a87ce58e4df4d5bb2d930c6d296fad130553ba6bdb15d2d50a11871b2ec70c5717a4fa3f44232bb2b172a77e021e978f215d202e7759adc8a775caa539d13ae8  0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 b6c5bdc731f65a333ae033ebae91267c8741808eae4447d04656df94dd863ad7b1e05a703ad51dc899c660817617965f796d0f7103c5fa97943d883de05e143a  0019-drm-panel-td4160-hx-90hz.patch
-740eb1bb4c93fe99e73cc11d5e618a2c14779389c0e47f62a0948af6438c87353849f054063c455ca43c91a9a8309f0323676f8f880d0e53e29de3a9bec75063  0020-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
+7ec03a57cd790666597cf7f178dc78b2796b90f0abded405e5920a062858b8ecd538dd36daf861e94f4749fe082ed4b5d25eb3b4fe8a32ce87817a41e1c8b9d8  0020-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
 0c7732e27b71b61b92fcfa565c089cbd9cb9ea765b1b0a42c1319a91878219b0040a232f92dcc438a6500aa9682b35aa0eb1dfb388e1e81b561f091e2d24bd90  0021-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
 dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc81ade1ffcf0f8a8ecd4a0c9edd5598a52cef909d552670ed  0022-mmc-sdhci-sprd-opt-in-hs200-override.patch
 60e4e778d5a05e54c01c3e56f3e998eba5dce9cb560c259e736f78ec2f1567430f5b35b33573d83dd43758e4d723ee47bc6d8464e274da1d7ee5fd6ae5a6c4d7  0023-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
@@ -131,4 +132,5 @@ dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc
 2225ccd1488e9412ca7c9464002d726cc73fe4acda228bef6fb9cd63eed320ebdc8d12720457886cd35b4e1b737607db388b691bb24649e1866219ddcfc90732  0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 c5be1128145dde296487ef278b640d950cb8f1f9c68c79ebb928eec681749068748ef1460977d8f592ae2b5a011414acc95450c3411557519524523550f6446d  0028-clk-sprd-let-composite-clocks-switch-mux-parent.patch
 bc2ee7d9ccde7edf06ad8904b012a06d7768b46cd07634fb4ceb34291845c813ea2a21f73d57f0851791179d04d09938b12a1ac4fb56cd60f89e7694fec0997c  0029-arm64-dts-sprd-infinix-x6525-gpu-clock-fixes.patch
+68c5425cb6b35ebdb8a7b5a0c7d3eee2159f52b5997871d2696e3ef9d2e689d0675c2d63ea380da6719a37222d195568b26402d198915c09ad764ec8ea63d29a  0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
 "
