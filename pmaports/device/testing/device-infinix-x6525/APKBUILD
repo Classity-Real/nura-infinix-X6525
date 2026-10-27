@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=34
+pkgrel=35
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -70,6 +70,9 @@ makedepends="devicepkg-dev"
 # deliberately not set: its continue path removes the USB ACM function and re-binds the UDC,
 # which hangs on this controller - hold volume-down at boot for the debug shell instead
 # (the initramfs check_keys path).
+# TEST BUILD: cpuidle.off=1 is dropped and patch 0033 enables the always-on broadcast timer
+# (the idle states are local-timer-stop and the dtsi had that timer commented out). If RCU
+# stalls return, put cpuidle.off=1 back in kernel-cmdline.conf.
 # cpuidle.off=1 cpufreq.off=1: with them on, a CPU (it varied) stopped taking timer interrupts
 # and RCU stalled forever (rcu_preempt kthread starved); with them off the boot is stable. Which
 # of the two is the cause is not known yet. regulator_ignore_unused keeps the touch controller's
@@ -978,6 +981,6 @@ EOF
 
 sha512sums="
 52f6b1fdf5d4becb2ecd26b63d917696671916348c82215d3a6c005bc2e0ad70993892e2e4b85ff61bef30879a2d1d505e569438a91b22c07ea3ebbb3d61c683  deviceinfo
-13b1c3f56f29e9b16034f47550ca39ecaac1828012533f213c2144cd4a44d9c2bc27c6ec81b60ef31f14d42f7c80d109236c831a7c7c01743ce52c4223dcb59a  kernel-cmdline.conf
+66f7e4aaabde0e5c76ed34206e555bb3da70114d3b5301cafc4e735896346b8b3b2afeb6fbd984c2ab2ff97a570c4751b5dbe3399dd298938a43fc1991ccc16e  kernel-cmdline.conf
 c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
 "
