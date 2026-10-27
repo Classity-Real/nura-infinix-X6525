@@ -3,8 +3,7 @@
 Configured Nura port for the Infinix X6525 (Unisoc UMS9230 / T606): the **mainline** kernel
 (`ums9230-mainline`), with a U-Boot board chainloaded from `boot_a`.
 
-**Status: UFS Working and boots** U-Boot loads the kernel from the UFS, the root filesystem
-comes up, SSH is denying, Everything else need more testing.
+**Status: GPU Accerlation Works** The performance is smooth, Wi-Fi is fixed and alot more. 
 
 [FIRST_BOOT.md](FIRST_BOOT.md) is the port stage by stage, with what to send back at each one, and
 how to build the image either here or on GitHub. The `rom` workflow builds a *split* install (a boot
@@ -44,7 +43,7 @@ fastboot flash userdata pmos-root-fs.img
 **2. Power on with the USB cable connected.** The phone sets up the USB connection once, about two
 seconds into boot; if the cable goes in later, power-cycle.
 
-**3. On the A01 Core, configure the USB link.** Run as root. `ip link` shows the interface name -
+**3. On the Rooted Phone or Linux PC, configure the USB link.** Run as root. `ip link` shows the interface name -
 `usb0` here; after a re-plug it becomes `usb1`, and so on, so use the name it printed.
 
 ```sh
@@ -64,7 +63,7 @@ ssh user@172.16.42.1        # password: x6525pmos
 the phone uses the host's connection over the USB link.
 
 ```sh
-# A01 Core, as root. usb0 = the name from step 3. First check the host is online
+# On rooted phone or Linux PC, usb0 = the name from step 3. First check the host is online
 # itself (ping 1.1.1.1 / 8.8.8.8) and which interface carries its default route:
 #   DEF=$(ip route | awk '/^default/{print $5; exit}'); echo "$DEF"
 # It is wlan0 on WiFi, but Android may prefer rmnet* (cellular) - NAT the one the
