@@ -3,11 +3,14 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=31
+pkgrel=32
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
+_pmb_recommends="
+	megapixels
+"
 depends="
 	alsa-ucm-conf-unisoc-ums9230
 	android-tools
@@ -870,6 +873,38 @@ EOF
 default-sample-rate=48000
 alternate-sample-rate=8000
 EOF
+
+	# Megapixels camera configuration
+	mkdir -p "$pkgdir"/usr/share/megapixels/config
+	mkdir -p "$pkgdir"/etc/megapixels/config
+	install -Dm644 /dev/stdin "$pkgdir"/usr/share/megapixels/config/infinix,x6525.ini <<'EOF'
+[device]
+make=Infinix
+model=Smart 8 (X6525)
+
+[rear]
+driver=s5k3l6
+media-driver=sprd-camsys
+rotate=90
+mirrored=false
+blacklevel=64
+whitelevel=1023
+focallength=3.85
+cropfactor=7.6
+
+[front]
+driver=ov8856
+media-driver=sprd-camsys
+rotate=270
+mirrored=true
+blacklevel=64
+whitelevel=1023
+focallength=3.33
+cropfactor=8.0
+EOF
+	ln -sf infinix,x6525.ini "$pkgdir"/usr/share/megapixels/config/sprd,ums9230.ini
+	ln -sf /usr/share/megapixels/config/infinix,x6525.ini "$pkgdir"/etc/megapixels/config/infinix,x6525.ini
+	ln -sf /usr/share/megapixels/config/infinix,x6525.ini "$pkgdir"/etc/megapixels/config/sprd,ums9230.ini
 }
 
 sha512sums="
