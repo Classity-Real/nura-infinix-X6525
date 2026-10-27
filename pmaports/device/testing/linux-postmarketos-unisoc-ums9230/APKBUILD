@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=29
+pkgrel=30
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -74,6 +74,7 @@ source="
 	0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
 	0031-rpmsg-sprd_sipc_sbuf-publish-sdev-before-device-regi.patch
 	0032-Bluetooth-btsprdsipc-set-drvdata-before-registering-.patch
+	0033-arm64-dts-sprd-ums9230-enable-the-always-on-broadcast.patch
 "
 builddir="$srcdir/linux"
 
@@ -137,4 +138,5 @@ bc2ee7d9ccde7edf06ad8904b012a06d7768b46cd07634fb4ceb34291845c813ea2a21f73d57f085
 68c5425cb6b35ebdb8a7b5a0c7d3eee2159f52b5997871d2696e3ef9d2e689d0675c2d63ea380da6719a37222d195568b26402d198915c09ad764ec8ea63d29a  0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
 02f329ade485b82f04b57aa75d038034dbd238c8c748862549c3d1a606d1dd0688a1cafbaa5920ae1a156fee967f91a0b86308388b8e658bf1eafd5e87d1fd60  0031-rpmsg-sprd_sipc_sbuf-publish-sdev-before-device-regi.patch
 dc43eb501c17d353dc63a3a272bbcd7238c2f0440ad90ca5d9d3e116d527c19002ea71ec0134af2c03edd09c8690a788cdcb2a83d17fd821062ac96ee478b593  0032-Bluetooth-btsprdsipc-set-drvdata-before-registering-.patch
+e26b0952c22aa3ff6745cc85635c61c2a05b037eba8f8ffc6d605b0fd84019dc4d8b2fc8716cd0980b54e09ce14243687742799c39c060fa99d688a89fca876c  0033-arm64-dts-sprd-ums9230-enable-the-always-on-broadcast.patch
 "

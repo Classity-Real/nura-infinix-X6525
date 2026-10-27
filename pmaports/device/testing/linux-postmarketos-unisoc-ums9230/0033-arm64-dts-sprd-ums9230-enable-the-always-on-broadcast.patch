@@ -1,0 +1,40 @@
+From 6c83397502a93344f00f3d5f2e7c2c1d9379fb5b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 03:33:30 +0800
+Subject: [PATCH] arm64: dts: sprd: ums9230: enable the always-on broadcast
+ timer
+
+The idle states are marked local-timer-stop: the per-CPU architected timer
+stops in core power-down, so another timer has to wake the CPU. The
+SC9860-family always-on timer at 0x64470000 (32 kHz, GIC SPI 71) provides
+that, as on the other Spreadtrum SoCs, but its node was left commented out
+in the dtsi. Without it a CPU that enters cpu-pd-lit/cpu-pd-big can stop
+taking timer interrupts and RCU stalls (rcu_preempt kthread starved).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/boot/dts/sprd/ums9230.dtsi | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230.dtsi b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+index 9bf35dc25..c9c14fe71 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230.dtsi
++++ b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+@@ -1322,12 +1322,12 @@ pwm: pwm@643f0000 {
+ 			#pwm-cells = <2>;
+ 		};
+ 
+-		/*timer@64470000 {
++		timer@64470000 {
+ 			compatible = "sprd,ums9230-timer", "sprd,sc9860-timer";
+ 			reg = <0x64470000 0x20>;
+ 			interrupts = <GIC_SPI 71 IRQ_TYPE_LEVEL_HIGH>;
+ 			clocks = <&ext_32k>;
+-		};*/
++		};
+ 
+ 		timer@64470020 {
+ 			compatible = "sprd,ums9230-suspend-timer", "sprd,sc9860-suspend-timer";
+-- 
+2.43.0
+
