@@ -21,8 +21,8 @@ cat /proc/cmdline | tr ' ' '\n' | grep -iE 'chipid|lcd|platform|boot_devices'
 W "live device tree: every node that looks like a codec, JPEG, GSP or IOMMU"
 DT=/proc/device-tree
 [ -d "$DT" ] || DT=/sys/firmware/devicetree/base
-find "$DT" -maxdepth 4 -type d 2>/dev/null | grep -iE 'vsp|vpu|vdec|venc|jpg|jpeg|codec|gsp|iommu|mm-?sub' | head -60
-for d in $(find "$DT" -maxdepth 4 -type d 2>/dev/null | grep -iE 'vsp|vpu|vdec|venc|jpg|jpeg|codec' | head -20); do
+find -L "$DT/" -maxdepth 6 -type d 2>/dev/null | grep -iE 'vsp|vpu|vdec|venc|jpg|jpeg|codec|gsp|iommu|mm-?sub' | head -60
+for d in $(find -L "$DT/" -maxdepth 6 -type d 2>/dev/null | grep -iE 'vsp|vpu|vdec|venc|jpg|jpeg|codec' | head -20); do
 	echo "--- $d"
 	for f in compatible reg interrupts clock-names clocks power-domains iommus resets reset-names sprd,name sprd,ip_version sprd,version sprd,vsp_clk_freq operating-points; do
 		[ -e "$d/$f" ] && { printf '%s: ' "$f"; od -An -tx1 -v "$d/$f" 2>/dev/null | tr -d '\n' | cut -c1-200; printf ' | '; tr '\0' ' ' < "$d/$f" 2>/dev/null | tr -cd '[:print:]' | cut -c1-120; echo; }
@@ -49,6 +49,13 @@ dumpsys media.codec 2>/dev/null | grep -iE 'name|sprd|vsp|hw' | head -30
 W "recent kernel log lines from the blocks"
 dmesg 2>/dev/null | grep -iE 'vsp|vpu|vdec|venc|jpg|jpeg' | tail -60
 } > "$OUT/info.txt" 2>&1
+
+# the whole flattened device tree: one ~200 KB file with every node's registers,
+# interrupts, clocks, syscon offsets and IOMMU links (find on a symlinked
+# /proc/device-tree used to come back empty)
+for f in /sys/firmware/fdt /proc/device-tree/../fdt; do
+	[ -f "$f" ] && { cp "$f" "$OUT"/stock.dtb 2>/dev/null && break; }
+done
 
 # the module itself, the firmware it loads, and the libs (small files only)
 for f in $(find /vendor_dlkm /vendor/lib/modules /vendor/lib64/modules /system/lib/modules -name '*.ko' 2>/dev/null | grep -iE 'vsp|vpu|jpg|jpeg|codec|vdec|venc'); do
