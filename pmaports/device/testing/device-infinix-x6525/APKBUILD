@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=35
+pkgrel=36
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -70,6 +70,10 @@ makedepends="devicepkg-dev"
 # deliberately not set: its continue path removes the USB ACM function and re-binds the UDC,
 # which hangs on this controller - hold volume-down at boot for the debug shell instead
 # (the initramfs check_keys path).
+# Quiet console: loglevel=4 and no initcall_debug / ignore_loglevel. With them every initcall
+# (and every later kernel message) was written to the 115200-baud UART and to tty0 while the CPU
+# waited, which costs tens of seconds at boot and stalls anything that logs. For a bring-up hang,
+# add `ignore_loglevel initcall_debug` back to kernel-cmdline.conf.
 # TEST BUILD: cpuidle.off=1 is dropped and patch 0033 enables the always-on broadcast timer
 # (the idle states are local-timer-stop and the dtsi had that timer commented out). If RCU
 # stalls return, put cpuidle.off=1 back in kernel-cmdline.conf.
@@ -981,6 +985,6 @@ EOF
 
 sha512sums="
 52f6b1fdf5d4becb2ecd26b63d917696671916348c82215d3a6c005bc2e0ad70993892e2e4b85ff61bef30879a2d1d505e569438a91b22c07ea3ebbb3d61c683  deviceinfo
-66f7e4aaabde0e5c76ed34206e555bb3da70114d3b5301cafc4e735896346b8b3b2afeb6fbd984c2ab2ff97a570c4751b5dbe3399dd298938a43fc1991ccc16e  kernel-cmdline.conf
+79a49b9636e011e11ea77f85dd191e0370c3a1a2d3f2d2b9957ed06f206bc8cd340443b7a3282b5220d7279a7a0957f4c3c04fb1f9eb01f6385d015575449bf6  kernel-cmdline.conf
 c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
 "
