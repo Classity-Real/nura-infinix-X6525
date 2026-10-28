@@ -1,1 +1,7 @@
-PLACEHOLDER
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Infinix X6525 ("Infinix Smart 8") - Unisoc UMS9230 (Tiger T606)
+ *
+ * Board support for the UMS9230. See the full file in the repo; this is a
+ * temporary placeholder while the full content is restored.
+ */
