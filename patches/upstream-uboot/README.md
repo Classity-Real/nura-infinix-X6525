@@ -7,7 +7,9 @@ but bring-up), the pmicwdt command the bootcmd uses, the UFS scan (patch 7), and
 preboot (patch 8). The UFS scan exists because some X6525 units shipped UFS instead of the eMMC on
 sdio3: the defconfig keeps the reeder's CMD_UFS/SCSI/UFS/UFS_SPRD_UMS9230, the device tree enables
 `&ufs`, and the environment scans `scsi` right after `mmc`. The MAC preboot reads the unit's own
-`btmac.txt` and `wifimac.txt` from the eMMC `prodnv` partition. The fork marks its
+`btmac.txt` and `wifimac.txt` from the eMMC `prodnv` partition, and falls back to the UFS one
+(`sspi 0 00; ufs init; scsi scan; load scsi 0#prodnv ...`) when either file was not on eMMC, so
+both storage variants get their real MACs. The fork marks its
 own Reeder device tree commit `WIP:`; these do not, since the board builds in CI and the values that
 came from the Reeder have been checked against this phone. Verified with `git am` to apply in order
 to a clean checkout and to reproduce byte-identical files to what CI builds.
@@ -35,11 +37,12 @@ First things to check when it runs:
   variants", is the first-boot check list for one.
 - `CONFIG_SYS_BOOTM_LEN=0x800000` (8 MB, also copied) — worth watching if the uncompressed arm64
   `Image` on the boot partition ever exceeds it.
-- whether the eMMC `prodnv` partition really holds `btmac.txt` and `wifimac.txt` (FAT). The preboot
-  loads both with `load mmc 0#prodnv ...` and only sets `bdaddr`/`wifiaddr` when the load succeeds;
-  `printenv bdaddr wifiaddr` at the U-Boot prompt is the test. If they are empty, the kernel keeps
-  its random-BD-address fallback and the Wi-Fi MAC service, and the partition's contents are the
-  thing to check.
+- whether the `prodnv` partition really holds `btmac.txt` and `wifimac.txt` (FAT), on eMMC and on
+  UFS. The preboot reads both from `load mmc 0#prodnv ...` first and retries the missing one from
+  `load scsi 0#prodnv ...` after bringing up UFS, and only sets `bdaddr`/`wifiaddr` when a load
+  succeeds; `printenv bdaddr wifiaddr` at the U-Boot prompt is the test. If they are empty, the
+  kernel keeps its random-BD-address fallback and the Wi-Fi MAC service, and the partition's
+  contents are the thing to check.
 
 Settled since this was written: the memory node is the **4 GiB** window this phone reports
 (`0x0 0x80000000 0x0 0xfffff000`, from `androidboot.ddrsize=4096M`), not the Reeder's 8 GiB one, and
