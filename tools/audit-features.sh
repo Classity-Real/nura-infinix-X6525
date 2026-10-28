@@ -179,11 +179,11 @@ feature "on-screen keyboard / UI service"
 # plasma-mobile: postmarketos-ui-plasma-mobile brings the Plasma Mobile
 # shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
 # plasma-mobile.service. All three have their own service-manager defaults,
-# so the Build PMOS rom job (ci.yml) pins them and its ui input picks which.
-need "the rom job records a known UI"            grep -Eq "inputs\.ui \|\| '(buffyboard|phosh|plasma-mobile)'" "$ROOT/.github/workflows/ci.yml"
-need "the rom job pins the service manager"      grep -q "'service_manager = systemd'" "$ROOT/.github/workflows/ci.yml"
-need "Build PMOS's rom job writes a ui line"     grep -Fq 'ui = ${{ inputs.ui' "$ROOT/.github/workflows/ci.yml"
-need "the ui input defaults to phosh"            grep -Fq "inputs.ui || 'phosh'" "$ROOT/.github/workflows/ci.yml"
+# so job-rom.yml pins them and ci.yml's workflow_dispatch input picks which.
+need "the rom job records a known UI"            grep -Eq "inputs\.ui \|\| '(buffyboard|phosh|plasma-mobile)'" "$ROOT/.github/workflows/job-rom.yml"
+need "the rom job pins the service manager"      grep -q "'service_manager = systemd'" "$ROOT/.github/workflows/job-rom.yml"
+need "Build PMOS's rom job writes a ui line"     grep -Fq 'ui = ${{ inputs.ui' "$ROOT/.github/workflows/job-rom.yml"
+need "the ui input defaults to phosh"            grep -Fq "inputs.ui || 'phosh'" "$ROOT/.github/workflows/job-rom.yml"
 need "the ui input offers plasma-mobile"         grep -qE '^[[:space:]]*-[[:space:]]*plasma-mobile$' "$ROOT/.github/workflows/ci.yml"
 need "the ui input offers buffyboard"            grep -qE '^[[:space:]]*-[[:space:]]*buffyboard$' "$ROOT/.github/workflows/ci.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
@@ -213,6 +213,9 @@ need "the GPU OPP table is in the DTS"           grep -q 'operating-points-v2 = 
 need "the GPU node is enabled in the DTS"        grep -q '&gpu {' "$DTS"
 need "the GPU supply is set"                     grep -q 'mali-supply' "$DTS"
 need "Mesa panfrost Vulkan is a dependency"      grep -q 'mesa-vulkan-panfrost' "$DPKG/APKBUILD"
+need "phoc renders on the Panfrost node"         grep -q 'WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128' "$DPKG/APKBUILD"
+need "the session waits for the sprd DRM card"   grep -q '/usr/libexec/x6525-wait-drm' "$DPKG/APKBUILD"
+need "software rendering is not pinned"          sh -c "! grep -q 'WLR_RENDERER=pixman' '$DPKG/APKBUILD' && ! grep -q 'LIBGL_ALWAYS_SOFTWARE=1' '$DPKG/APKBUILD'"
 finish
 
 feature "performance (CPU DVFS, thermal throttling, storage)"
@@ -350,11 +353,11 @@ if [ -n "$IMAGE" ]; then
 
 	TMP=$(mktemp -d) || exit 1
 	trap 'rm -rf "$TMP"' EXIT
-	# the two filesystems, by label - no loop device needed. Newer rom.yml
+	# the two filesystems, by label - no loop device needed. Newer job-rom.yml
 	# uploads them split already; use those instead of copying the 1.3 GB disk.
 	# Symlinked, not copied: debugfs reads through the link, and a copy of the
 	# 2.4 GB root image is both slow and, on a CI runner, the largest thing in
-	# this check (rom.yml runs this script as a gate on every artifact).
+	# this check (job-rom.yml runs this script as a gate on every artifact).
 	if [ -f pmos-boot-fs.img ] && [ -f pmos-root-fs.img ]; then
 		ln -s "$IMGDIR/pmos-boot-fs.img" "$TMP/boot.img"
 		ln -s "$IMGDIR/pmos-root-fs.img" "$TMP/root.img"
@@ -411,9 +414,9 @@ if [ -n "$IMAGE" ]; then
 		fi
 	fi
 
-	# the login the README documents: user <ci.yml's --password>, root locked
+	# the login the README documents: user <job-rom.yml's --password>, root locked
 	if [ -s "$TMP/root.img" ]; then
-		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/ci.yml" |
+		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/job-rom.yml" |
 			head -1 | cut -d' ' -f2)
 		debugfs -R "dump /etc/shadow $TMP/shadow" "$TMP/root.img" >/dev/null 2>&1
 		if [ -s "$TMP/shadow" ]; then
@@ -428,9 +431,9 @@ if [ -n "$IMAGE" ]; then
 				salt=$(echo "$userf" | cut -d'$' -f3)
 				if command -v openssl >/dev/null 2>&1 && [ -n "$pw" ] &&
 				   [ "$(openssl passwd -6 -salt "$salt" "$pw" 2>/dev/null)" = "$userf" ]; then
-					ok "user's password is rom.yml's --password ($pw)"
+					ok "user's password is job-rom.yml's --password ($pw)"
 				else
-					bad "user's password is not rom.yml's --password"
+					bad "user's password is not job-rom.yml's --password"
 				fi ;;
 			'') bad "user has no password" ;;
 			*)  printf '    note      user has a password (%s-crypt); not checked offline\n' \
@@ -442,12 +445,14 @@ if [ -n "$IMAGE" ]; then
 	fi
 
 	# the UI: buffyboard's service must be installed and enabled, or phosh's
-	# stack with greetd and the software-renderer drop-in. Which buffyboard
-	# service depends on the init system: systemd (unit + preset) or OpenRC
-	# (init script added to the default runlevel by the UI's openrc subpackage).
+	# stack with greetd and the GPU/wait-drm drop-ins. Which buffyboard service
+	# depends on the init system: systemd (unit + preset) or OpenRC (init
+	# script added to the default runlevel by the UI's openrc subpackage).
 	if [ -s "$TMP/root.img" ]; then
-		ui=$(grep -E '^ *ui = ' "$ROOT/.github/workflows/rom.yml" | head -1 |
-			awk '{print $3}')
+		# job-rom.yml has ui = ${{ inputs.ui || 'phosh' }}; take the fallback
+		# for a plain run, or UI=... to check an image built for another UI.
+		ui=${UI:-$(sed -n "s/.*inputs\.ui || '\([^']*\)'.*/\1/p" \
+			"$ROOT/.github/workflows/job-rom.yml" | head -1)}
 		if debugfs -R "stat /usr/lib/systemd/systemd" "$TMP/root.img" 2>/dev/null | grep -q .; then
 			init=systemd
 		elif debugfs -R "stat /sbin/openrc" "$TMP/root.img" 2>/dev/null | grep -q .; then
@@ -493,8 +498,10 @@ if [ -n "$IMAGE" ]; then
 				bad "the phosh image has no phosh shell (/usr/bin/phosh or /usr/libexec/phosh)"
 			fi
 			for f in /usr/bin/phosh-session /usr/bin/phoc /usr/bin/greetd \
+				 /usr/libexec/x6525-wait-drm \
 				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf \
-				 /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf \
+				 /etc/systemd/system/greetd.service.d/20-x6525-wait-drm.conf \
+				 /etc/systemd/system/greetd.service.d/30-x6525-gpu.conf \
 				 /usr/bin/x6525-display-report; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the phosh image has $f" ||
@@ -513,8 +520,8 @@ if [ -n "$IMAGE" ]; then
 				 /usr/bin/kwin_wayland /usr/bin/plasmashell \
 				 /usr/share/wayland-sessions/plasma-mobile.desktop \
 				 /usr/lib/systemd/system/plasma-mobile.service \
-				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf \
-				 /etc/systemd/system/plasma-mobile.service.d/20-x6525-software-render.conf; do
+				 /usr/libexec/x6525-wait-drm \
+				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the plasma image has $f" ||
 					bad "the plasma image has no $f"
@@ -530,7 +537,7 @@ if [ -n "$IMAGE" ]; then
 				bad "no enabled plasma display manager (display-manager alias or graphical.target wants)"
 			fi ;;
 		*)
-			bad "rom.yml selects no known UI (ui = ${ui:-none})" ;;
+			bad "job-rom.yml selects no known UI (ui = ${ui:-none})" ;;
 		esac
 	fi
 
