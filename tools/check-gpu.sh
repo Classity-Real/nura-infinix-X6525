@@ -27,7 +27,7 @@ else fail "panfrost module not loaded (modprobe panfrost)"; fi
 dm=$($S dmesg 2>/dev/null | grep -iE 'panfrost|mali' | tail -12)
 if [ -n "$dm" ]; then printf '%s\n' "$dm" | sed 's/^/      /'; fi
 case "$dm" in
-*"Unknown GPU"*|*"unknown GPU"*) fail "Panfrost does not know this GPU id (needs a GPU_MODEL entry)" ;;
+*"GPU model not found"*) fail "Panfrost does not know this GPU id (needs a GPU_MODEL entry)" ;;
 *"failed"*|*"error"*) fail "Panfrost reported an error (see above)" ;;
 *"mali-g57"*|*"Mali-G57"*|*"mali-g"*) pass "Panfrost identified the GPU" ;;
 *) info "no Panfrost line in dmesg (need sudo, or the ring buffer wrapped)" ;;
