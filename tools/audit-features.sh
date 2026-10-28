@@ -354,7 +354,12 @@ if [ -n "$IMAGE" ]; then
 			debugfs -R "stat $f" "$TMP/boot.img" 2>/dev/null | grep -q . ||
 				bad "the boot filesystem has no $f"
 		done
-		grep -q 'loglevel=7' "$TMP/extlinux.conf" || bad "the cmdline has no loglevel=7"
+		# every option of the device package's kernel-cmdline.conf must have
+		# reached extlinux (this used to pin loglevel=7 and broke when the
+		# console was quieted); a distro default would lack them
+		for t in $(cat "$DPKG/kernel-cmdline.conf"); do
+			grep -qF -- "$t" "$TMP/extlinux.conf" || bad "the cmdline lacks $t"
+		done
 		grep -q 'console=ttyS1' "$TMP/extlinux.conf" || bad "the cmdline has no console=ttyS1"
 		ok "the boot filesystem holds what extlinux names, with loglevel and the UART console"
 
