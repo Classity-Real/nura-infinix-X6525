@@ -1,0 +1,54 @@
+From a51bedb53a0912c8961ce1710a3ff70252074583 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 17:59:12 +0800
+Subject: [PATCH 2/2] arm64: dts: sprd: infinix-x6525: charge at up to 1.5 A,
+ with an explicit source limit
+
+ti,charge-current 650 mA kept the phone at about 667 mA (the register's
+minimum at 56 mohm sense). Raise it to the register maximum, 1507 mA, and set
+usb_detect's default-microamp to 2 A so a wall charger is not held to
+500 mA now that the notifier reads microamps correctly. Change it back to
+500000 to hold every source to 500 mA.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../boot/dts/sprd/ums9230-infinix-x6525.dts      | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 9d1b2f572..72b3ee1da 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -303,6 +303,14 @@ vbus_extcon: extcon-vbus {
+ 	usb_detect: usb-charger-detect {
+ 		compatible = "linux,extcon-charger-detect";
+ 		extcon = <&vbus_extcon>;
++		/*
++		 * Only VBUS is known, so every source gets this limit. 2 A is
++		 * read as a dedicated charger (input limit lifted), which a
++		 * wall charger needs; a PC port is then not held to 500 mA.
++		 * Use <500000> to be safe on PC ports at the cost of 500 mA
++		 * charging from a wall charger too, until BC1.2 detection exists.
++		 */
++		default-microamp = <2000000>;
+ 	};
+ };
+ 
+@@ -386,7 +394,13 @@ charger: charger@6a {
+ 		ti,current-limit = <100>;		/* mA, vendor 100000 uA */
+ 		ti,weak-battery-voltage = <3400>;	/* mV */
+ 		ti,battery-regulation-voltage = <4400>;	/* mV */
+-		ti,charge-current = <650>;		/* mA, vendor 650000 uA */
++		/*
++		 * 650 mA was the vendor's value for a plain USB source; the
++		 * register (3 bits, 56 mohm sense) tops out at 1507 mA, which
++		 * is what 1550 selects. The input limit still follows the
++		 * source (see usb_detect).
++		 */
++		ti,charge-current = <1550>;		/* mA, register max 1507 */
+ 		ti,termination-current = <60>;		/* mA, vendor 60000 uA */
+ 		ti,resistor-sense = <56>;		/* mohm */
+ 		ti,usb-charger-detection = <&usb_detect>;
+-- 
+2.43.0
+

@@ -303,6 +303,14 @@
 	usb_detect: usb-charger-detect {
 		compatible = "linux,extcon-charger-detect";
 		extcon = <&vbus_extcon>;
+		/*
+		 * Only VBUS is known, so every source gets this limit. 2 A is
+		 * read as a dedicated charger (input limit lifted), which a
+		 * wall charger needs; a PC port is then not held to 500 mA.
+		 * Use <500000> to be safe on PC ports at the cost of 500 mA
+		 * charging from a wall charger too, until BC1.2 detection exists.
+		 */
+		default-microamp = <2000000>;
 	};
 };
 
@@ -386,7 +394,13 @@
 		ti,current-limit = <100>;		/* mA, vendor 100000 uA */
 		ti,weak-battery-voltage = <3400>;	/* mV */
 		ti,battery-regulation-voltage = <4400>;	/* mV */
-		ti,charge-current = <650>;		/* mA, vendor 650000 uA */
+		/*
+		 * 650 mA was the vendor's value for a plain USB source; the
+		 * register (3 bits, 56 mohm sense) tops out at 1507 mA, which
+		 * is what 1550 selects. The input limit still follows the
+		 * source (see usb_detect).
+		 */
+		ti,charge-current = <1550>;		/* mA, register max 1507 */
 		ti,termination-current = <60>;		/* mA, vendor 60000 uA */
 		ti,resistor-sense = <56>;		/* mohm */
 		ti,usb-charger-detection = <&usb_detect>;
