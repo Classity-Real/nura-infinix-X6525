@@ -1,0 +1,35 @@
+From ee56e6e8476da1e94cc52d24768acc7899a67016 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 12:06:51 +0800
+Subject: [PATCH 1/2] dt-bindings: media: ov8856: add powerdown-gpios
+
+Some boards wire the sensor's power-down pin to a GPIO separate from the
+reset line. Describe it as an optional, active-high property.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../devicetree/bindings/media/i2c/ovti,ov8856.yaml        | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/media/i2c/ovti,ov8856.yaml b/Documentation/devicetree/bindings/media/i2c/ovti,ov8856.yaml
+index 5377ae72c..8570c0580 100644
+--- a/Documentation/devicetree/bindings/media/i2c/ovti,ov8856.yaml
++++ b/Documentation/devicetree/bindings/media/i2c/ovti,ov8856.yaml
+@@ -60,6 +60,14 @@ properties:
+       This corresponds to the hardware pin XSHUTDOWN which is physically
+       active low.
+ 
++  powerdown-gpios:
++    description:
++      The phandle and specifier for an optional GPIO that controls the
++      sensor's power-down (standby) pin. The pin is active high: driving it
++      high puts the sensor in standby, and it is driven low once the supplies
++      and the external clock are stable.
++    maxItems: 1
++
+   orientation: true
+   rotation: true
+ 
+-- 
+2.43.0
+
