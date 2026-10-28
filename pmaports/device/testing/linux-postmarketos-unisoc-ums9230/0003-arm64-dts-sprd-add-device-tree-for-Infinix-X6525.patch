@@ -439,10 +439,10 @@ index 000000000..08f494f0d
 +	charger: charger@6a {
 +		compatible = "ti,bq24158";
 +		reg = <0x6a>;
-+		ti,current-limit = <100>;		/* mA, vendor 100000 uA */
++		ti,current-limit = <2000>;		/* mA, vendor 100000 uA */
 +		ti,weak-battery-voltage = <3400>;	/* mV */
 +		ti,battery-regulation-voltage = <4400>;	/* mV */
-+		ti,charge-current = <650>;		/* mA, vendor 650000 uA */
++		ti,charge-current = <2000>;		/* mA, vendor 650000 uA */
 +		ti,termination-current = <60>;		/* mA, vendor 60000 uA */
 +		ti,resistor-sense = <56>;		/* mohm */
 +		ti,usb-charger-detection = <&usb_detect>;
