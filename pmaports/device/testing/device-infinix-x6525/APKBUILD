@@ -3,7 +3,7 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=36
+pkgrel=37
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -15,6 +15,7 @@ depends="
 	alsa-ucm-conf-unisoc-ums9230
 	android-tools
 	bluez
+	e2fsprogs-extra
 	firmware-infinix-x6525
 	iw
 	linux-postmarketos-unisoc-ums9230
@@ -420,6 +421,31 @@ EOF
 	ln -s /usr/lib/systemd/system/x6525-emmc-flush.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-emmc-flush.service
 
+	# The image is a ~2 GB ext4 flashed into the 110 GiB userdata partition. The
+	# initramfs is meant to grow it on first boot, but that step is skipped or cut
+	# short when the first boot is interrupted (forced reboot, a failed fsck), and
+	# the phone then runs on a 2 GB root that is "almost full". ext4 grows online and
+	# resize2fs does nothing when the filesystem already fills its device, so run it
+	# on every boot as a safety net.
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-growroot.service <<'EOF2'
+[Unit]
+Description=Grow the root filesystem to fill its partition
+After=local-fs.target
+Before=multi-user.target
+ConditionPathExists=/usr/sbin/resize2fs
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'dev=$(findmnt -no SOURCE /); [ -b "$dev" ] && exec resize2fs "$dev"'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+	ln -s /usr/lib/systemd/system/x6525-growroot.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-growroot.service
+
 	# Enabling a unit with a symlink created here does not survive the image
 	# build: pmOS's systemd-apk-trigger runs `systemctl preset` for every
 	# newly installed unit that has an [Install] section, and 99-default.preset
@@ -439,6 +465,7 @@ EOF
 		"$pkgdir"/usr/lib/systemd/system-preset/90-infinix-x6525.preset <<'EOF'
 enable x6525-emmc-cacheoff.service
 enable x6525-emmc-flush.service
+enable x6525-growroot.service
 enable bluetooth.service
 enable x6525-prodnv-mac.service
 enable x6525-modem-nv.service
