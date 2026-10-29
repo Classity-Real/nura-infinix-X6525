@@ -98,3 +98,14 @@ Honest status: steps 2-3 cannot be finished from the dumps alone. They need (a) 
 step 1 to confirm the block answers and to calibrate which offsets are real, then (b) a long,
 function-by-function read of the library plus experiments on the phone (feed a known I-frame, compare
 the output against ffmpeg). That is weeks of work, not a single patch.
+
+## Step 4 (started ahead of 2-3): the JPEG codec bring-up
+Steps 2-3 are paused until the step 1 dump exists. Step 4's other parts (HEVC, VP9, the encoders)
+all need the register map of step 3, so they cannot start. The JPEG codec can: it is a separate
+block with its own small register window, and the stock device tree describes it completely.
+Patches 0041-0042 make `sprd-vsp.ko` bind `sprd,ums9230-jpg` as well (clocks and resets come from
+the DT now) and add `jpeg-codec@36000000`: SPI 42, clocks `CLK_MM_CKG_EB`, `CLK_MM_JPG_EB`, `CLK_JPG`
+(parent: 256 MHz TWPLL), reset `RESET_MM_AHB_JPG_SOFT_RST_MASK` (the stock mask `0x80000` = bit 19),
+MM power domain. `/sys/kernel/debug/sprd-jpg/regs` dumps it; see `VSP_TESTS.md`, test 4b.
+Baseline JPEG decode is far simpler than H.264 (no reference frames, no CABAC), so it is the
+best first block to get real work out of. The stock `libjpeg`-side library is next to read.

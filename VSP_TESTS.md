@@ -1,7 +1,7 @@
-# Tests for the first ROM with the VSP bring-up (kernel patches 0038-0040)
+# Tests for the first ROM with the VSP and JPEG bring-up (kernel patches 0038-0042)
 
-What this build adds: the `AP_VSP` power domain, the `video-codec@32000000` node, and `sprd-vsp.ko`
-(not loaded automatically). Nothing here decodes video. The goal is to learn whether the block powers
+What this build adds: the `AP_VSP` power domain, the `video-codec@32000000` and `jpeg-codec@36000000`
+nodes, and `sprd-vsp.ko` (binds both; not loaded automatically; kernel package pkgrel 35 or later). Nothing here decodes video. The goal is to learn whether the block powers
 up and answers, and to capture its registers. **Do these over SSH, not on the phone's screen**, and
 in this order: the first tests can already tell you the build is not the one you think.
 
@@ -64,6 +64,18 @@ diff /tmp/vsp-regs-1.txt /tmp/vsp-regs-2.txt && echo "stable across reads"
 ```
 Differences are interesting too (counters, status bits): send both files.
 
+## 4b. The JPEG codec (same module, same risk)
+Do this after test 4 has finished without a hang; the JPEG block sits under the MM power domain only.
+```sh
+sudo dmesg | grep -iE 'jpeg|sprd-jpg' | tail -3
+ls /sys/kernel/debug/sprd-jpg/regs
+sudo cat /sys/kernel/debug/sprd-jpg/regs | tee /tmp/jpg-regs-1.txt
+sudo cat /sys/kernel/debug/sprd-jpg/regs > /tmp/jpg-regs-2.txt; diff /tmp/jpg-regs-1.txt /tmp/jpg-regs-2.txt && echo stable
+```
+Outcomes are the same as in the table above (real values / all `ffffffff` or zero / hang). A JPEG
+block that answers while the VSP does not (or the reverse) is useful: it separates a shared MM
+problem from a VSP-only one. Send both register files.
+
 ## 5. After the read: did it power down again?
 ```sh
 sleep 6
@@ -84,8 +96,8 @@ camera or the display behaves differently from the previous build, say so.
 
 ## What to send back
 1. The output of tests 0, 1, 2 and 5 (short).
-2. `/tmp/vsp-regs-1.txt` and `/tmp/vsp-regs-2.txt` from test 4.
-3. `sudo dmesg | grep -iE 'vsp|genpd|ap_vsp'`.
+2. `/tmp/vsp-regs-1.txt`, `/tmp/vsp-regs-2.txt` (test 4) and `/tmp/jpg-regs-1.txt`, `/tmp/jpg-regs-2.txt` (test 4b).
+3. `sudo dmesg | grep -iE 'vsp|jpg|jpeg|genpd|ap_vsp'`.
 4. If the phone hung: `journalctl -k -b -1 | tail -60` after the reboot.
 
 ## What I will do with it
