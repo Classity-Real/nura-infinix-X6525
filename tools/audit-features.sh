@@ -363,6 +363,33 @@ if [ -n "$IMAGE" ]; then
 		grep -q 'console=ttyS1' "$TMP/extlinux.conf" || bad "the cmdline has no console=ttyS1"
 		ok "the boot filesystem holds what extlinux names, with loglevel and the UART console"
 
+		# The kernel and its modules must come from one build, or the module BTF check
+		# fails (-22) and the GPU driver does not load (software rendering). The build
+		# makes both in one run, so this is a check of the artifact, not of the tree.
+		# The kernel image may be compressed: try gzip and zstd, then raw.
+		k="$TMP/vmlinuz"
+		debugfs -R "dump /vmlinuz $k" "$TMP/boot.img" >/dev/null 2>&1
+		rel=
+		for dec in "cat" "gzip -dc" "zstd -dc"; do
+			rel=$($dec "$k" 2>/dev/null | grep -a -o -m1 'Linux version [^ ]*' | awk '{print $3}')
+			[ -n "$rel" ] && break
+		done
+		# ls -p prints /inode/mode/uid/gid/name/size/ per entry: the name is field 6
+		mods=$(debugfs -R "ls -p /lib/modules" "$TMP/root.img" 2>/dev/null | awk -F/ '$6 ~ /^[0-9]/ {print $6}' | sort -u)
+		if [ -z "$rel" ]; then
+			# an unknown compression is not a broken artifact: say so, do not fail the build
+			printf '    unknown   could not read the kernel release from /vmlinuz (compression?): kernel/modules match not checked\n'
+		elif [ "$(printf '%s\n' "$mods" | grep -c .)" -ne 1 ] || ! printf '%s\n' "$mods" | grep -qx "$rel"; then
+			bad "kernel $rel does not match the modules in /lib/modules ($(printf '%s' "$mods" | tr '\n' ' ')): module BTF will fail"
+		else
+			ok "kernel $rel and /lib/modules/$rel come from one build"
+		fi
+		if [ -n "$rel" ]; then
+			debugfs -R "stat /lib/modules/$rel/kernel/drivers/gpu/drm/panfrost/panfrost.ko" "$TMP/root.img" >/dev/null 2>&1 &&
+				ok "panfrost.ko (the GPU driver) is in the image" ||
+				bad "panfrost.ko is missing from /lib/modules/$rel: the GPU will not accelerate"
+		fi
+
 		# the effective kernel config is the one in the boot filesystem
 		debugfs -R "dump /config $TMP/config" "$TMP/boot.img" >/dev/null 2>&1
 		if [ -s "$TMP/config" ]; then
