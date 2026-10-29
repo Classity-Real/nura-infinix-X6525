@@ -42,3 +42,26 @@ Stages:
 An alternative that needs no register work is a compatibility `/dev/sprd_vsp` driver plus the
 stock libraries under Waydroid, but that does not give native Linux players hardware decode
 and means shipping the vendor blobs.
+
+## Step 1 result: what the stock device tree says (and what is in the kernel now)
+From `stock.dtb` (`video-codec@32000000`): registers `0x32000000` (0xc000), SPI 34, clocks
+`clk_ahb_gate_vsp_eb` (AP AHB gate 2 = mainline `CLK_VSP_EB`) and `clk_vsp` (AP clock 28 = `CLK_VSP`,
+a mux of the TWPLL 256 / 307.2 / 384 MHz outputs, as `vsp_parents` already has), resets
+`0x2800` of AP AHB offset 4 (bits 11 and 13 = `RESET_AP_AHB_VSP_GLOBAL_SOFT_RST` and
+`RESET_AP_AHB_VSP_SOFT_RST`), power domain `vsp-power-domain` (PMU `0x314`, force shutdown bit 25,
+auto shutdown bit 24: the same layout as the MM domain at `0x2e8`). The stock DVFS table runs the
+VSP at 256 MHz idle and 384 MHz at work. The VSP's IOMMU (`sprd,iommuvaul6-vsp`, iova `0x20000000`
++ 256 MiB) shares the first 0x80 bytes of the register window; the JPEG codec
+(`0x36000000`, SPI 42, resets in MM AHB, power domain MM) has the same shape.
+
+Patches 0038-0040: the AP_VSP power domain, the `video-codec@32000000` node, and `sprd-vsp.ko`
+(`CONFIG_VIDEO_SPRD_VSP=m`, not loaded automatically), which powers the block (MM + VSP domains),
+enables the clocks, releases the resets and dumps the first 0x200 bytes of registers:
+
+    sudo modprobe sprd-vsp
+    sudo cat /sys/kernel/debug/sprd-vsp/regs
+    sudo dmesg | grep -i vsp
+
+Send that output: the registers will show whether the block answers (a hang on `cat` or a bus
+error means a missing power/clock/reset step) and which words look like version/status registers,
+which is where the register-map work starts.

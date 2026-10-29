@@ -1,0 +1,30 @@
+From efba29b1c409fdfaeb934c44690fc522d94a9d34 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Thu, 29 Oct 2026 18:34:52 +0800
+Subject: [PATCH] pmdomain: sprd: ums9230: add the AP VSP (video codec) power
+ domain
+
+The Unisoc BSP's vsp-power-domain node controls the domain with the force
+shutdown (bit 25) and auto shutdown (bit 24) bits of the PMU register at
+0x314, the same layout the MM domain has at 0x2e8, so it fits the existing
+SPRD_PD_SHUTDOWN handling.
+---
+ drivers/pmdomain/sprd/ums9230-pm-domains.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/pmdomain/sprd/ums9230-pm-domains.h b/drivers/pmdomain/sprd/ums9230-pm-domains.h
+index d8fb568e0..d52b129b5 100644
+--- a/drivers/pmdomain/sprd/ums9230-pm-domains.h
++++ b/drivers/pmdomain/sprd/ums9230-pm-domains.h
+@@ -17,6 +17,11 @@ static const struct sprd_pmu_domain_data sprd_pmu_domain_data_ums9230[] = {
+ 		.caps = SPRD_PD_SHUTDOWN,
+ 		.pd_cfg_offs = 0x02e8,
+ 	},
++	[UMS9230_POWER_DOMAIN_AP_VSP] = {
++		.name = "ap_vsp",
++		.caps = SPRD_PD_SHUTDOWN,
++		.pd_cfg_offs = 0x0314,
++	},
+ 	[UMS9230_POWER_DOMAIN_PUBCP] = {
+ 		.name = "pubcp",
+ 		.caps = SPRD_PD_SHUTDOWN | SPRD_PD_ACTIVE_WAKEUP,

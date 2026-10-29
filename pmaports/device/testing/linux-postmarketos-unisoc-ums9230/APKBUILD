@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=33
+pkgrel=34
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -79,6 +79,9 @@ source="
 	0035-arm64-dts-sprd-infinix-x6525-ov8856-powerdown-gpios.patch
 	0036-power-supply-bq2415x-accept-CURRENT_MAX-in-microamps.patch
 	0037-arm64-dts-sprd-infinix-x6525-charge-at-up-to-1.5-A.patch
+	0038-pmdomain-sprd-ums9230-add-the-AP-VSP-video-codec-pow.patch
+	0039-arm64-dts-sprd-ums9230-add-the-VSP-video-codec-node.patch
+	0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
 "
 builddir="$srcdir/linux"
 
@@ -109,7 +112,7 @@ package() {
 
 sha512sums="
 3fa24b0720994802fee53b0b343de722a3a4a9db547dff597411e7eb5cb15d63ec62120705b279edc559a78f6c67e1d1ec52adad4d72ffb4a611767e8ccb86f2  linux-v7.2-rc6-ums9230-0.tar.gz
-0cac0e1322e5afca78aea568c117d6655aa4eafa2d9d8376441815ca8f6dd19810713b618cd8f6f4ab198276fe7c931184cccaf4a7782bfc074b72bb7ecb2d09  config-postmarketos-unisoc-ums9230.aarch64
+6edf145abba3fe7b3582d64015813c76229b1281c9d15b845981e2c52291e8544026e4235c4191a91a7b07edf83236683d895d93dfa9e43947d871dab7061af2  config-postmarketos-unisoc-ums9230.aarch64
 7eaff147db4d2dbaadb287ce72f11d4bbfb0abb70af36aff3001331777627a40e573d680d31079946be0234d3af0be9e7db8fabf4d87e5ce4a03ae4d106b23f3  0001-dt-bindings-vendor-prefixes-add-Infinix-Mobility.patch
 3f035560c3dcf79104266c382fe55bdf0a6ae434eb27f5e44b19430573fc6bff1f99248c6d48d04d6c0834722ddf690efed6f8c6791fd8e704f72708dd86f574  0002-dt-bindings-arm-sprd-add-Infinix-X6525-board.patch
 6cffa0dd1408d8652136fa6d77c63304b54c90e96a10cbf314a40e01bdc41e063fd16852d054f9bda1346a6402c6093f3232a751e40827a2e947f8007e2127e0  0003-arm64-dts-sprd-add-device-tree-for-Infinix-X6525.patch
@@ -147,4 +150,7 @@ e26b0952c22aa3ff6745cc85635c61c2a05b037eba8f8ffc6d605b0fd84019dc4d8b2fc8716cd098
 123410d5091808bae04a8aebe555997939d9cb68f442a5b661ad3aea6bfef202b4ba1fc5898a2fcbf937a03f3d3e8126663b0bcbce263f06fed58ea585c7e9ed  0035-arm64-dts-sprd-infinix-x6525-ov8856-powerdown-gpios.patch
 f1eccff2e5eb00b3977861f31ea771bab23d5f3c7d8ab5341bc862b68dad89ad3e39eec7d76f3a46ad057d55277f6607a56d617dff6bd82ea5ca3205a489bebb  0036-power-supply-bq2415x-accept-CURRENT_MAX-in-microamps.patch
 eef57a39cf015ac5551058b50476a67a578d009499041b1801ee2a7d0a182a31aa5634ee07d5e3ba4d547c275adc7da0edbc9d2e16264fe97148d4559d1b0c17  0037-arm64-dts-sprd-infinix-x6525-charge-at-up-to-1.5-A.patch
+3a5dc4c13b57ab0a5c3652606b8c54dca16e23a8ed022f521173f8bcc729b6c329f38d38bf09e50cdb943e550861b9a0d7d30af89d2cb2b41c5d107ac393fa09  0038-pmdomain-sprd-ums9230-add-the-AP-VSP-video-codec-pow.patch
+b230cd9f5ef23eb8f0adfeae5f7523eab0d941a984525643be0813d3fc80fcd75f74cc3434bf01d831c997c5aaa036c18b4d256c7f4630174b0f0f746ce78b9f  0039-arm64-dts-sprd-ums9230-add-the-VSP-video-codec-node.patch
+97bfee382b0d2338f5067466c197359ce827b3f1602d5ddeb2cb327f6d8bb38ab0de3cd059544afaf695db8cd655d72f96b9df1c348025b9d8882e24b1b90e11  0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
 "
