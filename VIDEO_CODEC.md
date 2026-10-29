@@ -109,3 +109,20 @@ the DT now) and add `jpeg-codec@36000000`: SPI 42, clocks `CLK_MM_CKG_EB`, `CLK_
 MM power domain. `/sys/kernel/debug/sprd-jpg/regs` dumps it; see `VSP_TESTS.md`, test 4b.
 Baseline JPEG decode is far simpler than H.264 (no reference frames, no CABAC), so it is the
 best first block to get real work out of. The stock `libjpeg`-side library is next to read.
+
+## First register dump (step 1 on the phone, kernel pkgrel 34)
+The module loaded, nothing hung, and the first 0x200 bytes read back as real values: the power
+domain, clocks and resets are right (`ap_vsp` was off before, `vsp-clk` ran at 256 MHz). But the
+values are the **IOMMU's** registers, not the codec's: the stock tree puts `sprd,iommuvaul6-vsp`
+at `0x32000000` with size 0x80, and the dump shows exactly that shape:
+
+    0000: 00000100 00000008 ...      (version/ctrl-looking words)
+    0020: 000fffff 00000000 0000ffff 00000000   (a 0xfffff limit, then 0xffff ranges)
+    0030: 0000ffff 00000000 0000ffff 00000000
+    0040: 0000ffff ...
+    0080: 01000000
+
+Everything from 0x50 to 0x1ff reads zero, so the codec's registers are elsewhere: the vendor
+library uses 0x1000-0x1060, 0x1200, 0x2080, 0x2400, 0x2480 and the bitstream module at 0x8000.
+Patch 0043 dumps those ranges (and 0x400 bytes of the JPEG window). If those answer, the next
+step is reading what the stock code writes to them before a decode.

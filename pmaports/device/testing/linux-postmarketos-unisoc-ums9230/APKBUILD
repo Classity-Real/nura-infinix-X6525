@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=35
+pkgrel=36
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -84,6 +84,7 @@ source="
 	0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
 	0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
 	0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
+	0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
 "
 builddir="$srcdir/linux"
 
@@ -157,4 +158,5 @@ b230cd9f5ef23eb8f0adfeae5f7523eab0d941a984525643be0813d3fc80fcd75f74cc3434bf01d8
 97bfee382b0d2338f5067466c197359ce827b3f1602d5ddeb2cb327f6d8bb38ab0de3cd059544afaf695db8cd655d72f96b9df1c348025b9d8882e24b1b90e11  0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
 3c0eef48e47879c72a51d2fcef036ad9792e947f33b78bca66044563f8f1f93c930dc22aa07f09db9d97692c61085917228f086f24d53d8b483869cc4acbc2e0  0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
 01485360631bc23c3e0a87b93945a750bc2a8bf248ecccd7c684c8d6bf6b103ace9b1e42cb5a61226ca8923aeeaf3dcd9ff1b66bc54b2344c992d76a7e172058  0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
+46369aa84a4fae5cd8bb6cd667c9f8319ab669bc776ba43878515d2cbe3f2c9d061bbe2b938190230df889e7f414aac7e291bccd0f5b5370c544e1652feb7448  0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
 "
