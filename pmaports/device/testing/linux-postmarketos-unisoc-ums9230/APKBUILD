@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=36
+pkgrel=37
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -85,6 +85,7 @@ source="
 	0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
 	0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
 	0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
+	0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
 "
 builddir="$srcdir/linux"
 
@@ -159,4 +160,5 @@ b230cd9f5ef23eb8f0adfeae5f7523eab0d941a984525643be0813d3fc80fcd75f74cc3434bf01d8
 3c0eef48e47879c72a51d2fcef036ad9792e947f33b78bca66044563f8f1f93c930dc22aa07f09db9d97692c61085917228f086f24d53d8b483869cc4acbc2e0  0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
 01485360631bc23c3e0a87b93945a750bc2a8bf248ecccd7c684c8d6bf6b103ace9b1e42cb5a61226ca8923aeeaf3dcd9ff1b66bc54b2344c992d76a7e172058  0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
 46369aa84a4fae5cd8bb6cd667c9f8319ab669bc776ba43878515d2cbe3f2c9d061bbe2b938190230df889e7f414aac7e291bccd0f5b5370c544e1652feb7448  0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
+40cf99df56872d78785304ba65b853addf96a2ed025f6a690aa7e3c76c06bff2f5e6a645ceff2480c4a2ed23e018e6a7c1e4c2665822a31ec56a65a5b67f8232  0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
 "

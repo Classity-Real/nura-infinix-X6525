@@ -13,7 +13,8 @@ $S dmesg | grep -iE 'btsprd|wcn|sipc|sbuf|bluetooth|hci[0-9]|pskey|bt_config' | 
 echo; echo "== 3. rfkill and BlueZ state"
 $S rfkill list 2>&1
 systemctl is-active bluetooth; systemctl is-enabled bluetooth
-$S btmgmt info 2>&1 | head -20
+$S hciconfig -a 2>&1 | head -12; $S bluetoothctl list 2>&1 | head -3
+command -v btmon >/dev/null || echo "(btmon not installed: sudo apk add bluez-btmon for a full HCI trace)"
 $S bluetoothctl show 2>&1 | head -15
 echo; echo "== 4. firmware, MAC service and files"
 ls -l /lib/firmware/sprd/ 2>&1 | grep -iE 'bt|wcn' | head
@@ -24,9 +25,13 @@ $S dmesg -C 2>/dev/null; $S dmesg -w > /tmp/bt-dmesg-live.txt 2>&1 & W=$!
 $S journalctl -u bluetooth -f --no-pager > /tmp/bt-journal-live.txt 2>&1 & J=$!
 sleep 1
 $S rfkill unblock bluetooth
-$S btmgmt power on 2>&1 | head -5
+command -v btmon >/dev/null && { $S btmon > /tmp/bt-btmon-live.txt 2>&1 & M=$!; }
+sleep 1
+$S hciconfig hci0 up 2>&1 | head -3
+$S bluetoothctl power on 2>&1 | head -3
 sleep 4
-$S btmgmt info 2>&1 | grep -iE 'current settings|powered|addr' 
+$S hciconfig hci0 2>&1 | head -4
+[ -n "$M" ] && { kill $M 2>/dev/null; echo "--- btmon"; tail -60 /tmp/bt-btmon-live.txt; }
 kill $W $J 2>/dev/null
 echo "--- kernel log during the attempt"; cat /tmp/bt-dmesg-live.txt | tail -60
 echo "--- bluetoothd log during the attempt"; cat /tmp/bt-journal-live.txt | tail -40
