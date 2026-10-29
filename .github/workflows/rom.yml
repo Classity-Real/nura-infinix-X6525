@@ -236,7 +236,14 @@ jobs:
           resize2fs -M "$B"
           bs=$(dumpe2fs -h "$B" 2>/dev/null | awk '/^Block size/{print $3}')
           bc=$(dumpe2fs -h "$B" 2>/dev/null | awk '/^Block count/{print $3}')
-          bc=$((bc + 8 * 1048576 / bs))
+          # Leave the partition's free space to the filesystem: with only 8 MiB of slack, a
+          # kernel or initramfs update on the phone (boot-deploy writes the new files next to
+          # the old) can run out of room halfway and leave /boot without /vmlinuz, which is
+          # a phone stuck at the U-Boot prompt. Grow it to the whole 64 MiB partition (keeping
+          # a minimum of 8 MiB of slack if the contents ever outgrow that).
+          min=$((bc + 8 * 1048576 / bs))
+          bc=$((64 * 1048576 / bs - 64))   # 64 blocks under 64 MiB: a flash must not overrun
+          [ "$bc" -lt "$min" ] && bc=$min
           resize2fs "$B" "$bc"
           truncate -s $((bs * bc)) "$B"
           e2fsck -fn "$B"
