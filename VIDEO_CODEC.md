@@ -65,3 +65,36 @@ enables the clocks, releases the resets and dumps the first 0x200 bytes of regis
 Send that output: the registers will show whether the block answers (a hang on `cat` or a bus
 error means a missing power/clock/reset step) and which words look like version/status registers,
 which is where the register-map work starts.
+
+## Steps 2-3: what the stock AVC library shows so far (analysis only, no driver code yet)
+`libomx_avcdec_hw_sprd.so` is stripped but exports ~150 symbols (`ARM_VSP_RST`, `VSP_CHECK_DDR_BUS_IDLE`,
+`VSP_POLL_COMPLETE`, `H264Dec_cfg_bsm`, `print_debug_register_all`...). Registers reached through
+`0x6120xxxx` constants (`tools/vsp-reg-scan.py`; subtract `0x61200000`, add to the `0x32000000` window):
+
+| Offset | Seen in | What it looks like |
+|--------|---------|--------------------|
+| `0x1010` | `ARM_VSP_RST`, `H264DecDecode` | reset: written `0xd0` |
+| `0x101c` | `VSP_CHECK_DDR_BUS_IDLE` | polled with mask `0x101` (AXI master idle) |
+| `0x1004`, `0x100c`, `0x1020` | `VSP_DMA_TRANSFER` | DMA (table upload) |
+| `0x1028` | `H264DecDecode_NALU` x4, debug dump | interrupt raw/status ("int_raw") |
+| `0x1034` | `H264Dec_cfg_bsm` | bitstream-module configuration |
+| `0x1400` | `H264Dec_Cfg_ScalingMatix` | scaling-list upload |
+| `0x1800` | `init_contexts` | CABAC context init tables |
+| `0x8000-0x8024` | `H264Dec_cfg_bsm`, `read_bits`, `ue_v`, `se_v`, `long_ue_v`, start-code search | the **bitstream module**: the library reads SPS/PPS/slice-header bits (`ue_v`, `se_v`) *through the hardware*, not from memory |
+
+The last row matters for the design: header parsing in the stock stack goes through a hardware
+bit-reader, so a V4L2 stateless driver (which receives already-parsed controls) must feed the same
+bitstream to the module and load the parsed values into the decode registers itself. Only ~22 offsets
+come out of the constant scan; the per-macroblock and reference-frame registers are addressed
+through base-plus-immediate and need the disassembly read function by function
+(`H264Dec_Process_slice`, `H264DecDecode_NALU`, `H264Dec_init_picture`).
+
+The IOMMU side (step 2): `VSP_CHECK_MMU_STATUS` reads eight status registers whose offsets come from a
+structure filled by the kernel module, so the MMU (`sprd,iommuvaul6-vsp`, first 0x80 bytes of the window)
+layout is in `vsp.ko`, not the library. Until it is mapped, buffers have to be physically contiguous
+(CMA) with the MMU left in bypass, which is the fallback the stock library itself has (`cfg_vaor_bypass_en`).
+
+Honest status: steps 2-3 cannot be finished from the dumps alone. They need (a) the `regs` dump from
+step 1 to confirm the block answers and to calibrate which offsets are real, then (b) a long,
+function-by-function read of the library plus experiments on the phone (feed a known I-frame, compare
+the output against ffmpeg). That is weeks of work, not a single patch.
