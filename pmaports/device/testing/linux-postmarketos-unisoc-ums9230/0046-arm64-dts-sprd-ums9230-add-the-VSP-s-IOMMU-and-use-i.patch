@@ -1,0 +1,40 @@
+From 1560522d01882c2b68819398e1ef9fa7983e960b Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 03:18:43 +0800
+Subject: [PATCH] arm64: dts: sprd: ums9230: add the VSP's IOMMU and use it for
+ the video codec
+
+From the stock tree (iommu@32000000, 256 MiB window at 0x20000000). The first dump on the phone read back
+version 1 / VPN range 0xfffff at the offsets the Unisoc VAU IOMMU driver uses, so the existing
+sprd,iommu-v1 driver applies.
+---
+ arch/arm64/boot/dts/sprd/ums9230.dtsi | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230.dtsi b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+index 73f3374f6..4fa6e7bbe 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230.dtsi
++++ b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+@@ -862,6 +862,22 @@ video-codec@32000000 {
+ 			power-domains = <&pmu UMS9230_POWER_DOMAIN_MM>,
+ 					<&pmu UMS9230_POWER_DOMAIN_AP_VSP>;
+ 			power-domain-names = "mm", "vsp";
++			iommus = <&iommu_vsp>;
++		};
++
++		/*
++		 * The IOMMU registers are the first 0x80 bytes of the codec's own
++		 * register window (as in the stock tree), so the two nodes overlap.
++		 */
++		iommu_vsp: iommu@32000000 {
++			compatible = "sprd,iommu-v1";
++			reg = <0x32000000 0x80>;
++			clocks = <&apahb_gate CLK_VSP_EB>;
++			resets = <&apahb_gate RESET_AP_AHB_VSP_GLOBAL_SOFT_RST>,
++				 <&apahb_gate RESET_AP_AHB_VSP_SOFT_RST>;
++			power-domains = <&pmu UMS9230_POWER_DOMAIN_AP_VSP>;
++			sprd,iova-range = <0x20000000 0x10000000>;
++			#iommu-cells = <0>;
+ 		};
+ 
+ 		jpeg-codec@36000000 {

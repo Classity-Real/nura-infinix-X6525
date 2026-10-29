@@ -126,3 +126,19 @@ Everything from 0x50 to 0x1ff reads zero, so the codec's registers are elsewhere
 library uses 0x1000-0x1060, 0x1200, 0x2080, 0x2400, 0x2480 and the bitstream module at 0x8000.
 Patch 0043 dumps those ranges (and 0x400 bytes of the JPEG window). If those answer, the next
 step is reading what the stock code writes to them before a decode.
+
+## Step 2: the VSP's IOMMU (patches 0045-0047)
+The first dump showed that the first 0x80 bytes of the VSP window are an IOMMU whose layout matches the
+mainline Unisoc VAU driver (`sprd-iommu`, compatible `sprd,iommu-v1`): word 0 = `0x100` (version byte
+`1` = VAU), `0x20` = `0xfffff` (the VPN range register's reset value). So no new IOMMU driver is needed:
+- 0045 teaches `sprd-iommu` two things the VSP needs: optional (shared) resets released before the
+  version is read (a block in reset reads version 0, which the driver would take for the *other* layout),
+  and a runtime-PM reference so the `ap_vsp` domain stays on while the IOMMU is bound.
+- 0046 adds `iommu@32000000` (256 MiB window at `0x20000000`, from the stock tree; clock `CLK_VSP_EB`,
+  the two VSP resets, domain `AP_VSP`) and `iommus = <&iommu_vsp>` on the codec.
+- 0047 makes `sprd-vsp` map its window without claiming it (the IOMMU owns the first 0x80 bytes, as in
+  the stock tree), share the resets, and adds `iommu_test` (allocate 256 KiB through the IOMMU, check the
+  bus address and the readback). See `VSP_TESTS.md`, test 4c, including the boot kill-switch.
+This gives scatter-gather buffers for the decoder; whether the codec's bus master is translated is only
+testable once the codec runs. The fallback without it is CMA (32 MiB, `CONFIG_CMA_SIZE_MBYTES=32`) with
+the IOMMU in bypass, as the stock library's `cfg_vaor_bypass_en` does.

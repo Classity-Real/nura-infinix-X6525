@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=37
+pkgrel=38
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -86,6 +86,9 @@ source="
 	0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
 	0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
 	0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
+	0045-iommu-sprd-support-optional-resets-and-keep-the-powe.patch
+	0046-arm64-dts-sprd-ums9230-add-the-VSP-s-IOMMU-and-use-i.patch
+	0047-media-sprd-vsp-allocate-through-the-IOMMU-and-add-an.patch
 "
 builddir="$srcdir/linux"
 
@@ -161,4 +164,7 @@ b230cd9f5ef23eb8f0adfeae5f7523eab0d941a984525643be0813d3fc80fcd75f74cc3434bf01d8
 01485360631bc23c3e0a87b93945a750bc2a8bf248ecccd7c684c8d6bf6b103ace9b1e42cb5a61226ca8923aeeaf3dcd9ff1b66bc54b2344c992d76a7e172058  0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
 46369aa84a4fae5cd8bb6cd667c9f8319ab669bc776ba43878515d2cbe3f2c9d061bbe2b938190230df889e7f414aac7e291bccd0f5b5370c544e1652feb7448  0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
 40cf99df56872d78785304ba65b853addf96a2ed025f6a690aa7e3c76c06bff2f5e6a645ceff2480c4a2ed23e018e6a7c1e4c2665822a31ec56a65a5b67f8232  0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
+1df24ccf5f518dcfac33b952f3930e9d848911c1e23b4045f2e5579ddfaba65a711e296dcfd0f35dfce4fdd86d954f695920fac5368587e974ea19177cef8faf  0045-iommu-sprd-support-optional-resets-and-keep-the-powe.patch
+6192b047054e01845b511d1e0abee91c09d9eacff640ea6a2f5ea62bf961170dd1285ff56381aed24e06dd8dda19e7d4023713e7b5f7b4ef9fb3ea1e0bef849a  0046-arm64-dts-sprd-ums9230-add-the-VSP-s-IOMMU-and-use-i.patch
+35eabf986f5b3d62bd5085d8274669bba45a2e7a88b1a0ba0468eee20fd4b17bd60f539dcd99885d677a8a2cad29f0d64cd94006aaa2e2b9aea4626e7cdb8a05  0047-media-sprd-vsp-allocate-through-the-IOMMU-and-add-an.patch
 "

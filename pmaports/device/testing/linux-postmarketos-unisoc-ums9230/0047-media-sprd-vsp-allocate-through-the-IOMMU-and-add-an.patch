@@ -1,0 +1,144 @@
+From a1de80d7795e2326a59ffb74ef0d1403a1a18481 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 03:18:44 +0800
+Subject: [PATCH] media: sprd: vsp: allocate through the IOMMU and add an
+ iommu_test debugfs file
+
+The IOMMU shares the first 0x80 bytes of the codec's register window, so map it without
+claiming the region, share the resets with the IOMMU, and add a test that allocates a
+buffer like a decoder would (bus address in the IOMMU window, CPU readback).
+---
+ .../bindings/media/sprd,ums9230-vsp.yaml      |  4 ++
+ drivers/media/platform/sprd/vsp/vsp.c         | 66 +++++++++++++++++--
+ 2 files changed, 66 insertions(+), 4 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/media/sprd,ums9230-vsp.yaml b/Documentation/devicetree/bindings/media/sprd,ums9230-vsp.yaml
+index 4fe23128a..f7b974ff2 100644
+--- a/Documentation/devicetree/bindings/media/sprd,ums9230-vsp.yaml
++++ b/Documentation/devicetree/bindings/media/sprd,ums9230-vsp.yaml
+@@ -55,6 +55,9 @@ properties:
+       - const: mm
+       - const: vsp
+ 
++  iommus:
++    maxItems: 1
++
+ required:
+   - compatible
+   - reg
+@@ -87,4 +90,5 @@ examples:
+         power-domains = <&pmu UMS9230_POWER_DOMAIN_MM>,
+                         <&pmu UMS9230_POWER_DOMAIN_AP_VSP>;
+         power-domain-names = "mm", "vsp";
++        iommus = <&iommu_vsp>;
+     };
+diff --git a/drivers/media/platform/sprd/vsp/vsp.c b/drivers/media/platform/sprd/vsp/vsp.c
+index f5a75e3a0..b98b372e5 100644
+--- a/drivers/media/platform/sprd/vsp/vsp.c
++++ b/drivers/media/platform/sprd/vsp/vsp.c
+@@ -12,7 +12,9 @@
+ 
+ #include <linux/clk.h>
+ #include <linux/debugfs.h>
++#include <linux/dma-mapping.h>
+ #include <linux/io.h>
++#include <linux/iommu.h>
+ #include <linux/module.h>
+ #include <linux/mod_devicetable.h>
+ #include <linux/platform_device.h>
+@@ -93,10 +95,57 @@ static int sprd_vsp_regs_show(struct seq_file *s, void *unused)
+ }
+ DEFINE_SHOW_ATTRIBUTE(sprd_vsp_regs);
+ 
++/*
++ * Allocate a buffer the way a decoder would, through the IOMMU, and check the
++ * CPU view of it: the bus address has to lie in the IOMMU's window and what is
++ * written has to read back. The codec itself is not involved.
++ */
++static int sprd_vsp_iommu_test_show(struct seq_file *s, void *unused)
++{
++	struct sprd_vsp *vsp = s->private;
++	struct iommu_domain *dom = iommu_get_domain_for_dev(vsp->dev);
++	size_t size = 256 * 1024;
++	dma_addr_t dma;
++	u32 *buf;
++	int ret, i, bad = 0;
++
++	seq_printf(s, "iommu domain: %s\n", dom ? (dom->type == IOMMU_DOMAIN_DMA ?
++		   "DMA (translated)" : "other") : "none (no IOMMU in use)");
++
++	ret = pm_runtime_resume_and_get(vsp->dev);
++	if (ret)
++		return ret;
++
++	buf = dma_alloc_coherent(vsp->dev, size, &dma, GFP_KERNEL);
++	if (!buf) {
++		seq_puts(s, "dma_alloc_coherent failed\n");
++		pm_runtime_put(vsp->dev);
++		return 0;
++	}
++
++	for (i = 0; i < size / 4; i++)
++		buf[i] = 0xa5000000 | i;
++	for (i = 0; i < size / 4; i++)
++		if (buf[i] != (0xa5000000 | i))
++			bad++;
++
++	seq_printf(s, "buffer: %zu bytes, bus address %pad", size, &dma);
++	if (dom)
++		seq_printf(s, ", physical %pa", &(phys_addr_t){ iommu_iova_to_phys(dom, dma) });
++	seq_printf(s, "\nreadback mismatches: %d\n", bad);
++
++	dma_free_coherent(vsp->dev, size, buf, dma);
++	pm_runtime_put(vsp->dev);
++
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(sprd_vsp_iommu_test);
++
+ static int sprd_vsp_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+ 	const struct sprd_vsp_data *data = device_get_match_data(dev);
++	struct resource *res;
+ 	struct sprd_vsp *vsp;
+ 	int ret;
+ 
+@@ -108,9 +157,17 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 	vsp->data = data;
+ 	platform_set_drvdata(pdev, vsp);
+ 
+-	vsp->base = devm_platform_ioremap_resource(pdev, 0);
+-	if (IS_ERR(vsp->base))
+-		return PTR_ERR(vsp->base);
++	/*
++	 * The first 0x80 bytes of this window belong to the codec's IOMMU, which
++	 * has its own node and driver, so the region cannot be claimed
++	 * exclusively here.
++	 */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!res)
++		return -EINVAL;
++	vsp->base = devm_ioremap(dev, res->start, resource_size(res));
++	if (!vsp->base)
++		return -ENOMEM;
+ 
+ 	/* the clocks are enabled in the order the device tree lists them */
+ 	ret = devm_clk_bulk_get_all(dev, &vsp->clks);
+@@ -118,7 +175,7 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, ret, "failed to get the clocks\n");
+ 	vsp->num_clks = ret;
+ 
+-	vsp->rsts = devm_reset_control_array_get_exclusive(dev);
++	vsp->rsts = devm_reset_control_array_get_shared(dev);
+ 	if (IS_ERR(vsp->rsts))
+ 		return dev_err_probe(dev, PTR_ERR(vsp->rsts),
+ 				     "failed to get the resets\n");
+@@ -134,6 +191,7 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 
+ 	vsp->dir = debugfs_create_dir(data->name, NULL);
+ 	debugfs_create_file("regs", 0400, vsp->dir, vsp, &sprd_vsp_regs_fops);
++	debugfs_create_file("iommu_test", 0400, vsp->dir, vsp, &sprd_vsp_iommu_test_fops);
+ 
+ 	dev_info(dev, "ready; cat /sys/kernel/debug/%s/regs powers it and dumps its registers\n",
+ 		 data->name);

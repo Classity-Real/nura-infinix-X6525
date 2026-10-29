@@ -1,4 +1,4 @@
-# Tests for the first ROM with the VSP and JPEG bring-up (kernel patches 0038-0042)
+# Tests for the VSP, JPEG and IOMMU bring-up (kernel patches 0038-0047)
 
 What this build adds: the `AP_VSP` power domain, the `video-codec@32000000` and `jpeg-codec@36000000`
 nodes, and `sprd-vsp.ko` (binds both; not loaded automatically; kernel package pkgrel 35 or later). Nothing here decodes video. The goal is to learn whether the block powers
@@ -76,6 +76,45 @@ sudo cat /sys/kernel/debug/sprd-jpg/regs > /tmp/jpg-regs-2.txt; diff /tmp/jpg-re
 Outcomes are the same as in the table above (real values / all `ffffffff` or zero / hang). A JPEG
 block that answers while the VSP does not (or the reverse) is useful: it separates a shared MM
 problem from a VSP-only one. Send both register files.
+
+## 4c. The IOMMU (kernel pkgrel 38 or later, patches 0045-0047)
+**Boot risk, read first.** `CONFIG_SPRD_IOMMU` is built in, so from this build on the VSP's IOMMU
+is probed at every boot: it powers the `ap_vsp` domain, enables `vsp-eb`, releases the two VSP resets
+and reads its version register, the same sequence test 4 ran by hand. If the phone no longer boots
+(or hangs before the UI), it is this. Recover without a rebuild by blocking that initcall from the
+boot filesystem (on a PC, with the `pmos-boot-fs.img` you flash):
+```sh
+sh tools/patch-cmdline.sh pmos-boot-fs.img "initcall_blacklist=sprd_iommu_driver_init"
+```
+(then flash it to `cache` again; `--remove` takes it out). The side effects while it is bound:
+`ap_vsp` stays on and `vsp-eb`/`vsp-clk` run at 256 MHz permanently (a small idle-power cost).
+
+Checks, after boot, before loading anything:
+```sh
+sudo dmesg | grep -iE 'sprd-iommu|iommu' | head
+ls /sys/class/iommu/ 2>&1
+sudo cat /sys/kernel/debug/pm_genpd/pm_genpd_summary | grep -iE 'ap_vsp|mm '
+sudo grep -iE 'vsp' /sys/kernel/debug/clk/clk_summary
+```
+Expect an IOMMU named `32000000.iommu`, `ap_vsp` **on**, `vsp-eb` enabled. An `IOMMU version(0)
+is invalid` / `failed to get the resets` line, or a missing `32000000.iommu`, means the probe failed:
+send the lines.
+
+Then the allocation test (needs `sprd-vsp` loaded as in test 4):
+```sh
+sudo modprobe sprd-vsp
+sudo dmesg | grep -iE 'vsp|iommu' | tail
+sudo cat /sys/kernel/debug/sprd-vsp/iommu_test
+sudo cat /sys/kernel/debug/sprd-vsp/regs | head -4
+```
+Expected: `iommu domain: DMA (translated)`, a buffer with a **bus address between 0x20000000 and
+0x2fffffff**, `physical` somewhere in RAM (0x8xxxxxxx), and `readback mismatches: 0`. In `regs`, the
+first rows change from the first dump (`0000: 00000100 00000008 ...`): the config word at `0x4` and
+the page-table address registers (`0x10`-`0x20`) should now hold values. "none (no IOMMU in use)"
+means the codec did not pick up the IOMMU (probe deferred or `iommus` ignored).
+
+What this does **not** test: that the codec's own bus master is translated. That needs the codec
+running (step 3).
 
 ## 5. After the read: did it power down again?
 ```sh
