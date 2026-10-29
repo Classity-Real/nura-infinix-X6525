@@ -53,7 +53,8 @@ Possible outcomes, and what each means:
 | Result | Meaning | Send |
 |--------|---------|------|
 | Probe line `video codec ready`, then 32 rows of `0000: ...` with mixed values | Power, clocks and resets are right; the block answers | `/tmp/vsp-regs-1.txt` |
-| Rows are all `ffffffff` or all `00000000` | The window answers but the block is not really enabled (a gate, reset or power step is missing, or the MM domain is off) | the file + test 2 output |
+| Rows are all `ffffffff`, or one constant everywhere | The window is not really enabled (a gate, reset or power step is missing, or the MM domain is off) | the file + test 2 output |
+| Structured values somewhere (not one constant), zeros elsewhere | The window answers. The first 0x80 bytes are the IOMMU's registers (seen on the first dump), so those prove power and clock; zeros elsewhere prove nothing by themselves (idle or unimplemented registers). Judge the codec core by the rows at `0x1000`, `0x1028`, `0x8000` | the file |
 | `modprobe` fails with `-EPROBE_DEFER` / `failed to get the clocks|resets|power domains` | A DT reference is wrong | the exact `dmesg` line |
 | The `cat` hangs, the phone reboots, or the UI freezes | Bus access to an unpowered or ungated block | after the reboot: `sudo dmesg` of the previous boot (`journalctl -k -b -1`), and which line you ran last |
 
