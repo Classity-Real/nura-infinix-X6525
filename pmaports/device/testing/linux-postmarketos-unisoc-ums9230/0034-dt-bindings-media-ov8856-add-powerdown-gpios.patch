@@ -22,7 +22,7 @@ index 5377ae72c..8570c0580 100644
 +  powerdown-gpios:
 +    description:
 +      The phandle and specifier for an optional GPIO that controls the
-+      sensor's power-down (standby) pin. The pin is active high: driving it
++      sensor's power-down (standby) pin. The pin is active high, so driving it
 +      high puts the sensor in standby, and it is driven low once the supplies
 +      and the external clock are stable.
 +    maxItems: 1
