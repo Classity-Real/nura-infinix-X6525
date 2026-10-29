@@ -1,0 +1,28 @@
+#!/bin/sh
+# apk commit hook: after every apk transaction make sure the boot filesystem still
+# holds what U-Boot's extlinux asks for, and keep a copy of the last good set.
+# A transaction that rewrites the kernel or initramfs (boot-deploy) followed by a
+# forced reboot has left this phone at the U-Boot prompt with no /vmlinuz.
+# Installed as /etc/apk/commit_hooks.d/90-x6525-boot-check; never fails the transaction.
+[ "$1" = post-commit ] || exit 0
+B=/boot
+BK=/var/lib/x6525-boot-backup
+NEED="vmlinuz initramfs ums9230-infinix-x6525.dtb extlinux/extlinux.conf"
+mountpoint -q "$B" 2>/dev/null || { echo "x6525-boot-check: $B is not a separate mount, skipping"; exit 0; }
+good() { for f in $NEED; do [ -s "$B/$f" ] || return 1; done; }
+sync
+if good; then
+	rm -rf "$BK.new"; mkdir -p "$BK.new/extlinux" &&
+	for f in $NEED; do cp -p "$B/$f" "$BK.new/$f" || { rm -rf "$BK.new"; exit 0; }; done
+	rm -rf "$BK"; mv "$BK.new" "$BK"; sync
+	echo "x6525-boot-check: $B is complete, a copy is kept in $BK"
+elif [ -d "$BK" ]; then
+	echo "x6525-boot-check: $B is INCOMPLETE, restoring the missing files from $BK"
+	for f in $NEED; do [ -s "$B/$f" ] || cp -p "$BK/$f" "$B/$f"; done
+	sync
+	good && echo "x6525-boot-check: restored (kernel and initramfs may be from different versions; reinstall linux-postmarketos-unisoc-ums9230 if it misbehaves)" ||
+		echo "x6525-boot-check: STILL INCOMPLETE, do NOT reboot: check df -h $B and run mkinitfs"
+else
+	echo "x6525-boot-check: $B is INCOMPLETE and there is no backup: do NOT reboot; check df -h $B and run mkinitfs"
+fi
+exit 0
