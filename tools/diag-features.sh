@@ -3,6 +3,7 @@
 # Bluetooth, and cellular. It changes nothing (no power-on, no hotspot start, no modem poke), so it
 # is safe to run at any time, over SSH or on the phone's terminal:
 #   sh tools/diag-features.sh        # writes /tmp/features-diag.txt; send that file
+# The GPU section runs tools/check-gpu.sh, so fetch both files into the same folder.
 OUT=/tmp/features-diag.txt
 S=; [ "$(id -u)" = 0 ] || S=sudo
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -44,7 +45,16 @@ echo "-- rpmsg channels (names decide whether rpmsg_wwan can bind):"; ls /sys/bu
 echo "-- tty/wwan nodes:"; for n in /dev/ttyS* /dev/ttyBT* /dev/ttyUSB* /dev/ttyACM* /dev/*wwan*; do [ -e "$n" ] && printf '%s ' "$n"; done; echo
 if have mmcli; then $S mmcli -L 2>&1 | head -5; else echo "ModemManager (mmcli): not installed"; fi
 
-echo; echo "== 5. services"
+echo; echo "== 5. GPU acceleration (tools/check-gpu.sh, next to this script)"
+D=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+if [ -f "$D/check-gpu.sh" ]; then
+	sh "$D/check-gpu.sh" 2>&1
+else
+	echo "check-gpu.sh not found next to this script. Fetch it too:"
+	echo "  curl -fsSL https://raw.githubusercontent.com/Seuj09/pmos-infinix-x6525/main/tools/check-gpu.sh -o /tmp/check-gpu.sh && sh /tmp/check-gpu.sh"
+fi
+
+echo; echo "== 6. services"
 systemctl --failed --no-pager 2>&1 | head -8
 } > "$OUT" 2>&1
 echo "wrote $OUT ($(wc -l < "$OUT") lines): please send it"
