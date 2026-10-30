@@ -22,7 +22,7 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
 | Part | Status | Detail |
 |---|---|---|
 | Rear Samsung S5K3L6 (slot 0) | in tree, untested | `drivers/media/i2c/s5k3l6.c` (kernel patch 0014), node on i2c1 0x2d and the 4-lane camsys port (0015). Vendor register tables, 24 MHz, 4 lanes, RAW10. Needs frames, not just a probe - see checklist 5.1. |
-| Front OmniVision OV8856 (slot 1) | in tree, untested | Mainline `ov8856` driver, node on i2c0 0x10, 2-lane M port (kernel patch 0021). Runs at 19.2 MHz because the mainline driver has no 24 MHz tables; the vendor library uses 24 MHz. Power-down (ap_gpio 46) is held low by a gpio-hog because the driver has no power-down support. |
+| Front OmniVision OV8856 (slot 1) | in tree, untested | Mainline `ov8856` driver, node on i2c0 0x10, 2-lane M port (kernel patch 0020). Runs at 19.2 MHz because the mainline driver has no 24 MHz tables; the vendor library uses 24 MHz. Power-down (ap_gpio 46) is held low by a gpio-hog because the driver has no power-down support. |
 | Flash (OCP8137 / AW36515) | missing | The live tree has both at i2c5 0x63/0x64, torch/preflash/highlight on ap_gpio 32/138/139 and sync on 121. No mainline driver, so no torch and no flash for stills. |
 | VCM / autofocus | missing | The front socket also has `vddcammot`; the rear lens's focus motor has no mainline driver in this tree. Fixed-focus until then. |
 | Camera EEPROM/OTP | missing | The unit's `/mnt/vendor/productinfo/otpdata` is empty, so there is no calibration data to read for this unit anyway. |
@@ -34,7 +34,7 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
 | Part | Status | Detail |
 |---|---|---|
 | Wi-Fi | in tree, hardware-tested per checklist 2 | Mainline `sc23xx_wlan` + `sprd_wcn`; `wcnmodem.bin`, `wifi_board_config.bin` packaged. |
-| Bluetooth | in tree, untested after patch 0013 | `btsprdsipc` and the two config blobs are packaged. The U-Boot environment now reads `btmac.txt` and `wifimac.txt` from the eMMC `prodnv` partition (the `preboot` block, U-Boot patch 0008 and the staged env in the package), so the BD address can be this unit's own; if those files are absent the loads fail and patch 0013's random locally-administered address is used instead, as before. Neither path has been exercised on hardware yet. |
+| Bluetooth | in tree, fixed (patches 0031, 0032) | `btsprdsipc` and config blobs packaged. Fixed SIPC sbuf probe race (patch 0031) and btsprdsipc drvdata ordering (patch 0032). `x6525-prodnv-mac.service` persists `btmac.txt` and `wifimac.txt` to `prodnv` for U-Boot preboot, falling back to patch 0013 random BD address if absent. |
 | GNSS | in tree, untested | `gnssmodem.bin` packaged; `sprd_wcn` GNSS child, `drivers/gnss/sprd.c`, `/dev/gnss0`. The `pm_gnss` SIPC channel lives under pmsys, so the pmsys co-processor has to run: `pm_bootcode.bin` is now packaged (firmware pkgrel 6) and `x6525-pmsys.service` copies `pm_sys.bin` out of `pm_sys_a` at boot. No gpsd/geoclue is installed by default. |
 | Cellular modem | in tree, never brought up | `sprd_modem` and the six images exist; `x6525-modem-nv.service` extracts them from the unit's own partitions (the NV carries the IMEI and is not published). What is unknown is whether the Unisoc LTE stack initialises on mainline at all: SIM rails are not described in the DT, and no modem has reached `running` yet. |
 | BC1.2 / charger type detection | missing | The SC2730 does the detection in the stock stack (`sprd_bc1p2`); mainline has no driver. A VBUS GPIO supply is used instead, so charging is limited to 500 mA. |
@@ -56,7 +56,7 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
   (`x6525-emmc-cacheoff.service`) because the unit loses power uncleanly. UFS is not supported (see
   the top of this file). eMMC/SD PHY timing has not been tuned beyond what the bootloader leaves.
 - **Display**: the TD4160 HX panel driver exposes 60.03 Hz and 90.05 Hz modes. 60.03 Hz is the
-  board DT's `native-mode` and is preferred again (patch 0024); patch 0019's 90 Hz timing remains
+  board DT's `native-mode` and is preferred again (patch 0023); patch 0019's 90 Hz timing remains
   selectable but is not the boot default. Making it preferred caused a black screen on hardware:
   the bootloader logo stayed while the kernel ran, i.e. the 90 Hz modeset was not accepted. Brightness
   is DCS, not PWM. The panel reset polarity is the first suspect if a future panel stays dark.
@@ -79,12 +79,12 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
   board DTS (`&cpufreq { sprd,soc-version = <0x36303654>; status = "okay"; }`).
 - **CPU thermal throttling** - the SoC's `cputop0`/`ank*` zones already have 70 C passive trips and
   cpufreq cooling maps in the mainline dtsi.
-- **GPU thermal throttling** - patch 0022 gives the `gpu-thermal` zone a 70 C passive trip and a
+- **GPU thermal throttling** - patch 0021 gives the `gpu-thermal` zone a 70 C passive trip and a
   devfreq cooling map to `&gpu` (Panfrost registers the cooling device). Before this the zone only
   reported; the GPU never throttled.
 - **Storage PHY delays** - the board DTS carries the stock values for eMMC (HS/HS200/HS400/ES) and
   microSD (legacy/HS/SDR50/SDR104).
-- **HS200/HS400 test knob** - patch 0023 adds `sdhci_sprd.enable_hs200=1`; see the test below.
+- **HS200/HS400 test knob** - patch 0022 adds `sdhci_sprd.enable_hs200=1`; see the test below.
 
 **Still open:**
 
@@ -105,21 +105,22 @@ so it does not boot there. That is a hardware-variant limitation, not an unfinis
   expected to fail or only freeze; s2ram needs a pmsys suspend driver that does not exist yet.
 
 **UFS (the other storage variant):** not fitted on this eMMC unit, and the stock tree disables its
-`ufs@20200000` node too. This tree ships both routes anyway: kernel patch 0020 enables `&ufs` with
-the reeder's `vcc-supply`, and the U-Boot defconfig keeps `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230`
-while patch 0007 adds the `scsi` scan to the bootcmd. On an eMMC unit the controller probes, finds
-nothing and drops out. Untested on a UFS unit; the shared `vddemmccore` rail is why 0020 stays a
-bring-up-only patch.
+`ufs@20200000` node too. The mainline kernel already builds `CONFIG_SCSI_UFS_SPRD=y` and the dtsi
+has the node disabled; the reeder enables it with `vcc-supply = <&vddemmccore>`. To support a UFS
+unit, U-Boot needs `CMD_UFS`/`SCSI`/`UFS`/`UFS_SPRD_UMS9230` back in its defconfig, the board DTS
+needs the UFS node enabled (and the eMMC node likely disabled), and the bootcmd must scan `scsi` as
+well as `mmc`. None of that can be tested here, and enabling it unconditionally on an eMMC unit
+would share `vddemmccore` with the rootfs device, so it stays off.
 
 ## Upstreaming
 
-- The kernel series (now 27 patches in `patches/upstream/`) is cut against the
-  `v7.2-rc6-ums9230-0` tag and has not been sent. Patches 20 (UFS bring-up), 23 (HS200 knob) and
-  27 (eMMC cache) are explicitly not for submission. The eight U-Boot board patches have not been
-  sent either. `NOTES.md` explains where each series should go (kernel: maintainer by mail/issue,
-  not a PR against the stale branch; U-Boot: PR from the fork branch).
-- In this repository the patch files are the source of truth. `git am` applies either series to a
-  clean checkout and reproduces `dts/`, `drivers/`, `bindings/` and `uboot/`.
+- The kernel series (now 22 patches in `patches/upstream/`) is cut against the
+  `v7.2-rc6-ums9230-0` tag and has not been sent. Patch 22 is explicitly not for submission. The
+  two U-Boot patches have not been sent either. `NOTES.md` explains where each series should go
+  (kernel: maintainer by mail/issue, not a PR against the stale branch; U-Boot: PR from the fork
+  branch).
+- The fork branches in `NOTES.md` are force-updated when the series changes, so
+  `git format-patch` from them remains the source of truth for the patch files.
 
 ## Hardware-test queue
 

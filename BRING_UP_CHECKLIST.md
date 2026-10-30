@@ -121,38 +121,32 @@ ssh user@172.16.42.1            # password x6525pmos
 If SSH does not answer a minute after `pmos_continue_boot`, it is a real boot failure: capture the
 last screen lines (a photo is fine) and, if available, the UART output on `ttyS1` (115200 8N1).
 
-**Why "Waiting for root partition" happens, and why a cache-only flash is safe now.** The
-initramfs mounts the root by `pmos_root_uuid` when extlinux passes one. Builds made with this tree's
-device package leave it out: a boot-deploy hook rewrites `/etc/fstab` to name `/` and `/boot` by
-label, so extlinux carries no `pmos_*_uuid` and the initramfs uses its built-in `pmOS_root` /
-`pmOS_boot` label fallback. Labels are the same in every build, so a cache-only flash (the usual way to
-try a new kernel or display change) boots on top of the rootfs already on the phone. The initramfs
-also rewrites an older rootfs's `/etc/fstab` from UUIDs to labels before `switch_root`, so systemd
-does not trip over stale `UUID=` entries.
-
-A cache image built **before** this change still names one exact rootfs UUID. A cache-only flash then
-stops at `Waiting for root partition`; flash the `userdata` image from the same artifact:
+**`cache` and `userdata` must come from the same run.** `extlinux.conf` on `cache` carries
+`pmos_root_uuid`, and the initramfs mounts the root only by that UUID. A cache-only flash (the usual
+way to try a new kernel) points at a filesystem UUID that is not on the phone, and the boot stops
+right after the console handover with no further error on screen. Flash the matching rootfs:
 
 ```sh
-fastboot flash userdata pmos-root-fs.img   # only needed for a pre-label cache
+fastboot flash userdata pmos-root-fs.img   # same run as the cache you flashed
 ```
 
-Check which case you are in from the debug shell. The boot filesystem is not mounted there, but the
-UUIDs U-Boot got from extlinux are on the kernel command line:
+The same applies in reverse: a new userdata with an old cache has a UUID the old extlinux does not
+name. Both files come out of one ROM artifact; flash them together.
+
+Check it in the debug shell before continuing. The boot filesystem is not mounted there, but the
+UUIDs U-Boot got from extlinux are in the kernel command line:
 
 ```sh
 tr ' ' '\n' < /proc/cmdline | grep -E 'pmos_(root|boot)_uuid'
-blkid -L pmOS_root   # the partition the label path would mount
-blkid                # filesystem UUIDs, to compare with the line above
+blkid
 ```
 
-No `pmos_root_uuid` line means the new label path, and `blkid -L pmOS_root` names the userdata
-partition. A `pmos_root_uuid` value that `blkid` does not list means the boot filesystem
-and rootfs are from different pre-label builds; reflash the matching rootfs. To read extlinux itself,
-mount the boot filesystem by its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt;
-cat /mnt/extlinux/extlinux.conf`.
+The `pmos_root_uuid` value must appear in `blkid`'s output (on `mmcblk0p73`, the `userdata`
+partition). If it does not, the rootfs on the phone is from a different build, and
+`pmos_continue_boot` has nothing to mount. To read extlinux itself, mount the boot filesystem by
+its label: `mkdir -p /mnt; mount -o ro "$(blkid -L pmOS_boot)" /mnt; cat /mnt/extlinux/extlinux.conf`.
 
-If root is found and the boot still stops, walk the same steps by hand. Each prints, so the one
+If the UUIDs match and the boot still stops, walk the same steps by hand. Each prints, so the one
 that errors or never returns is the step `pmos_continue_boot` dies in:
 
 ```sh
@@ -178,13 +172,11 @@ same image you are flashing, then flash it:
 ```sh
 sh tools/patch-cmdline.sh --remove pmos-boot-fs.img pmos.debug-shell
 fastboot flash cache pmos-boot-fs.img
-fastboot flash userdata pmos-root-fs.img   # old, pre-label cache only
+fastboot flash userdata pmos-root-fs.img   # only if the phone's userdata is another run's
 ```
 
-For a label-based cache (the one this tree builds) that is all: extlinux names the `pmOS_root` label,
-so the rootfs already on the phone is found, and the initramfs migrates its fstab on first boot. For
-a pre-label cache that still pins `pmos_root_uuid`, flash the matching userdata and check that its
-UUID is the one extlinux names:
+Both files must come from one ROM run; check before flashing that the rootfs UUID is the one the
+patched extlinux names:
 
 ```sh
 blkid -p pmos-root-fs.img                    # UUID= must match...
@@ -230,7 +222,7 @@ on a mounted filesystem. The clean recovery is to reflash `userdata` from the sa
 the first boot finish:
 
 ```sh
-fastboot flash userdata pmos-root-fs.img   # same artifact as the cache
+fastboot flash userdata pmos-root-fs.img   # same run as the cache
 ```
 
 If it keeps happening without power cuts, collect the storage-side evidence:
@@ -318,9 +310,9 @@ pgrep -a buffyboard
 
 If nothing is listed, the process was killed at switch_root and no service restarted it. An image
 built with `ui = console` has no buffyboard service - it is shipped by `postmarketos-ui-buffyboard` -
-while the `rom` job's `buffyboard` option installs it and enables it (the systemd unit via
+while `rom.yml` now selects `ui = buffyboard`, which installs it and enables it (the systemd unit via
 `postmarketos-base`'s preset; on an OpenRC image the UI's openrc subpackage adds the script to the
-default runlevel). The job also pins `service_manager = systemd`, because the UI package defaults
+default runlevel). `rom.yml` also pins `service_manager = systemd`, because the UI package defaults
 to OpenRC and the init system would otherwise change with the UI. Until that image is flashed, start
 it by hand over SSH as `user`; it draws on the console and injects keys there, so an SSH session is
 enough:
@@ -599,10 +591,9 @@ bluetoothctl show
 
 ## 3. GUI
 
-Touch (1) and Wi-Fi (2) are done. The Build PMOS `rom` job takes a **ui** input: `phosh` (the
-default mobile UI), `plasma-mobile` (KDE) or `buffyboard` (a console with a keyboard). The Phosh
-and Plasma steps below cover whichever the input picked, and the device package carries both
-sessions' drop-ins.
+Touch (1) and Wi-Fi (2) are done. The `rom` workflow now builds **Plasma Mobile**
+(`ui = plasma-mobile` in rom.yml); the Phosh steps below still apply when `ui` is set back, and the
+device package carries both sessions' drop-ins.
 
 ### 3.0 What the Plasma Mobile image runs
 
@@ -699,31 +690,19 @@ route.
 
 ### 3.3 Switch the UI and build
 
-the `rom` job's `ui` input defaults to `phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
-defaults to systemd and uses greetd with the `greetd-phrog` greeter). The device package installs a
-software-renderer drop-in, because the GPU path (phoc/wlroots trying GLES2 through Panfrost first)
-booted to a black screen with the session running and SSH working:
+`rom.yml` now selects `ui = phosh` (keeping the `service_manager = systemd` pin; the Phosh UI also
+defaults to systemd and uses greetd with the `greetd-phrog` greeter). Because there is no GPU
+firmware, the device package installs the software-renderer drop-in:
 
 ```ini
-# /etc/systemd/system/greetd.service.d/20-x6525-software-render.conf
+# /etc/systemd/system/greetd.service.d/10-x6525-software.conf
 [Service]
 Environment=WLR_RENDERER=pixman
-Environment=LIBGL_ALWAYS_SOFTWARE=1
-Environment=GSK_RENDERER=cairo
 ```
 
-`pixman` makes phoc compose on the CPU, `LIBGL_ALWAYS_SOFTWARE` sends Mesa clients to llvmpipe (a pixman
-compositor offers no dmabuf, so a GPU client would have nothing to share buffers with), and
-`GSK_RENDERER=cairo` makes GTK4 apps draw without GL. Plasma Mobile gets the same idea in
-`plasma-mobile.service.d/20-x6525-software-render.conf` (`KWIN_COMPOSE=Q`, `QT_QUICK_BACKEND=software`,
-`LIBGL_ALWAYS_SOFTWARE=1`). To try the GPU again, delete that one file and reboot; section 7 is the test.
-Whatever the screen does, run `sudo x6525-display-report` over SSH: it prints the DRM cards, panel and
-backlight state, GPU messages, the session's drop-ins and its journal in one go.
-
-For a first install, build and flash `cache` and `userdata` from the same run, and boot. Once a
-label-based rootfs is on the phone, later kernel/display changes need only a new `cache`. On a working
-`simpledrm` the Phosh shell comes up on greetd; if phoc fails instead, SSH still works and its log
-says why - then go to 3.2 (enable `sprd_drm`).
+Build, flash `cache` and `userdata` from the same run, and boot. On a working `simpledrm` the Phosh
+shell comes up on greetd; if phoc fails instead, SSH still works and its log says why - then go to
+3.2 (enable `sprd_drm`).
 
 What the image gives, and what it will not: greetd-phrog is itself Phosh-based, so the first screen
 is a Phosh-style login asking for `user` / `x6525pmos` with the on-screen keyboard. After that:
@@ -782,7 +761,7 @@ journalctl -b --no-pager _UID=10000 | tail -100
 - symlink missing: the DEVPATH rule did not match; fix the rule (the new ROM uses
   `DEVPATH=*/display-subsystem/drm/card*`).
 - symlink present and the screen still black: the handoff worked and KWin's modeset or Plasma
-  itself failed; the `_UID=10000` journal has the reason, and a build with patch 0024 (60 Hz
+  itself failed; the `_UID=10000` journal has the reason, and a build with patch 0023 (60 Hz
   preferred) is the next test.
 
 Two things have caused this on this port. Check the first before rebuilding:
@@ -798,7 +777,7 @@ Two things have caused this on this port. Check the first before rebuilding:
    `DEVPATH=="*/display-subsystem/drm/card[0-9]*"`. Without the link, KWin/phoc is started with a
    nonexistent device and the panel is never modeset.
 2. **The 90 Hz mode is preferred.** The board DT's `native-mode` is timing0 (60 Hz). Patch 0019
-   made timing1 (90 Hz) preferred; patch 0024 restores 60 Hz and keeps 90 Hz selectable. On this
+   made timing1 (90 Hz) preferred; patch 0023 restores 60 Hz and keeps 90 Hz selectable. On this
    DSI/DPU path a rejected 90 Hz modeset also leaves the bootloader logo in place.
 
 Collect this first (works over SSH):
@@ -823,7 +802,7 @@ What the result means:
 |---|---|---|
 | `/dev/dri/card1` exists, `/dev/dri/x6525-primary` missing | the udev rule did not match (the card has no `DRIVERS`; match its `DEVPATH` instead) | create the link by hand (below); the port needs the rule fixed |
 | no `/dev/dri/card1`, although dmesg says `Initialized sprd ... on minor 1` | the sprd DRM card is not registered (or was removed after init) | send the full `dmesg` from that line and `ls -l /dev/dri`; do not chase the compositor yet |
-| symlink exists, `journalctl -u plasma-mobile` shows a DRM/device error | compositor/modeset failure | send the journal; with the 0024 build also try `video=DSI-1:720x1612@60` for one boot |
+| symlink exists, `journalctl -u plasma-mobile` shows a DRM/device error | compositor/modeset failure | send the journal; with the 0023 build also try `video=DSI-1:720x1612@60` for one boot |
 | `bl_power` is 1 or `brightness` is 0 | backlight off, not necessarily a DRM failure | set `brightness` to `max_brightness` and check the panel init in `dmesg` |
 
 Manual hand-off test, if `card1` exists but the symlink does not:
@@ -863,7 +842,7 @@ journalctl -b --no-pager _UID=10000 | tail -80
 
 A reboot is the reliable retry after creating the link by hand: KWin lives in the user session and
 can survive a restart of the system unit. If KWin exits with a mode/modeset error, the image still
-has 90 Hz preferred; use a build with patch 0024 (60 Hz preferred) before chasing the compositor
+has 90 Hz preferred; use a build with patch 0023 (60 Hz preferred) before chasing the compositor
 further. The manual symlink alone cannot fix a rejected 90 Hz mode on the old image.
 
 The 60 Hz test on an older image, for the second cause:
@@ -878,7 +857,7 @@ cannot help.
 
 ### 3.6 Deep Diagnostic: If the Screen Still Fails (Black Screen)
 
-If the screen is still black after applying patches 0024 (60 Hz mode default), 0025 (delays and AVDD/AVEE GPIOs), and 0026 (LP command tx and boot handoff), use this systematic triage over SSH:
+If the screen is still black after applying patches 0023 (60 Hz mode default), 0024 (delays and AVDD/AVEE GPIOs), and 0025 (LP command tx and boot handoff), use this systematic triage over SSH:
 
 #### Step 1: Identify the symptom category
 
@@ -1113,7 +1092,7 @@ The port now describes the rear camera and builds a driver for it:
 
 The front camera is now described too:
 
-- `patches/upstream/0021-*` adds `camera@10` on `&i2c0` for the front OV8856, plus the two-lane
+- `patches/upstream/0020-*` adds `camera@10` on `&i2c0` for the front OV8856, plus the two-lane
   `CAMSYS_CSI_M` port. It uses the mainline `ov8856` driver at 19.2 MHz on `CLK_SENSOR0`
   (`TWPLL_96M` parent) and the `vddcamio`/`vddcama0`/`vddcamd0` rails.
 - the vendor library (`libsensor_ov8856_front.so`) runs the part at 24 MHz, but the mainline driver
@@ -1160,7 +1139,7 @@ There is no camera application yet: the mainline sprd stack exposes raw Bayer ca
 blocks through V4L2, but libcamera has no sprd pipeline handler and there is no 3A. The first
 milestone is frames from the sensor, then a userspace pipeline.
 
-The front OV8856 is described by patch 0021. The live tree puts it in `sensor-main`: i2c0 at 7-bit
+The front OV8856 is described by patch 0020. The live tree puts it in `sensor-main`: i2c0 at 7-bit
 0x10, `phyid 2` (a two-lane port), reset ap_gpio 44, power-down ap_gpio 46, vddcamio/vddcama0/
 vddcamd0/vddcammot, on `CLK_SENSOR0`. The mainline ov8856 driver only knows 19.2 MHz tables, so its
 clock is `CLK_SENSOR0` at 19.2 MHz (TWPLL_96M parent, as the reeder does) - the rear sensor is on
@@ -1451,10 +1430,9 @@ matches Valhall JM as `arm,mali-valhall-jm`. `mali_csffw.bin` belongs to Arm's n
 (G610 and up), not this one - an earlier revision of this note wrongly expected it.
 
 What is needed is already in the tree: `sprd_drm` probing (so the panel/drm device exists), the
-Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus `mesa-vulkan-panfrost`. The session
-renderer is pinned to software again for now (3.3): with it unpinned, phoc/wlroots and KWin try GLES2
-through Panfrost first, and that left the screen black on this board. To test the GPU, delete
-`20-x6525-software-render.conf` (3.3), reboot, and use `sudo x6525-display-report` if the screen goes black.
+renderer no longer pinned to pixman (phoc/wlroots and KWin both try GLES2 through Panfrost, then
+Vulkan, then software), and Mesa's panfrost Gallium driver (aarch64 `mesa-dri-gallium`) plus
+`mesa-vulkan-panfrost`.
 
 The GPU now also has a DVFS table, taken from the stock kernel's `operating-points` for this part:
 384 MHz at 0.70 V, 512 and 614.4 MHz at 0.75 V, 768 MHz at 0.80 V. Panfrost's devfreq scales through
@@ -1482,7 +1460,7 @@ vulkaninfo --summary
 
 ### 7.1 GPU thermal throttling
 
-Patch 0022 gives the SoC's `gpu-thermal` zone a 70 C passive trip and a devfreq cooling map to the
+Patch 0021 gives the SoC's `gpu-thermal` zone a 70 C passive trip and a devfreq cooling map to the
 GPU (Panfrost registers the cooling device). Before it, the zone only reported. Check the zone and
 that the GPU rate moves when the trip is crossed:
 
@@ -1505,7 +1483,7 @@ watch -n 1 'cat /sys/class/devfreq/*/cur_freq'
 ### 7.2 eMMC HS200/HS400 (opt-in test)
 
 The mainline driver marks HS200 broken for every `sprd,sdhci-r11` controller, so the eMMC link comes
-up at DDR52 even though the stock kernel runs the same part at HS400. Patch 0023 adds a boot-time
+up at DDR52 even though the stock kernel runs the same part at HS400. Patch 0022 adds a boot-time
 override; it is deliberately **off** by default because the eMMC is the root filesystem.
 
 On the host, add the option to the boot image before flashing (or to an already-extracted image):

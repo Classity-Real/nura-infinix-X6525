@@ -1,0 +1,80 @@
+From 8b9f71c42e8a15a0c1f4e19194208031d2797e55 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Tue, 27 Oct 2026 11:45:00 +0000
+Subject: [PATCH] media: ov8856: add powerdown GPIO support and camsys robustness
+
+Add support for an optional powerdown GPIO to the ov8856 sensor driver,
+asserting powerdown at boot and suspend and deasserting it on resume after
+the power rails and external clock are stable. This eliminates the need
+for board device trees to use persistent gpio-hogs which violate power
+sequencing.
+
+Also update sprd camsys to check if the remote sensor endpoint is
+available before registering it with the async subdev notifier. This
+prevents camsys async notification from stalling indefinitely if an
+endpoint references a disabled sensor node.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ drivers/media/i2c/ov8856.c                  | 20 ++++++++++++++++++++
+ drivers/media/platform/sprd/camsys/camsys.c |  5 +++++
+ 2 files changed, 25 insertions(+)
+
+diff --git a/drivers/media/i2c/ov8856.c b/drivers/media/i2c/ov8856.c
+index 213d289..fc6694e 100644
+--- a/drivers/media/i2c/ov8856.c
++++ b/drivers/media/i2c/ov8856.c
+@@ -1424,4 +1424,5 @@ struct ov8856 {
+ 	struct clk		*xvclk;
++	struct gpio_desc	*powerdown_gpio;
+ 	struct gpio_desc	*reset_gpio;
+ 	struct regulator_bulk_data supplies[ARRAY_SIZE(ov8856_supply_names)];
+ 
+@@ -2106,4 +2107,7 @@ static int ov8856_power_on(struct device *dev)
+ 		goto disable_clk;
+ 	}
+ 
++	if (ov8856->powerdown_gpio)
++		gpiod_set_value_cansleep(ov8856->powerdown_gpio, 0);
++
+ 	gpiod_set_value_cansleep(ov8856->reset_gpio, 0);
+@@ -2113,4 +2117,6 @@ static int ov8856_power_on(struct device *dev)
+ disable_clk:
+ 	gpiod_set_value_cansleep(ov8856->reset_gpio, 1);
++	if (ov8856->powerdown_gpio)
++		gpiod_set_value_cansleep(ov8856->powerdown_gpio, 1);
+ 	clk_disable_unprepare(ov8856->xvclk);
+ 
+@@ -2127,4 +2133,6 @@ static int ov8856_power_off(struct device *dev)
+ 
+ 	gpiod_set_value_cansleep(ov8856->reset_gpio, 1);
++	if (ov8856->powerdown_gpio)
++		gpiod_set_value_cansleep(ov8856->powerdown_gpio, 1);
+ 	regulator_bulk_disable(ARRAY_SIZE(ov8856_supply_names),
+ 			       ov8856->supplies);
+@@ -2308,4 +2316,9 @@ static int ov8856_probe(struct i2c_client *client)
+ 		if (IS_ERR(ov8856->reset_gpio))
+ 			return PTR_ERR(ov8856->reset_gpio);
+ 
++		ov8856->powerdown_gpio = devm_gpiod_get_optional(dev, "powerdown",
++								 GPIOD_OUT_HIGH);
++		if (IS_ERR(ov8856->powerdown_gpio))
++			return PTR_ERR(ov8856->powerdown_gpio);
++
+ 		for (i = 0; i < ARRAY_SIZE(ov8856_supply_names); i++)
+diff --git a/drivers/media/platform/sprd/camsys/camsys.c b/drivers/media/platform/sprd/camsys/camsys.c
+index a35221b..6009ec3 100644
+--- a/drivers/media/platform/sprd/camsys/camsys.c
++++ b/drivers/media/platform/sprd/camsys/camsys.c
+@@ -108,4 +108,9 @@ static int sprd_camsys_parse_ports(struct sprd_camsys *cs)
+ 			goto err_out;
+ 		}
+ 
++		if (!of_device_is_available(remote)) {
++			of_node_put(remote);
++			continue;
++		}
++
+ 		sl = v4l2_async_nf_add_fwnode(&cs->notifier,
+-- 
+2.43.0

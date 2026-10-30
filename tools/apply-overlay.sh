@@ -53,7 +53,11 @@ install -Dm644 "$HERE/bindings/infinix,td4160-hx-panel.yaml" \
 	"$TREE/Documentation/devicetree/bindings/display/panel/infinix,td4160-hx-panel.yaml"
 install -Dm644 "$HERE/bindings/omnivision,tcm-spi.yaml" \
 	"$TREE/Documentation/devicetree/bindings/input/touchscreen/omnivision,tcm-spi.yaml"
-echo "copied device tree, four drivers and three bindings"
+# The OV8856 binding with powerdown-gpios (patches/upstream/0034): the board DT
+# uses the property, so dt-validate on the pristine tag needs this version.
+install -Dm644 "$HERE/bindings/ovti,ov8856.yaml" \
+	"$TREE/Documentation/devicetree/bindings/media/i2c/ovti,ov8856.yaml"
+echo "copied device tree, four drivers and four bindings"
 
 # 'git apply' rather than patch(1): its --check semantics are unambiguous in
 # both directions, whereas patch's reverse detection happily reports success

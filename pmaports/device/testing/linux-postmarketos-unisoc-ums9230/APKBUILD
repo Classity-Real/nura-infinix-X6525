@@ -1,4 +1,4 @@
-# Staging for the Infinix X6525: the twenty-seven patches below add this board
+# Staging for the Infinix X6525: the thirty patches below add this board
 # (device tree, panel, touch, charger and camera sensor drivers, the bindings
 # they need, two binding fixes, a watchdog fix, a Bluetooth fallback and the
 # charger's OTG boost regulator) and are cut against the same tag this package
@@ -9,7 +9,7 @@ maintainer="Affe Null <affenull2345@gmail.com>"
 _flavor="postmarketos-unisoc-ums9230"
 pkgname=linux-$_flavor
 pkgver=7.2.0_rc6_git20260807
-pkgrel=24
+pkgrel=38
 pkgdesc="Linux kernel with patches for Unisoc UMS9230 devices"
 arch="aarch64"
 _carch="arm64"
@@ -55,21 +55,40 @@ source="
 	0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 	0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 	0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
-	0028-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 	0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 	0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 	0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
 	0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 	0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 	0019-drm-panel-td4160-hx-90hz.patch
-	0020-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch
-	0021-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
-	0022-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
-	0023-mmc-sdhci-sprd-opt-in-hs200-override.patch
-	0024-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
-	0025-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
-	0026-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
-	0027-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+	0020-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
+	0021-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
+	0022-mmc-sdhci-sprd-opt-in-hs200-override.patch
+	0023-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+	0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+	0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
+	0026-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+	0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
+	0028-clk-sprd-let-composite-clocks-switch-mux-parent.patch
+	0029-arm64-dts-sprd-infinix-x6525-gpu-clock-fixes.patch
+	0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
+	0031-rpmsg-sprd_sipc_sbuf-publish-sdev-before-device-regi.patch
+	0032-Bluetooth-btsprdsipc-set-drvdata-before-registering-.patch
+	0033-arm64-dts-sprd-ums9230-enable-the-always-on-broadcast.patch
+	0034-dt-bindings-media-ov8856-add-powerdown-gpios.patch
+	0035-arm64-dts-sprd-infinix-x6525-ov8856-powerdown-gpios.patch
+	0036-power-supply-bq2415x-accept-CURRENT_MAX-in-microamps.patch
+	0037-arm64-dts-sprd-infinix-x6525-charge-at-up-to-1.5-A.patch
+	0038-pmdomain-sprd-ums9230-add-the-AP-VSP-video-codec-pow.patch
+	0039-arm64-dts-sprd-ums9230-add-the-VSP-video-codec-node.patch
+	0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
+	0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
+	0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
+	0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
+	0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
+	0045-iommu-sprd-support-optional-resets-and-keep-the-powe.patch
+	0046-arm64-dts-sprd-ums9230-add-the-VSP-s-IOMMU-and-use-i.patch
+	0047-media-sprd-vsp-allocate-through-the-IOMMU-and-add-an.patch
 "
 builddir="$srcdir/linux"
 
@@ -100,10 +119,10 @@ package() {
 
 sha512sums="
 3fa24b0720994802fee53b0b343de722a3a4a9db547dff597411e7eb5cb15d63ec62120705b279edc559a78f6c67e1d1ec52adad4d72ffb4a611767e8ccb86f2  linux-v7.2-rc6-ums9230-0.tar.gz
-0cac0e1322e5afca78aea568c117d6655aa4eafa2d9d8376441815ca8f6dd19810713b618cd8f6f4ab198276fe7c931184cccaf4a7782bfc074b72bb7ecb2d09  config-postmarketos-unisoc-ums9230.aarch64
+6edf145abba3fe7b3582d64015813c76229b1281c9d15b845981e2c52291e8544026e4235c4191a91a7b07edf83236683d895d93dfa9e43947d871dab7061af2  config-postmarketos-unisoc-ums9230.aarch64
 7eaff147db4d2dbaadb287ce72f11d4bbfb0abb70af36aff3001331777627a40e573d680d31079946be0234d3af0be9e7db8fabf4d87e5ce4a03ae4d106b23f3  0001-dt-bindings-vendor-prefixes-add-Infinix-Mobility.patch
 3f035560c3dcf79104266c382fe55bdf0a6ae434eb27f5e44b19430573fc6bff1f99248c6d48d04d6c0834722ddf690efed6f8c6791fd8e704f72708dd86f574  0002-dt-bindings-arm-sprd-add-Infinix-X6525-board.patch
-f994869d48cba8ac0c676e3acde38e22cbeed2f3e09c9306becbd830890d27496b8e8a2cef20a67505deffdaf2eae8646f44c847553aad7e7cdae3c2ee35fdfd  0003-arm64-dts-sprd-add-device-tree-for-Infinix-X6525.patch
+6cffa0dd1408d8652136fa6d77c63304b54c90e96a10cbf314a40e01bdc41e063fd16852d054f9bda1346a6402c6093f3232a751e40827a2e947f8007e2127e0  0003-arm64-dts-sprd-add-device-tree-for-Infinix-X6525.patch
 ad1a8b9faaef0da7630292d9da5fc763a27dccfcc109f7d31023736a041657b65ffb7b20d1b39f8454f820a4e81736b80c651f9e983bda4bcce3c413bdce291c  0004-drm-panel-add-driver-for-the-TD4160-HX-720x1612-panel.patch
 efeef7f9ed719bd38cc592a4360c0dfd8547aa3af943046db6db61e05432d9fe1f8f0a3fc8b6d3200013dd1ea263a9659269ff15aa88a51d8f7b57e8f45147df  0005-dt-bindings-input-add-OmniVision-TCM-SPI-touchscreen.patch
 783bdb9971e27f953f2eab4d08a27e1c7ad8ff8e01fcbb36e7a5018b5e4604598a4bf5dee594a93d4d633e9d3a40fe2e70978aa2ba6b119a0a073b6e936914ac  0006-Input-add-OmniVision-TCM-SPI-touchscreen-driver-host.patch
@@ -114,19 +133,38 @@ c8d4c9191516a0bff476855d8e63dec3fb284142ee27f766d3440c0cc8d4703530dd43680a3d9114
 debb96fe3138b14e5498cfdd5c6f0dd3c953c5f9335262e1d1ce5bb6851df3cb71aed32f267d40677c8992e35bc875acdce9d0afb363f09886830d9925ae5888  0011-watchdog-sprd_wdt-keep-a-watchdog-the-bootloader-started-fed.patch
 775bdfac6606e64ac178376a3e056f53a75e8bb95dcbe2cf0cb1c72164e9a3c007b795185961a3cc871c6a6e713ec785c74a6d2c5d76017f8b3cd1207ed369d4  0012-spi-sprd-fix-full-duplex-pio-rx-length-and-irq-clear.patch
 2ade1accb8ed2725ed05bcc45eef32c34e7b57f456bd0b53c9ed86bfc9b613b2c24175009f12e981bcfa3b9f6a6b3972ff3cb916055e1ed30255ae33c7e92bae  0013-bluetooth-btsprdsipc-fall-back-to-a-random-bd-address.patch
-ac2a085ea94482d1cac45d1c04c3ddd5b86e6fc4b5a3ad0ee91a97a94d7b066ab7f1903c42fbda79b325319762e4a83dbcb198ed3347da1e1c7521efce80397f  0028-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
 4f4166cba2d1a4c645358252fe167e51b445a1d50ccaef2078ee70bef21160a1e08adb200e90e7cb712de3f393045dd537e41b64dc9f24501e86b1a3f5bf830c  0014-media-i2c-add-a-Samsung-S5K3L6-sensor-driver.patch
 4ea9574d3a164d430a5aeef6d588a71f2b7fac3b808096dfb4154cba9a54268794d17b35116dd4e587ce81eb5b94ac7340285d37a0ca44c118b22e58752ef0a0  0015-arm64-dts-sprd-infinix-x6525-add-the-rear-camera.patch
 171d4e0b735fc83643761bf2419b3b7e1cdedab5327ceb837a92bbc7bc69f467cb2448085fdaefb852596d3cc82c3a3645dcc86e876f1a568a810f59a73b1333  0016-power-supply-bq2415x-expose-the-OTG-boost-as-a-regulator.patch
 34cb73217581a0d1300075f5a733cd5dd21353aaf5b8e31a89057ebf6c35c9b4de0ceb6edf849683a6a03c2d4d063fbea4b8f7bab49ea15ea725ca01deecbbd2  0017-arm64-dts-sprd-infinix-x6525-charger-otg-boost.patch
 a87ce58e4df4d5bb2d930c6d296fad130553ba6bdb15d2d50a11871b2ec70c5717a4fa3f44232bb2b172a77e021e978f215d202e7759adc8a775caa539d13ae8  0018-arm64-dts-sprd-infinix-x6525-gpu-dvfs.patch
 b6c5bdc731f65a333ae033ebae91267c8741808eae4447d04656df94dd863ad7b1e05a703ad51dc899c660817617965f796d0f7103c5fa97943d883de05e143a  0019-drm-panel-td4160-hx-90hz.patch
-4dfffa8cf1d7265da87f7a607ab13fa2a8d316e32a8c9f90989c21632ce521f73b82f8b8d24363f8c2e3aeba82c1a4debe9bae517c41edd222f4f32733365df5  0020-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch
-740eb1bb4c93fe99e73cc11d5e618a2c14779389c0e47f62a0948af6438c87353849f054063c455ca43c91a9a8309f0323676f8f880d0e53e29de3a9bec75063  0021-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
-0c7732e27b71b61b92fcfa565c089cbd9cb9ea765b1b0a42c1319a91878219b0040a232f92dcc438a6500aa9682b35aa0eb1dfb388e1e81b561f091e2d24bd90  0022-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
-dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc81ade1ffcf0f8a8ecd4a0c9edd5598a52cef909d552670ed  0023-mmc-sdhci-sprd-opt-in-hs200-override.patch
-60e4e778d5a05e54c01c3e56f3e998eba5dce9cb560c259e736f78ec2f1567430f5b35b33573d83dd43758e4d723ee47bc6d8464e274da1d7ee5fd6ae5a6c4d7  0024-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
-6a5ce154560745a1764ea954f17abde9fa03c6019719da0ee0e91820cf37c45bb9009851de738a9567c85577c1e378ec879bf62f2deaab9cc53cf8cb3371ede1  0025-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
-5e827f6204b700725d2fcd4b201d27f3fc8fa421dea9b2935181dc8c4c147dc928e7acbc396bba175551e8c316f4d689acd431a59695466470185d7bc887db05  0026-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
-1886e7d291d7beb115000d315649f1352ecdce472fb268da824dd39bf0a85511dd463d371266157195749020f9fb1a850c3f6b706cc5e6f4d8f1992d1a8abad6  0027-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+576febc7716b0835dd1374008109a8eabb8c4220f092c0b5b4ab960610a74f1beb7f66c8a1a9323b8908ed2f7f7187730c61dbad3c51d6a48582cd30d6db6ae9  0020-arm64-dts-sprd-infinix-x6525-add-the-front-camera.patch
+0c7732e27b71b61b92fcfa565c089cbd9cb9ea765b1b0a42c1319a91878219b0040a232f92dcc438a6500aa9682b35aa0eb1dfb388e1e81b561f091e2d24bd90  0021-arm64-dts-sprd-infinix-x6525-gpu-thermal-throttling.patch
+dbb177427725839ac1b75f33ee0607d65e71479c71175d28536d768b43ffd14659bdd888187553dc81ade1ffcf0f8a8ecd4a0c9edd5598a52cef909d552670ed  0022-mmc-sdhci-sprd-opt-in-hs200-override.patch
+60e4e778d5a05e54c01c3e56f3e998eba5dce9cb560c259e736f78ec2f1567430f5b35b33573d83dd43758e4d723ee47bc6d8464e274da1d7ee5fd6ae5a6c4d7  0023-drm-panel-td4160-hx-keep-the-stock-60hz-preferred.patch
+6a5ce154560745a1764ea954f17abde9fa03c6019719da0ee0e91820cf37c45bb9009851de738a9567c85577c1e378ec879bf62f2deaab9cc53cf8cb3371ede1  0024-drm-panel-td4160-hx-fix-post-command-delays-and-powe.patch
+5e827f6204b700725d2fcd4b201d27f3fc8fa421dea9b2935181dc8c4c147dc928e7acbc396bba175551e8c316f4d689acd431a59695466470185d7bc887db05  0025-drm-sprd-enable-LP-cmd-tx-and-clean-boot-handoff.patch
+1886e7d291d7beb115000d315649f1352ecdce472fb268da824dd39bf0a85511dd463d371266157195749020f9fb1a850c3f6b706cc5e6f4d8f1992d1a8abad6  0026-mmc-core-disable-volatile-eMMC-cache-by-default-and-.patch
+2225ccd1488e9412ca7c9464002d726cc73fe4acda228bef6fb9cd63eed320ebdc8d12720457886cd35b4e1b737607db388b691bb24649e1866219ddcfc90732  0027-Bluetooth-btsprdsipc-reject-a-pskey-config-shorter-t.patch
+c5be1128145dde296487ef278b640d950cb8f1f9c68c79ebb928eec681749068748ef1460977d8f592ae2b5a011414acc95450c3411557519524523550f6446d  0028-clk-sprd-let-composite-clocks-switch-mux-parent.patch
+bc2ee7d9ccde7edf06ad8904b012a06d7768b46cd07634fb4ceb34291845c813ea2a21f73d57f0851791179d04d09938b12a1ac4fb56cd60f89e7694fec0997c  0029-arm64-dts-sprd-infinix-x6525-gpu-clock-fixes.patch
+68c5425cb6b35ebdb8a7b5a0c7d3eee2159f52b5997871d2696e3ef9d2e689d0675c2d63ea380da6719a37222d195568b26402d198915c09ad764ec8ea63d29a  0030-media-i2c-ov8856-add-powerdown-gpio-and-camsys-robustness.patch
+02f329ade485b82f04b57aa75d038034dbd238c8c748862549c3d1a606d1dd0688a1cafbaa5920ae1a156fee967f91a0b86308388b8e658bf1eafd5e87d1fd60  0031-rpmsg-sprd_sipc_sbuf-publish-sdev-before-device-regi.patch
+dc43eb501c17d353dc63a3a272bbcd7238c2f0440ad90ca5d9d3e116d527c19002ea71ec0134af2c03edd09c8690a788cdcb2a83d17fd821062ac96ee478b593  0032-Bluetooth-btsprdsipc-set-drvdata-before-registering-.patch
+e26b0952c22aa3ff6745cc85635c61c2a05b037eba8f8ffc6d605b0fd84019dc4d8b2fc8716cd0980b54e09ce14243687742799c39c060fa99d688a89fca876c  0033-arm64-dts-sprd-ums9230-enable-the-always-on-broadcast.patch
+7343f4d3589addcb69c251736513774aa0916055c83031ac3c343293ee5f55e442f2b1aa23bbde8764cad46eb49f89dc916163ca3e1631945e0fcb4630ccd66c  0034-dt-bindings-media-ov8856-add-powerdown-gpios.patch
+123410d5091808bae04a8aebe555997939d9cb68f442a5b661ad3aea6bfef202b4ba1fc5898a2fcbf937a03f3d3e8126663b0bcbce263f06fed58ea585c7e9ed  0035-arm64-dts-sprd-infinix-x6525-ov8856-powerdown-gpios.patch
+f1eccff2e5eb00b3977861f31ea771bab23d5f3c7d8ab5341bc862b68dad89ad3e39eec7d76f3a46ad057d55277f6607a56d617dff6bd82ea5ca3205a489bebb  0036-power-supply-bq2415x-accept-CURRENT_MAX-in-microamps.patch
+eef57a39cf015ac5551058b50476a67a578d009499041b1801ee2a7d0a182a31aa5634ee07d5e3ba4d547c275adc7da0edbc9d2e16264fe97148d4559d1b0c17  0037-arm64-dts-sprd-infinix-x6525-charge-at-up-to-1.5-A.patch
+3a5dc4c13b57ab0a5c3652606b8c54dca16e23a8ed022f521173f8bcc729b6c329f38d38bf09e50cdb943e550861b9a0d7d30af89d2cb2b41c5d107ac393fa09  0038-pmdomain-sprd-ums9230-add-the-AP-VSP-video-codec-pow.patch
+b230cd9f5ef23eb8f0adfeae5f7523eab0d941a984525643be0813d3fc80fcd75f74cc3434bf01d831c997c5aaa036c18b4d256c7f4630174b0f0f746ce78b9f  0039-arm64-dts-sprd-ums9230-add-the-VSP-video-codec-node.patch
+97bfee382b0d2338f5067466c197359ce827b3f1602d5ddeb2cb327f6d8bb38ab0de3cd059544afaf695db8cd655d72f96b9df1c348025b9d8882e24b1b90e11  0040-media-sprd-add-a-bring-up-driver-for-the-UMS9230-vid.patch
+3c0eef48e47879c72a51d2fcef036ad9792e947f33b78bca66044563f8f1f93c930dc22aa07f09db9d97692c61085917228f086f24d53d8b483869cc4acbc2e0  0041-media-sprd-vsp-also-bind-the-UMS9230-JPEG-codec.patch
+01485360631bc23c3e0a87b93945a750bc2a8bf248ecccd7c684c8d6bf6b103ace9b1e42cb5a61226ca8923aeeaf3dcd9ff1b66bc54b2344c992d76a7e172058  0042-arm64-dts-sprd-ums9230-add-the-JPEG-codec-node.patch
+46369aa84a4fae5cd8bb6cd667c9f8319ab669bc776ba43878515d2cbe3f2c9d061bbe2b938190230df889e7f414aac7e291bccd0f5b5370c544e1652feb7448  0043-media-sprd-vsp-dump-the-register-ranges-the-vendor-l.patch
+40cf99df56872d78785304ba65b853addf96a2ed025f6a690aa7e3c76c06bff2f5e6a645ceff2480c4a2ed23e018e6a7c1e4c2665822a31ec56a65a5b67f8232  0044-Bluetooth-btsprdsipc-answer-Write-Default-Link-Polic.patch
+1df24ccf5f518dcfac33b952f3930e9d848911c1e23b4045f2e5579ddfaba65a711e296dcfd0f35dfce4fdd86d954f695920fac5368587e974ea19177cef8faf  0045-iommu-sprd-support-optional-resets-and-keep-the-powe.patch
+6192b047054e01845b511d1e0abee91c09d9eacff640ea6a2f5ea62bf961170dd1285ff56381aed24e06dd8dda19e7d4023713e7b5f7b4ef9fb3ea1e0bef849a  0046-arm64-dts-sprd-ums9230-add-the-VSP-s-IOMMU-and-use-i.patch
+35eabf986f5b3d62bd5085d8274669bba45a2e7a88b1a0ba0468eee20fd4b17bd60f539dcd99885d677a8a2cad29f0d64cd94006aaa2e2b9aea4626e7cdb8a05  0047-media-sprd-vsp-allocate-through-the-IOMMU-and-add-an.patch
 "

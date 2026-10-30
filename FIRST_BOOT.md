@@ -278,7 +278,7 @@ U-Boot looks on both and boots the card.
 ## 3. Kernel starts, and how to see it
 
 Expect extlinux to boot the kernel, and the framebuffer to show kernel messages. The kernel command
-line carries `loglevel=7` (the device package's `kernel-cmdline.conf`; the distro config ships
+line carries the options of `kernel-cmdline.conf` (`loglevel=4` now) (the device package's `kernel-cmdline.conf`; the distro config ships
 `quiet`, and the later `loglevel=` is the one that counts), so the console is not filtered.
 - The `simple-framebuffer` node in the DTS is **enabled** for the first boot: the bootloader leaves the
   panel scanning out `0x9e000000`, and `DRM_SIMPLEDRM` + fbcon turn that into a text console, so kernel

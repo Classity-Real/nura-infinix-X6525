@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Tue, 27 Oct 2026 10:12:00 +0000
+Subject: [PATCH] clk: sprd: let composite clocks switch their mux parent
+
+sprd_comp_determine_rate() only ran divider_determine_rate() on the parent the mux currently selects, so a composite clock could divide that parent but never move the mux. The UMS9230 GPU core clock resets onto ext-26m and the OPP table (384..614 MHz) could never be reached. Evaluate every parent and pick the closest rate.
+---
+diff --git a/drivers/clk/sprd/composite.c b/drivers/clk/sprd/composite.c
+index ad6b638..c54ff8a 100644
+--- a/drivers/clk/sprd/composite.c
++++ b/drivers/clk/sprd/composite.c
+@@ -6,6 +6,7 @@
+ // Author: Chunyan Zhang <chunyan.zhang@spreadtrum.com>
+ 
+ #include <linux/clk-provider.h>
++#include <linux/limits.h>
+ 
+ #include "composite.h"
+ 
+@@ -13,8 +14,43 @@ static int sprd_comp_determine_rate(struct clk_hw *hw,
+ 				    struct clk_rate_request *req)
+ {
+ 	struct sprd_comp *cc = hw_to_sprd_comp(hw);
++	struct clk_rate_request best = { };
++	unsigned long best_diff = ULONG_MAX;
++	unsigned int i, n = clk_hw_get_num_parents(hw);
++	bool found = false;
+ 
+-	return divider_determine_rate(hw, req, NULL, cc->div.width, 0);
++	/*
++	 * The mux and the divider live in one register, so every parent has to
++	 * be considered: divider_determine_rate() alone only divides the
++	 * current parent and could never move the mux.
++	 */
++	for (i = 0; i < n; i++) {
++		struct clk_rate_request tmp = *req;
++		struct clk_hw *parent = clk_hw_get_parent_by_index(hw, i);
++		unsigned long diff;
++
++		if (!parent)
++			continue;
++
++		tmp.best_parent_hw = parent;
++		tmp.best_parent_rate = clk_hw_get_rate(parent);
++		if (divider_determine_rate(hw, &tmp, NULL, cc->div.width, 0))
++			continue;
++
++		diff = tmp.rate > req->rate ? tmp.rate - req->rate :
++					      req->rate - tmp.rate;
++		if (!found || diff < best_diff) {
++			best = tmp;
++			best_diff = diff;
++			found = true;
++		}
++	}
++
++	if (!found)
++		return -EINVAL;
++
++	*req = best;
++	return 0;
+ }
+ 
+ static unsigned long sprd_comp_recalc_rate(struct clk_hw *hw,
+-- 
+2.47.3
+

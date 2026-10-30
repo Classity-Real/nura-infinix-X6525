@@ -16,17 +16,14 @@
   `nvt_nt36xxx_spi_ts` as candidates; himax and chipone are absent, so the loaded-module list alone
   does not identify the part - the bound driver does.
 - The SC27xx PMIC is on `spi4.0`; a Goodix fingerprint device registers `gf-keys`.
-- Internal storage (UFS vs eMMC) is still undetermined at this point - check the board DTB.
-  (Resolved just below: this unit is eMMC. Other X6525 units shipped UFS - see FIRST_BOOT.md,
-  "Storage variants".)
+- Internal storage (UFS vs eMMC) is still undetermined - check the board DTB.
 - The `lcd_*` group on the cmdline is `lcd_id` / `lcd_name` / `tp_vendor_id` / `lcd_base` / `lcd_size` /
   `logo_bpix` - it carries **no timing values** (the paste was truncated at the very end, so a stray
   parameter cannot be fully ruled out, but the group itself looks complete).
 - **Internal storage is eMMC** (`sprdboot.flash=emmc`), on **sdio3**
   (`androidboot.boot_devices=soc/soc:ap-apb/201d0000.sdio`). `sdio0` is the microSD slot. The reeder is
   UFS internally, so its storage nodes must not be copied. `CLK`/`SDHCI_SPRD` promotion in `pmos.config`
-  was therefore the right call; UFS is irrelevant for this unit (other X6525 units shipped UFS -
-  FIRST_BOOT.md, "Storage variants").
+  was therefore the right call and UFS is irrelevant for this device.
 - Other confirmed board values: `lcd_base=9e000000` (framebuffer region), `lcd_id=ID416002`,
   `logo_bpix=24`, `androidboot.pmic.chipid=2730` (SC2730 - so `sc2730.dtsi` is correct),
   `androidboot.slot_suffix=_a`, `androidboot.flash.locked=0`, `verifiedbootstate=orange` (unlocked).
@@ -153,7 +150,7 @@ nothing corrects memory at runtime - so relocation and the stack would land abov
 
 ## U-Boot board, reverified against the fork
 - **it builds, and the artifact is this board's**: a native `make ARCH=arm` from the fork's
-  `ums9230` tip plus the board patches finishes with no errors and passes U-Boot's own `OFCHK`
+  `ums9230` tip plus the two patches finishes with no errors and passes U-Boot's own `OFCHK`
   check, and the `u-boot.bin` it produces (450,536 bytes here, 452,376 in CI) embeds a
   **14,920-byte DTB** - the same size CI's does - containing `Infinix` and `201d0000` and no
   `reeder`, with the 4 GiB memory node inside. Every defconfig symbol takes effect except
@@ -220,39 +217,48 @@ The display path changed on 2026-10-24:
 
 The current ROM (`40143165207`) therefore boots a path the Phosh build never exercised: card1,
 DPU/DSI, the TD4160 driver and KWin. The black screen after the pmOS/logo is that path's bring-up,
-not a regression in the simpledrm path. Fixes on 2026-10-24/25: patch 0024 makes the stock 60 Hz
+not a regression in the simpledrm path. Fixes on 2026-10-24/25: patch 0023 makes the stock 60 Hz
 (timing0/`native-mode`) preferred again (0019 had made 90 Hz preferred), and the udev rule matches
 the card by `DEVPATH`.
 
-Feature-wise the current build has 27 kernel patches against 12 then. Newer than the Phosh build:
+Feature-wise the current build has 23 kernel patches against 12 then. Newer than the Phosh build:
 the rear S5K3L6 and front OV8856 drivers and nodes, the Bluetooth config blobs and the prodnv MAC
 preboot, the GPU DVFS table and GPU thermal cooling, the pmsys/GNSS/modem extraction services, and
-the HS200 opt-in. The current dmesg's `btsprdsipc ... failed to create endpoint (-12)` is a separate
-Bluetooth issue, not something the Phosh build had.
+the HS200 opt-in. The dmesg's `btsprdsipc ... failed to create endpoint (-12)` was a race
+where `sprd_sipc_sbuf.c` only published `sbuf->buffers[rx_id].sdev` after `rpmsg_register_device()`,
+failing synchronous driver probe; resolved by patches 0031 and 0032.
 
-# Where pmaports fetches from
+# Public forks (what pmaports can fetch)
 
-The kernel package builds from the Codeberg tag `v7.2-rc6-ums9230-0` and applies the twenty-seven
-patches in `patches/upstream/`, one commit each (verified: the subjects match the patch files one
-for one and the resulting files are byte-identical to `dts/`, `drivers/` and `bindings/`). The
-U-Boot package pins the fork's `x6525` archive at `_commit` `434a9c96ba4b3d42d9e95ee5eb2fd9fc956c0ac2`
-and copies the three staged board files over the older copies in it; those three are the bytes CI
-builds from `patches/upstream-uboot/`. The UFS scan is patch 0007 and the prodnv MAC preboot is
-patch 0008, both in `infinix-x6525.env`, so they ship from this repo without waiting for a fork
-bump. `git am` reproduces either series and `git format-patch` regenerates the patches; in this
-repository the patch files are the source of truth.
+Both trees are published as forks of the GitHub mirrors of the Codeberg repos, each with an `x6525`
+branch that is the upstream base plus this port's commits and nothing else:
 
-Patch 9 lets the sprd GPIO binding accept hog nodes, which `charger-en-hog` in our DTS needs - the
-binding is `additionalProperties: false` without the `patternProperties` block that other GPIO
-bindings carry, so the board failed `dtbs_check` on a binding it could not satisfy. That fix is
-independent of this board and can go upstream on its own.
+| Tree | Fork and branch | Tip |
+|---|---|---|
+| kernel | `github.com/Seuj09/ums9230-mainline-linux`, branch `x6525` | `ace813f8f1f8c38f9b2b31e0b20148301bdee035` |
+| U-Boot | `github.com/Seuj09/ums9230-mainline-u-boot`, branch `x6525` | `6d247043391aa8ed7d55cfadfd60908077a01bad` |
+
+The kernel branch is the tag `v7.2-rc6-ums9230-0` plus the twenty-three patches in `patches/upstream/`, one
+commit each (verified: the subjects match the patch files one for one and the tree's files are
+byte-identical to `dts/`, `drivers/` and `bindings/`). The U-Boot branch is the fork's `ums9230` plus
+the board commits (device tree, defconfig, environment, the pmicwdt command and the prodnv MAC
+preboot). Both were made by `git am`-ing the series, so `git format-patch` from either branch
+regenerates the patches - the branches are the source of truth now, not the patch files.
+The kernel branch is force-updated whenever the series changes (it was, to pick up the renamed
+thermal zones and the ninth patch, and again for the front camera): patch 9 lets the sprd GPIO binding accept hog nodes, which
+`charger-en-hog` in our DTS needs - the binding is `additionalProperties: false` without the
+`patternProperties` block that other GPIO bindings carry, so the board failed `dtbs_check` on a
+binding it could not satisfy. That fix is independent of this board and can go upstream on its own.
+`pmaports/device/testing/u-boot-infinix-x6525/APKBUILD` already builds from the U-Boot branch's tip
+(sha512 in place); the kernel side needs nothing until either a staging package is wanted or the
+series lands upstream.
 
 **Where patches go, and where they do not.** `ums9230-mainline/linux` releases by *tag*
 (`v6.12` … `v7.2-rc6-ums9230-0`, one per kernel version); its two branches (`ums9230`,
 `ums9230-opencp`) are older, divergent lines whose trees differ from the newest tag by ~17,300 files.
 So our patches are cut against the newest *tag* - correct for pmaports, which pins the same tag - and
 a Codeberg PR against `ums9230` would be aimed at a stale tree: the kernel series should go to the
-maintainer by mail or issue. U-Boot is the opposite, with one `ums9230` branch that our board patches
+maintainer by mail or issue. U-Boot is the opposite, with one `ums9230` branch that our two patches
 `git am` cleanly onto, so a PR from the fork branch is the right mechanism there.
 
 # Working from the phone shell
@@ -293,8 +299,8 @@ U-Boot board, smallest first:
    fuel gauge needs the OCV table for its capacity estimate and the charging animation. Done (OCV, resistance-temp and fast-charge threshold; `voltage-max-design-microvolt` not added - not read off the device).~~
 3. ~~Confirm the DTB is inside the artifact the pmaports package installs.~~ Done - the CI artifact
    carries it, see "U-Boot board, reverified against the fork" above.
-4. ~~Then upstream the `patches/upstream-uboot/` series and drop the `WIP:` prefixes.~~ The
-   prefixes are gone - the series was regenerated with `git format-patch` so the diffstat, blob
+4. ~~Then upstream the two `patches/upstream-uboot/` patches and drop the `WIP:` prefixes.~~ The
+   prefixes are gone - both patches were regenerated with `git format-patch` so the diffstat, blob
    hashes and subjects are derived rather than hand-kept, and checked with `git am` in order. All
    that is left is sending them to the fork.
 
@@ -303,7 +309,7 @@ lines in the three driver headers. What made them WIP has been dealt with - the 
 and its header no longer calls itself a skeleton, so the only caveat left is the honest one: nothing
 has run on hardware yet, and `FIRST_BOOT.md` carries what that means for each part. Patches 3, 4, 6
 and 8 were regenerated with `git format-patch` (every stat, bar and hash derived) and `git am`-verified
-byte for byte, since the driver comment change touches 6 and 8 as well. Same rule as the U-Boot series:
+byte for byte, since the driver comment change touches 6 and 8 as well. Same rule as the U-Boot pair:
 sending them is the remaining step.
 
 Charger (resolved - no new driver):
@@ -330,7 +336,7 @@ Charger (resolved - no new driver):
 
 The ROM, and the first boot:
 - **the kernel package is drafted** in `pmaports/device/testing/linux-postmarketos-unisoc-ums9230/`:
-  pmaports' own package with the twenty-seven patches added to `source=` (verified to apply with `patch -p1`,
+  pmaports' own package with the eleven patches added to `source=` (verified to apply with `patch -p1`,
   which is what `default_prepare` uses, reproducing `dts/`, `drivers/` and `bindings/` byte for byte)
   and the five symbols its config was missing. That config is pmaports' own and is what the ROM's
   kernel actually uses, so CI now checks those five survive `olddefconfig` in it, last in the job

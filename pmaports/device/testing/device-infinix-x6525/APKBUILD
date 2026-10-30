@@ -3,20 +3,31 @@ maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525"
 pkgver=1
-pkgrel=24
+pkgrel=41
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
+_pmb_recommends="
+	megapixels
+"
 depends="
+	alsa-ucm-conf-unisoc-ums9230
 	android-tools
 	bluez
+	bluez-deprecated
+	networkmanager-cli
+	bluez-btmon
+	wlr-randr
+	dnsmasq
+	modemmanager
+	mesa-demos
+	e2fsprogs-extra
 	firmware-infinix-x6525
 	iw
 	linux-postmarketos-unisoc-ums9230
 	mesa-vulkan-panfrost
 	mmc-utils
-	networkmanager
 	networkmanager-wifi
 	postmarketos-base
 	soc-unisoc-ums9230
@@ -67,6 +78,13 @@ makedepends="devicepkg-dev"
 # deliberately not set: its continue path removes the USB ACM function and re-binds the UDC,
 # which hangs on this controller - hold volume-down at boot for the debug shell instead
 # (the initramfs check_keys path).
+# Quiet console: loglevel=4 and no initcall_debug / ignore_loglevel. With them every initcall
+# (and every later kernel message) was written to the 115200-baud UART and to tty0 while the CPU
+# waited, which costs tens of seconds at boot and stalls anything that logs. For a bring-up hang,
+# add `ignore_loglevel initcall_debug` back to kernel-cmdline.conf.
+# TEST BUILD: cpuidle.off=1 is dropped and patch 0033 enables the always-on broadcast timer
+# (the idle states are local-timer-stop and the dtsi had that timer commented out). If RCU
+# stalls return, put cpuidle.off=1 back in kernel-cmdline.conf.
 # cpuidle.off=1 cpufreq.off=1: with them on, a CPU (it varied) stopped taking timer interrupts
 # and RCU stalled forever (rcu_preempt kthread starved); with them off the boot is stable. Which
 # of the two is the cause is not known yet. regulator_ignore_unused keeps the touch controller's
@@ -76,11 +94,7 @@ source="
 	deviceinfo
 	kernel-cmdline.conf
 	modules-initfs
-	boot-deploy-root-label.sh
-	initfs-fstab-labels.sh
-	nm-x6525-wifi.conf
-	nm-x6525-usb-never-default.conf
-	modules-x6525-camera.conf
+	x6525-boot-check
 "
 
 build() {
@@ -96,18 +110,6 @@ package() {
 	install -Dm644 dummy-initramfs \
 		"$pkgdir"/usr/share/u-boot/infinix-x6525/dummy-initramfs
 
-	# Boot and root are found by label, not by filesystem UUID. boot-deploy
-	# generates extlinux's cmdline from /etc/fstab; rewriting the two UUID=
-	# entries leaves pmos_boot_uuid/pmos_root_uuid out of it, and the initramfs
-	# then uses its built-in pmOS_boot/pmOS_root label fallback. Labels survive
-	# a rebuild, so flashing a new cache over the old rootfs (the usual kernel
-	# test) no longer stops at "Waiting for root partition". The hooks-cleanup
-	# script migrates an older rootfs's fstab at boot for the same reason.
-	install -Dm755 "$srcdir"/boot-deploy-root-label.sh \
-		"$pkgdir"/usr/share/boot-deploy/hooks/50-x6525-root-label
-	install -Dm644 "$srcdir"/initfs-fstab-labels.sh \
-		"$pkgdir"/usr/share/mkinitfs/hooks-cleanup/50-x6525-fstab-labels.sh
-
 	mkdir -p "$pkgdir"/usr/share/mkinitfs/files
 	echo "/lib/firmware/postmarketos/sprd/hdl_firmware_01.img" \
 		> "$pkgdir"/usr/share/mkinitfs/files/30-device-infinix-x6525.files
@@ -120,16 +122,19 @@ package() {
 	printf '%s\n' sprd_wcn sc23xx_wlan sc23xx_wlan_sipc btsprdsipc \
 		> "$pkgdir"/usr/lib/modules-load.d/x6525-wifi.conf
 
-	# Wi-Fi: disable powersave (DNS works, sites hang otherwise); keep the USB
-	# gadget from becoming the preferred default route when wlan0 is up.
-	install -Dm644 "$srcdir"/nm-x6525-wifi.conf \
-		"$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-wifi.conf
-	install -Dm644 "$srcdir"/nm-x6525-usb-never-default.conf \
-		"$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-usb-never-default.conf
+	# Wi-Fi that works and then goes silent until a reconnect is the classic
+	# power-save pattern on this kind of vendor cfg80211 driver (set_power_mgmt
+	# is forwarded to the firmware, which can stop receiving between beacons).
+	# Turn NetworkManager's power save off (2 = disable) and keep scans on the
+	# real MAC so the AP does not see a new client on every scan. Delete the
+	# file to go back to the defaults.
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/NetworkManager/conf.d/90-x6525-wifi.conf <<'EOF'
+[connection]
+wifi.powersave=2
 
-	# Camera sensors (DT + drivers; ISP/userspace still partial)
-	install -Dm644 "$srcdir"/modules-x6525-camera.conf \
-		"$pkgdir"/usr/lib/modules-load.d/x6525-camera.conf
+[device]
+wifi.scan-rand-mac-address=no
+EOF
 
 	# Start BlueZ on boot. The image's 90-base.preset enables bluetooth.service
 	# and so does 90-infinix-x6525.preset below; this symlink is belt and
@@ -281,11 +286,11 @@ EOF
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-pmsys.service
 
 	# The device tree's local-mac-address for the WLAN channel is all zeroes
-	# ("filled in by bootloader"); U-Boot fills it from its wifiaddr environment
-	# variable, which is unset on this board, so it stays zero and the interface
-	# would come up with 00:00:00:00:00:00. Give it a random locally
-	# administered address, generated once and kept, as soon as the interface
-	# exists.
+	# ("filled in by bootloader"). U-Boot now tries to read the real one from
+	# /wifimac.txt on the prodnv partition; if that file is absent the property
+	# stays zero and the interface would come up with 00:00:00:00:00:00. Give it
+	# a random locally administered address, generated once and kept, only when
+	# the kernel address is still all zero.
 	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-wlan-mac <<'EOF'
 #!/bin/sh
 # usage: x6525-wlan-mac <ifname>
@@ -300,6 +305,67 @@ ip link set dev "$1" address "$(cat "$f")"
 EOF
 	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-wlan-mac.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan*", RUN+="/usr/bin/x6525-wlan-mac %k"
+EOF
+
+	# Ensure persistent MACs on prodnv partition for U-Boot preboot loader
+	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-prodnv-mac <<'EOF'
+#!/bin/sh
+# Infinix X6525: ensure btmac.txt and wifimac.txt exist on the prodnv partition
+# so U-Boot will load them and supply stable MACs in the device tree.
+set -eu
+
+prodnv=/dev/disk/by-partlabel/prodnv
+[ -b "$prodnv" ] || exit 0
+
+mkdir -p /var/lib/x6525
+
+# Generate persistent MACs in /var/lib/x6525 if not already present
+if [ ! -s /var/lib/x6525/wlan-mac ]; then
+	od -An -N5 -tx1 /dev/urandom | awk '{printf "02:%s:%s:%s:%s:%s\n", $1,$2,$3,$4,$5}' > /var/lib/x6525/wlan-mac
+fi
+if [ ! -s /var/lib/x6525/bt-mac ]; then
+	od -An -N5 -tx1 /dev/urandom | awk '{printf "02:%s:%s:%s:%s:%s\n", $1,$2,$3,$4,$5}' > /var/lib/x6525/bt-mac
+fi
+
+mnt=$(mktemp -d)
+if mount -t ext4 -o rw "$prodnv" "$mnt" 2>/dev/null || mount "$prodnv" "$mnt" 2>/dev/null; then
+	if [ ! -s "$mnt/btmac.txt" ]; then
+		cp /var/lib/x6525/bt-mac "$mnt/btmac.txt"
+		chmod 644 "$mnt/btmac.txt"
+	fi
+	if [ ! -s "$mnt/wifimac.txt" ]; then
+		cp /var/lib/x6525/wlan-mac "$mnt/wifimac.txt"
+		chmod 644 "$mnt/wifimac.txt"
+	fi
+	umount "$mnt"
+fi
+rm -rf "$mnt"
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-prodnv-mac.service <<'EOF'
+[Unit]
+Description=Ensure persistent MAC addresses on prodnv
+After=local-fs.target
+Before=network-pre.target bluetooth.service
+ConditionPathExists=/dev/disk/by-partlabel/prodnv
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/x6525-prodnv-mac
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+	mkdir -p "$pkgdir"/etc/systemd/system/multi-user.target.wants
+	ln -s /usr/lib/systemd/system/x6525-prodnv-mac.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-prodnv-mac.service
+
+	# Automatically unblock Bluetooth when the rfkill device appears
+	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-rfkill.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="rfkill", ATTR{type}=="bluetooth", ATTR{state}="1"
 EOF
 
 	# The eMMC's write-back cache is what turns a forced power-off into ext4
@@ -363,6 +429,33 @@ EOF
 	ln -s /usr/lib/systemd/system/x6525-emmc-flush.service \
 		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-emmc-flush.service
 
+	# The image is a ~2 GB ext4 flashed into the 110 GiB userdata partition. The
+	# initramfs is meant to grow it on first boot, but that step is skipped or cut
+	# short when the first boot is interrupted (forced reboot, a failed fsck), and
+	# the phone then runs on a 2 GB root that is "almost full". ext4 grows online and
+	# resize2fs does nothing when the filesystem already fills its device, so run it
+	# on every boot as a safety net.
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/lib/systemd/system/x6525-growroot.service <<'EOF2'
+[Unit]
+Description=Grow the root filesystem to fill its partition
+After=local-fs.target
+Before=multi-user.target
+ConditionPathExists=/usr/sbin/resize2fs
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'dev=$(findmnt -no SOURCE /); [ -b "$dev" ] && exec resize2fs "$dev"'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+	ln -s /usr/lib/systemd/system/x6525-growroot.service \
+		"$pkgdir"/etc/systemd/system/multi-user.target.wants/x6525-growroot.service
+
+	install -Dm755 "$srcdir"/x6525-boot-check "$pkgdir"/etc/apk/commit_hooks.d/90-x6525-boot-check
+
 	# Enabling a unit with a symlink created here does not survive the image
 	# build: pmOS's systemd-apk-trigger runs `systemctl preset` for every
 	# newly installed unit that has an [Install] section, and 99-default.preset
@@ -382,20 +475,34 @@ EOF
 		"$pkgdir"/usr/lib/systemd/system-preset/90-infinix-x6525.preset <<'EOF'
 enable x6525-emmc-cacheoff.service
 enable x6525-emmc-flush.service
+enable x6525-growroot.service
 enable bluetooth.service
+enable x6525-prodnv-mac.service
 enable x6525-modem-nv.service
 enable x6525-pmsys.service
 EOF
 
 	# Create /dev/dri/x6525-primary for the compositor, waiting for the sprd
 	# display card to appear (up to 40 s). The udev rule further down has been
-	# seen to miss the boot-time add event for this card, so this does not
-	# depend on udev at all: it finds the card through sysfs (its parent is the
-	# display-subsystem platform device) and links to its /dev node. Exits 0
-	# either way so a missing card never blocks the session unit.
+	# seen to miss the boot-time add event for this card, and a re-triggered
+	# `udevadm wait` was reported not to rescue it on hardware, so this does not
+	# depend on udev at all: it finds the card through sysfs (its parent is
+	# the display-subsystem platform device) and links to its /dev node.
+	# Exits 0 either way so a missing card never blocks the session unit.
 	install -Dm755 /dev/stdin "$pkgdir"/usr/libexec/x6525-wait-drm <<'EOF'
 #!/bin/sh
 link=/dev/dri/x6525-primary
+# Panfrost is a module; make sure it is loaded and its render node exists
+# before the compositor starts, or wlroots/KWin fall back to software
+# rendering (the same coldplug race the display card had). Never fatal.
+/sbin/modprobe panfrost 2>/dev/null
+r=0
+while [ "$r" -lt 15 ] && [ ! -c /dev/dri/renderD128 ]; do
+	sleep 1
+	r=$((r + 1))
+done
+[ -c /dev/dri/renderD128 ] ||
+	echo "x6525-wait-drm: no /dev/dri/renderD128 after 15 s" >&2
 i=0
 while [ "$i" -lt 40 ]; do
 	for c in /sys/class/drm/card[0-9]*; do
@@ -421,28 +528,21 @@ EOF
 	# For the phosh build (the device package serves both UIs): point the
 	# session at the real panel (sprd-drm) instead of the bootloader's
 	# simpledrm. Only the panel driver registers the DCS backlight and reports
-	# the 68x152 mm size that gives the 2x output scale. The renderer itself
-	# is deliberately not pinned: wlroots tries GLES2 through Panfrost, then
-	# Vulkan, then pixman.
+	# the 68x152 mm size that gives the 2x output scale. simpledrm stays as the
+	# console fallback; the symlink the drop-in names is created by a udev rule
+	# only when a sprd-drm card exists. The renderer is deliberately not
+	# pinned: wlroots tries GLES2 (panfrost, which needs no firmware on this
+	# Valhall job-manager GPU), then Vulkan, then pixman.
 	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/10-x6525-software.conf <<'EOF'
 [Service]
+# Drive the real panel (sprd-drm), not the bootloader's simpledrm: only the
+# panel driver registers the DCS backlight and reports the 68x152 mm size
+# that gives the 2x scale. simpledrm stays as the console fallback; the
+# symlink is created below only when a sprd-drm card exists.
 Environment=WLR_DRM_DEVICES=/dev/dri/x6525-primary
-EOF
-
-	# The panel is on sprd-drm (no render node); the GPU is Panfrost
-	# (renderD128). Tell wlroots which device renders, while leaving the
-	# renderer unpinned so a failure falls back to pixman instead of a black
-	# screen. Remove this drop-in alone to test the compositor's own choice.
-	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/30-x6525-gpu.conf <<'EOF'
-[Service]
-Environment=WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128
-EOF
-
-	# greetd starts phoc with WLR_DRM_DEVICES=/dev/dri/x6525-primary, so the
-	# symlink has to exist before the session starts.
-	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/20-x6525-wait-drm.conf <<'EOF'
-[Service]
-ExecStartPre=-+/usr/libexec/x6525-wait-drm
+# The renderer is deliberately not pinned. wlroots tries GLES2 first (Mesa
+# panfrost; this Valhall job-manager GPU needs no firmware), then Vulkan, and
+# falls back to pixman.
 EOF
 
 	# Plasma Mobile: plasma-mobile.service runs /usr/bin/startplasmamobile,
@@ -458,66 +558,34 @@ EOF
 			"$pkgdir"/etc/systemd/system/$unit.service.d/10-x6525-drm.conf <<'EOF'
 [Service]
 Environment=KWIN_DRM_DEVICES=/dev/dri/x6525-primary
+# The udev rule below sometimes misses the boot-time add event for the sprd
+# card, so KWin started with no DRM device and the panel stayed on the last
+# console frame (observed 2026-10-25). x6525-wait-drm waits for the card and
+# creates the symlink itself, without relying on udev. "-" ignores failure; "+"
+# runs as root even if the unit runs as user.
 ExecStartPre=-+/usr/libexec/x6525-wait-drm
 EOF
 	done
 
-	# One command that gathers what is needed to tell a black screen's causes
-	# apart, written to a file so it can be read over SSH or sent back as it is.
-	install -Dm755 /dev/stdin "$pkgdir"/usr/bin/x6525-display-report <<'EOF'
-#!/bin/sh
-# x6525-display-report: why is the screen black? Run as root (sudo), over SSH.
-# Writes /tmp/x6525-display-report.txt and prints it.
-out=/tmp/x6525-display-report.txt
-{
-	echo "== date / kernel / cmdline"
-	date; uname -a; cat /proc/cmdline
-	echo
-	echo "== DRM cards and the panel driver's symlink"
-	ls -l /dev/dri/ 2>&1
-	for c in /sys/class/drm/card*; do
-		[ -e "$c" ] || continue
-		echo "$c -> $(readlink -f "$c")"
-	done
-	for c in /sys/class/drm/card*-*; do
-		[ -e "$c" ] || continue
-		echo "$c: status=$(cat "$c"/status 2>/dev/null) enabled=$(cat "$c"/enabled 2>/dev/null) modes=$(tr '\n' ' ' < "$c"/modes 2>/dev/null)"
-	done
-	echo
-	echo "== backlight"
-	for b in /sys/class/backlight/*; do
-		[ -e "$b" ] || continue
-		echo "$b: brightness=$(cat "$b"/brightness) max=$(cat "$b"/max_brightness)"
-	done
-	echo
-	echo "== GPU"
-	dmesg | grep -iE 'panfrost|mali' | tail -20
-	for d in /sys/class/devfreq/*; do
-		[ -e "$d" ] || continue
-		echo "$d: cur=$(cat "$d"/cur_freq 2>/dev/null) governor=$(cat "$d"/governor 2>/dev/null)"
-	done
-	echo
-	echo "== display stack in dmesg"
-	dmesg | grep -iE 'sprd.?drm|dsi|dpu|td4160|panel|simpledrm|drm' | tail -60
-	echo
-	echo "== session units"
-	systemctl --no-pager --lines=0 status greetd plasma-mobile plasmalogin 2>&1 | grep -E '●|Active:|Loaded:'
-	echo
-	echo "== session drop-ins"
-	for f in /etc/systemd/system/greetd.service.d/*.conf /etc/systemd/system/plasma-mobile.service.d/*.conf; do
-		[ -e "$f" ] || continue
-		echo "--- $f"; cat "$f"
-	done
-	echo
-	echo "== session log (this boot)"
-	journalctl -b --no-pager -u greetd -u plasma-mobile -u plasmalogin 2>&1 | tail -80
-	echo
-	echo "== compositor and shell processes"
-	ps -eo pid,user,args | grep -E 'phoc|phosh|greetd|kwin|plasma' | grep -v grep
-} > "$out" 2>&1
-cat "$out"
-echo
-echo "saved to $out"
+	# GPU experiment (2026-10-27), kept in its own drop-in so it can be removed
+	# alone (`sudo rm /etc/systemd/system/greetd.service.d/30-x6525-gpu.conf`).
+	# The panel is on sprd-drm (card1, no render node) and the GPU is Panfrost
+	# (card0 / renderD128), so wlroots has to be told, or be able to work out,
+	# which device renders. WLR_RENDER_DRM_DEVICE names it: phoc then renders
+	# on Panfrost and hands buffers to the sprd card. The renderer itself stays
+	# unpinned, so if this fails wlroots still falls back to pixman rather than
+	# giving a black screen. Check which one it chose with:
+	#   journalctl -b -u greetd | grep -iE 'renderer|gles|pixman|egl'
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/30-x6525-gpu.conf <<'EOF'
+[Service]
+Environment=WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128
+EOF
+
+	# Same wait for the phosh session: greetd starts phoc with
+	# WLR_DRM_DEVICES=/dev/dri/x6525-primary, so it needs the symlink too.
+	install -Dm644 /dev/stdin "$pkgdir"/etc/systemd/system/greetd.service.d/20-x6525-wait-drm.conf <<'EOF'
+[Service]
+ExecStartPre=-+/usr/libexec/x6525-wait-drm
 EOF
 
 	# Name the sprd-drm card so the session above can point at it without
@@ -531,15 +599,430 @@ EOF
 	install -Dm644 /dev/stdin "$pkgdir"/usr/lib/udev/rules.d/90-x6525-drm-primary.rules <<'EOF'
 ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DEVPATH=="*/display-subsystem/drm/card[0-9]*", SYMLINK+="dri/x6525-primary"
 EOF
+
+	# ALSA UCM configuration for infinix-x6525.
+	# The sound card model in the device tree is "infinix-x6525", driven by
+	# sprd_vbc_v4, ums9230_card and sc2730 codec. Without UCM profiles, PipeWire
+	# and WirePlumber cannot configure the DPCM routes (FE_FAST_PLAYBACK, TX0 SEL,
+	# Headphone Playback Switch, and Speaker Switch on ap_gpio 113).
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/infinix-x6525
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/ums9230-card
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/infinix-x6525.conf <<'EOF'
+Syntax 7
+
+Comment "Infinix Smart 8 (X6525)"
+
+Include.pcm_split.File "/common/pcm/split.conf"
+
+Macro [
+	{
+		SplitPCM {
+			Name "ums9230_mono_in"
+			Direction Capture
+			Channels 1
+			HWChannels 2
+			HWChannelPos0 MONO
+			HWChannelPos1 MONO
+		}
+	}
+]
+
+SectionUseCase."HiFi" {
+	File "/Unisoc/ums9230/infinix-x6525/HiFi.conf"
+	Comment "Default"
+}
+
+SectionUseCase."Voice Call" {
+	File "/Unisoc/ums9230/infinix-x6525/VoiceCall.conf"
+	Comment "Voice call"
+}
+
+SectionDefaults [
+	cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	cset "name='FE_CAPTURE_DSP RX Switch' off"
+	cset "name='FE_VOICE TX Switch' off"
+	cset "name='FE_VOICE RX Switch' off"
+]
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/HiFi.conf <<'EOF'
+SectionVerb {
+	EnableSequence [
+		cset "name='TX0 SEL' IIS0"
+		cset "name='RX0 SEL' IIS1"
+
+		cset "name='FE_FAST_PLAYBACK TX Switch' on"
+		cset "name='FE_CAPTURE_DSP RX Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='FE_CAPTURE_DSP RX Switch' off"
+		cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	]
+}
+
+SectionDevice."Headphones" {
+	Comment "Headphones playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' NOT_MIX"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 300
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Speaker" {
+	Comment "Speaker playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Headphones"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+		cset "name='Speaker Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+		cset "name='Speaker Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 200
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Earpiece" {
+	Comment "Earpiece playback"
+
+	ConflictingDevices [
+		"Headphones"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Earpiece Playback Switch' on"
+		cset "name='Earpiece Volume' 11"
+	]
+
+	DisableSequence [
+		cset "name='Earpiece Volume' 0"
+		cset "name='Earpiece Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 100
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Mic" {
+	Comment "Microphone capture"
+
+	ConflictingDevices [
+		"Headset"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer MIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer MIC' off"
+	]
+
+	Value {
+		CapturePriority 200
+	}
+
+	Macro.pcm_split.SplitPCMDevice {
+		Name "ums9230_mono_in"
+		Device 1
+		Direction Capture
+		HWChannels 2
+		Channels 1
+		Channel0 0
+		ChannelPos0 MONO
+	}
+}
+
+SectionDevice."Headset" {
+	Comment "Headset capture"
+
+	ConflictingDevices [
+		"Mic"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer HPMIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer HPMIC' off"
+	]
+
+	Value {
+		CapturePriority 300
+	}
+
+	Macro.pcm_split.SplitPCMDevice {
+		Name "ums9230_mono_in"
+		Device 1
+		Direction Capture
+		HWChannels 2
+		Channels 1
+		Channel0 0
+		ChannelPos0 MONO
+	}
+}
+EOF
+
+	install -Dm644 /dev/stdin \
+		"$pkgdir"/usr/share/alsa/ucm2/Unisoc/ums9230/infinix-x6525/VoiceCall.conf <<'EOF'
+SectionVerb {
+	EnableSequence [
+		cset "name='TX0 SEL' IIS0"
+		cset "name='RX0 SEL' IIS1"
+
+		cset "name='TX1 SEL' IIS0"
+		cset "name='RX2 SEL' IIS1"
+
+		cset "name='FE_FAST_PLAYBACK TX Switch' on"
+		cset "name='FE_VOICE TX Switch' on"
+		cset "name='FE_VOICE RX Switch' on"
+
+		cset "name='Voice Record Downlink' on"
+		cset "name='Voice Record Uplink' on"
+	]
+
+	DisableSequence [
+		cset "name='Voice Record Downlink' off"
+		cset "name='Voice Record Uplink' off"
+
+		cset "name='FE_VOICE TX Switch' off"
+		cset "name='FE_VOICE RX Switch' off"
+		cset "name='FE_FAST_PLAYBACK TX Switch' off"
+	]
+
+	Value {
+		CaptureRate 8000
+	}
+}
+
+SectionDevice."Headphones" {
+	Comment "Headphones playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' NOT_MIX"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 300
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Speaker" {
+	Comment "Speaker playback"
+
+	ConflictingDevices [
+		"Earpiece"
+		"Headphones"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Headphone Playback Switch' on"
+		cset "name='Headphone Volume' 9"
+		cset "name='Speaker Switch' on"
+	]
+
+	DisableSequence [
+		cset "name='Headphone Volume' 0"
+		cset "name='Headphone Playback Switch' off"
+		cset "name='Speaker Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 200
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Earpiece" {
+	Comment "Earpiece playback"
+
+	ConflictingDevices [
+		"Headphones"
+		"Speaker"
+	]
+
+	EnableSequence [
+		cset "name='TX0 MIXER0 Mode' HALF_ADD"
+		cset "name='Earpiece Playback Switch' on"
+		cset "name='Earpiece Volume' 11"
+	]
+
+	DisableSequence [
+		cset "name='Earpiece Volume' 0"
+		cset "name='Earpiece Playback Switch' off"
+	]
+
+	Value {
+		PlaybackPriority 100
+		PlaybackChannels 2
+		PlaybackPCM "hw:${CardId},0"
+	}
+}
+
+SectionDevice."Mic" {
+	Comment "Microphone capture"
+
+	ConflictingDevices [
+		"Headset"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer MIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer MIC' off"
+	]
+
+	Value {
+		CapturePriority 200
+		CaptureChannels 1
+		CapturePCM "hw:${CardId},3"
+	}
+}
+
+SectionDevice."Headset" {
+	Comment "Headset capture"
+
+	ConflictingDevices [
+		"Mic"
+	]
+
+	EnableSequence [
+		cset "name='ADCL Mixer HPMIC' on"
+		cset "name='Capture Volume' 7"
+	]
+
+	DisableSequence [
+		cset "name='ADCL Mixer HPMIC' off"
+	]
+
+	Value {
+		CapturePriority 300
+		CaptureChannels 1
+		CapturePCM "hw:${CardId},3"
+	}
+}
+EOF
+
+	# UCM conf.d symlink for card model lookup (model = "infinix-x6525" in DTS)
+	ln -sf ../../Unisoc/ums9230/infinix-x6525/infinix-x6525.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/conf.d/infinix-x6525/infinix-x6525.conf
+
+	# PulseAudio daemon sample rate constraint
+	mkdir -p "$pkgdir"/etc/pulse/daemon.conf.d
+	install -Dm644 /dev/stdin "$pkgdir"/etc/pulse/daemon.conf.d/89-infinix-x6525.conf <<'EOF'
+default-sample-rate=48000
+alternate-sample-rate=44100
+EOF
+
+	# PipeWire sample rate configuration
+	mkdir -p "$pkgdir"/usr/share/pipewire/pipewire.conf.d
+	install -Dm644 /dev/stdin "$pkgdir"/usr/share/pipewire/pipewire.conf.d/89-infinix-x6525.conf <<'EOF'
+context.properties = {
+    default.clock.rate = 48000
+    default.clock.allowed-rates = [ 48000 44100 8000 ]
+}
+EOF
+
+	# Megapixels camera configuration
+	mkdir -p "$pkgdir"/usr/share/megapixels/config
+	mkdir -p "$pkgdir"/etc/megapixels/config
+	install -Dm644 /dev/stdin "$pkgdir"/usr/share/megapixels/config/infinix,x6525.ini <<'EOF'
+[device]
+make=Infinix
+model=Smart 8 (X6525)
+
+[rear]
+driver=s5k3l6
+media-driver=sprd-camsys
+rotate=90
+mirrored=false
+blacklevel=64
+whitelevel=1023
+focallength=3.85
+cropfactor=7.6
+
+[front]
+driver=ov8856
+media-driver=sprd-camsys
+rotate=270
+mirrored=true
+blacklevel=64
+whitelevel=1023
+focallength=3.33
+cropfactor=8.0
+EOF
+	ln -sf infinix,x6525.ini "$pkgdir"/usr/share/megapixels/config/sprd,ums9230.ini
+	ln -sf /usr/share/megapixels/config/infinix,x6525.ini "$pkgdir"/etc/megapixels/config/infinix,x6525.ini
+	ln -sf /usr/share/megapixels/config/infinix,x6525.ini "$pkgdir"/etc/megapixels/config/sprd,ums9230.ini
 }
 
 sha512sums="
-43f28cd8c79d244762b3d79f7ca6737edccf25546d001300ef7c34f912581a20be376c1adf4cb5ea311633aecf9e8a493d2fee611aa5ffb9d33cb9c8d158dff9  deviceinfo
-13b1c3f56f29e9b16034f47550ca39ecaac1828012533f213c2144cd4a44d9c2bc27c6ec81b60ef31f14d42f7c80d109236c831a7c7c01743ce52c4223dcb59a  kernel-cmdline.conf
+52f6b1fdf5d4becb2ecd26b63d917696671916348c82215d3a6c005bc2e0ad70993892e2e4b85ff61bef30879a2d1d505e569438a91b22c07ea3ebbb3d61c683  deviceinfo
+79a49b9636e011e11ea77f85dd191e0370c3a1a2d3f2d2b9957ed06f206bc8cd340443b7a3282b5220d7279a7a0957f4c3c04fb1f9eb01f6385d015575449bf6  kernel-cmdline.conf
 c6c0dbe41167f41879b66fdd92163cd0ee267388737a23bbba3f790c1ba95709b035c4dfcdd775f498e5fffe04012be573de87bbd3e4830ce571be5011475164  modules-initfs
-feb8eea6ea7f832beb750851c41e8c1cab2fc80d5381c3b0dae210db75b9d2f9307d78ada3c669108c0bc4712f86fd6392e43551f1f17b22c19286e500bf0d49  boot-deploy-root-label.sh
-ef0db31b942f8a45f2bd1d5ba2f19670b2e857d36e0cae0ad09ae9fc3a5394ccfaf99a65fadb39698b9f717518243ac98916c8599466aa9e3c818318a2aeb913  initfs-fstab-labels.sh
-caf3dc4c21f082eb5306c6efa65bbf02f1e9a7e0b05e31ecda5ad2494fb429da1a25fc2b9c1a50329889eff7032837cce7ddc26c32f6ceb08ba3643eaaef77ae  nm-x6525-wifi.conf
-8c1dbb5b8689f91feffd604a43c46574cad71e5c26751d6a6aeaaf0e3204c621c077e7e2d5f42fcb7610ed05aa988824f1867333eb545feab8c3c4bbb3f5a36a  nm-x6525-usb-never-default.conf
-43cab77dd3d969aca1e0a022de9df61e5eb5770e8010530f1c47105265d3acf95a89f218c5578966449312e2303852d3ac04da2dc936aacbb8d1f7bbad6459cd  modules-x6525-camera.conf
+457db692f49d01d46be231faf2af71a9716e3bb58ab4b28caa2cd6350266481103f89ec94643cedbacdb204d9785d06cc056a90cd1139b23a5853e2ea1efdb1c  x6525-boot-check
 "
