@@ -1,0 +1,35 @@
+From c3e56cec9382497f8ab631d560264f1ece1096b7 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 02:58:27 +0800
+Subject: [PATCH] arm64: dts: sprd: ums9230: add the JPEG codec node
+
+From the stock device tree (jpg-codec@36000000, SPI 42, MM AHB reset mask bit 19, MM power
+domain, codec clock from the 256 MHz TWPLL output).
+---
+ arch/arm64/boot/dts/sprd/ums9230.dtsi | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230.dtsi b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+index 33101def6..73f3374f6 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230.dtsi
++++ b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+@@ -864,6 +864,19 @@ video-codec@32000000 {
+ 			power-domain-names = "mm", "vsp";
+ 		};
+ 
++		jpeg-codec@36000000 {
++			compatible = "sprd,ums9230-jpg";
++			reg = <0x36000000 0xc000>;
++			interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&mm_gate CLK_MM_CKG_EB>,
++				 <&mm_gate CLK_MM_JPG_EB>,
++				 <&mm_clk CLK_JPG>;
++			assigned-clocks = <&mm_clk CLK_JPG>;
++			assigned-clock-parents = <&pll1 CLK_TWPLL_256M>;
++			resets = <&mm_gate RESET_MM_AHB_JPG_SOFT_RST_MASK>;
++			power-domains = <&pmu UMS9230_POWER_DOMAIN_MM>;
++		};
++
+ 		isp@3a000000 {
+ 			compatible = "sprd,ums9230-isp";
+ 			reg = <0x3a000000 0x40000>;

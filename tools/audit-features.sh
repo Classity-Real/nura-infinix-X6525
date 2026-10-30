@@ -127,20 +127,6 @@ need "the eMMC cache units are preset-enabled"   grep -q 'enable x6525-emmc-cach
 need "the eMMC flush unit is preset-enabled"     grep -q 'enable x6525-emmc-flush.service' "$DPKG/APKBUILD"
 finish
 
-# Some X6525 units shipped UFS instead of the eMMC on sdio3. The kernel side
-# is built in (no initramfs module), and the U-Boot side mirrors the fork's
-# reeder enablement: the defconfig keeps the UFS stack and the board
-# environment scans the scsi bus right after mmc (patch upstream-uboot 0007).
-feature "storage: UFS (the other X6525 units)"
-need "CONFIG_SCSI_UFSHCD=y"                      cfg SCSI_UFSHCD "$CFG"
-need "CONFIG_SCSI_UFSHCD_PLATFORM=y"             cfg SCSI_UFSHCD_PLATFORM "$CFG"
-need "CONFIG_SCSI_UFS_SPRD=y"                    cfg SCSI_UFS_SPRD "$CFG"
-need "the &ufs node is enabled in the DTS"       grep -q '&ufs {' "$DTS"
-need "U-Boot keeps the UFS stack (UFS_SPRD_UMS9230)" grep -q 'CONFIG_UFS_SPRD_UMS9230=y' "$ROOT/uboot/configs/infinix-x6525_defconfig"
-need "U-Boot's board DTS enables &ufs"           grep -q '&ufs {' "$ROOT/uboot/dts/ums9230-infinix-x6525.dts"
-need "U-Boot scans scsi right after mmc"         grep -q 'bootflow scan -lb mmc; bootflow scan -lb scsi' "$ROOT/uboot/board/unisoc/ums9230/infinix-x6525.env"
-finish
-
 feature "serial console (ttyS1)"
 need "CONFIG_SERIAL_SPRD=y"                      cfg SERIAL_SPRD "$CFG"
 need "console=ttyS1 on the kernel command line"  grep -q 'console=ttyS1' "$DPKG/kernel-cmdline.conf"
@@ -179,13 +165,9 @@ feature "on-screen keyboard / UI service"
 # plasma-mobile: postmarketos-ui-plasma-mobile brings the Plasma Mobile
 # shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
 # plasma-mobile.service. All three have their own service-manager defaults,
-# so job-rom.yml pins them and ci.yml's workflow_dispatch input picks which.
-need "the rom job records a known UI"            grep -Eq "inputs\.ui \|\| '(buffyboard|phosh|plasma-mobile)'" "$ROOT/.github/workflows/job-rom.yml"
-need "the rom job pins the service manager"      grep -q "'service_manager = systemd'" "$ROOT/.github/workflows/job-rom.yml"
-need "Build PMOS's rom job writes a ui line"     grep -Fq 'ui = ${{ inputs.ui' "$ROOT/.github/workflows/job-rom.yml"
-need "the ui input defaults to phosh"            grep -Fq "inputs.ui || 'phosh'" "$ROOT/.github/workflows/job-rom.yml"
-need "the ui input offers plasma-mobile"         grep -qE '^[[:space:]]*-[[:space:]]*plasma-mobile$' "$ROOT/.github/workflows/ci.yml"
-need "the ui input offers buffyboard"            grep -qE '^[[:space:]]*-[[:space:]]*buffyboard$' "$ROOT/.github/workflows/ci.yml"
+# so rom.yml pins it explicitly.
+need "rom.yml selects a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
+need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
@@ -213,18 +195,15 @@ need "the GPU OPP table is in the DTS"           grep -q 'operating-points-v2 = 
 need "the GPU node is enabled in the DTS"        grep -q '&gpu {' "$DTS"
 need "the GPU supply is set"                     grep -q 'mali-supply' "$DTS"
 need "Mesa panfrost Vulkan is a dependency"      grep -q 'mesa-vulkan-panfrost' "$DPKG/APKBUILD"
-need "phoc renders on the Panfrost node"         grep -q 'WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128' "$DPKG/APKBUILD"
-need "the session waits for the sprd DRM card"   grep -q '/usr/libexec/x6525-wait-drm' "$DPKG/APKBUILD"
-need "software rendering is not pinned"          sh -c "! grep -q 'WLR_RENDERER=pixman' '$DPKG/APKBUILD' && ! grep -q 'LIBGL_ALWAYS_SOFTWARE=1' '$DPKG/APKBUILD'"
 finish
 
 feature "performance (CPU DVFS, thermal throttling, storage)"
 need "CPU DVFS enabled for the T606"             grep -q 'sprd,soc-version = /bits/ 64 <0x36303654>' "$DTS"
 need "GPU #cooling-cells in the board DTS"       grep -q '#cooling-cells = <2>' "$DTS"
 need "GPU thermal cooling map"                   grep -q 'cooling-device = <&gpu ' "$DTS"
-need "the GPU thermal patch"                     test -f "$ROOT"/patches/upstream/0022-*.patch
-need "the HS200 opt-in patch"                    test -f "$ROOT"/patches/upstream/0023-*.patch
-need "the HS200 parameter exists"                grep -q 'enable_hs200' "$ROOT"/patches/upstream/0023-*.patch
+need "the GPU thermal patch"                     test -f "$ROOT"/patches/upstream/0021-*.patch
+need "the HS200 opt-in patch"                    test -f "$ROOT"/patches/upstream/0022-*.patch
+need "the HS200 parameter exists"                grep -q 'enable_hs200' "$ROOT"/patches/upstream/0022-*.patch
 finish
 
 feature "Bluetooth (btsprdsipc over the WCN SIPC link)"
@@ -272,15 +251,12 @@ need "U-Boot board device tree"                  test -f "$ROOT/uboot/dts/ums923
 need "deviceinfo builds the U-Boot boot image"   grep -q 'generate_bootimg="true"' "$DPKG/deviceinfo"
 need "deviceinfo builds the extlinux config"     grep -q 'generate_extlinux_config="true"' "$DPKG/deviceinfo"
 need "the u-boot package installs u-boot.bin"    grep -q 'share/u-boot/infinix-x6525' "$UPKG/APKBUILD"
-need "boot/root are found by label, not UUID"    test -f "$DPKG/boot-deploy-root-label.sh"
-need "the device package installs the label hook" grep -q 'boot-deploy/hooks/50-x6525-root-label' "$DPKG/APKBUILD"
-need "an old rootfs's fstab is migrated at boot"  grep -q 'hooks-cleanup/50-x6525-fstab-labels.sh' "$DPKG/APKBUILD"
 finish
 
 feature "cameras (rear S5K3L6, front OV8856)"
 need "the S5K3L6 driver patch"                   test -f "$ROOT"/patches/upstream/0014-*.patch
 need "the rear camera DTS patch"                 test -f "$ROOT"/patches/upstream/0015-*.patch
-need "the front camera DTS patch"                test -f "$ROOT"/patches/upstream/0021-*.patch
+need "the front camera DTS patch"                test -f "$ROOT"/patches/upstream/0020-*.patch
 need "rear camera node (samsung,s5k3l6)"         dt 'samsung,s5k3l6'
 need "front camera node (ovti,ov8856)"           dt 'ovti,ov8856'
 need "front camera on the 2-lane M port"          dt 'CAMSYS_CSI_M'
@@ -309,7 +285,7 @@ finish
 echo
 echo "== missing by design (documented, not defects) =="
 printf '  known-missing  cameras: the rear S5K3L6 and front OV8856 are described and driven\n'
-printf '                 (patches 14/15 and 21); the flash controller (OCP8137/AW36515), the\n'
+printf '                 (patches 14/15 and 20); the flash controller (OCP8137/AW36515), the\n'
 printf '                 focus motor and all camera userspace (no libcamera sprd pipeline, no 3A)\n'
 printf '                 are absent (BRING_UP_CHECKLIST 5.1, ROADMAP.md)\n'
 printf '  known-missing  OTG host: the bq2415x boost is a vbus-supply now (patches 16/17), but a\n'
@@ -327,7 +303,7 @@ printf '                 the fingerprint reader has no mainline driver (ROADMAP.
 printf '  known-missing  performance: system suspend is unavailable (PSCI 0.2 has no SYSTEM_SUSPEND;\n'
 printf '                 the vendor path goes through the PM core); GPU 850 MHz needs GPLL/clock-tree\n'
 printf '                 work; HS200/HS400 on the eMMC is opt-in only (sdhci_sprd.enable_hs200=1,\n'
-printf '                 patch 23) until it has run on hardware (ROADMAP.md, checklist 7)\n'
+printf '                 patch 22) until it has run on hardware (ROADMAP.md, checklist 7)\n'
 
 # --- 3. the built artifact (optional) -------------------------------------
 if [ -n "$IMAGE" ]; then
@@ -353,11 +329,11 @@ if [ -n "$IMAGE" ]; then
 
 	TMP=$(mktemp -d) || exit 1
 	trap 'rm -rf "$TMP"' EXIT
-	# the two filesystems, by label - no loop device needed. Newer job-rom.yml
+	# the two filesystems, by label - no loop device needed. Newer rom.yml
 	# uploads them split already; use those instead of copying the 1.3 GB disk.
 	# Symlinked, not copied: debugfs reads through the link, and a copy of the
 	# 2.4 GB root image is both slow and, on a CI runner, the largest thing in
-	# this check (job-rom.yml runs this script as a gate on every artifact).
+	# this check (rom.yml runs this script as a gate on every artifact).
 	if [ -f pmos-boot-fs.img ] && [ -f pmos-root-fs.img ]; then
 		ln -s "$IMGDIR/pmos-boot-fs.img" "$TMP/boot.img"
 		ln -s "$IMGDIR/pmos-root-fs.img" "$TMP/root.img"
@@ -378,14 +354,41 @@ if [ -n "$IMAGE" ]; then
 			debugfs -R "stat $f" "$TMP/boot.img" 2>/dev/null | grep -q . ||
 				bad "the boot filesystem has no $f"
 		done
-		grep -q 'loglevel=7' "$TMP/extlinux.conf" || bad "the cmdline has no loglevel=7"
+		# every option of the device package's kernel-cmdline.conf must have
+		# reached extlinux (this used to pin loglevel=7 and broke when the
+		# console was quieted); a distro default would lack them
+		for t in $(cat "$DPKG/kernel-cmdline.conf"); do
+			grep -qF -- "$t" "$TMP/extlinux.conf" || bad "the cmdline lacks $t"
+		done
 		grep -q 'console=ttyS1' "$TMP/extlinux.conf" || bad "the cmdline has no console=ttyS1"
-		if grep -q 'pmos_root_uuid=' "$TMP/extlinux.conf"; then
-			bad "extlinux pins pmos_root_uuid: a cache-only flash stops at root"
-		else
-			ok "extlinux leaves root to the pmOS_root label (cache-only flash works)"
-		fi
 		ok "the boot filesystem holds what extlinux names, with loglevel and the UART console"
+
+		# The kernel and its modules must come from one build, or the module BTF check
+		# fails (-22) and the GPU driver does not load (software rendering). The build
+		# makes both in one run, so this is a check of the artifact, not of the tree.
+		# The kernel image may be compressed: try gzip and zstd, then raw.
+		k="$TMP/vmlinuz"
+		debugfs -R "dump /vmlinuz $k" "$TMP/boot.img" >/dev/null 2>&1
+		rel=
+		for dec in "cat" "gzip -dc" "zstd -dc"; do
+			rel=$($dec "$k" 2>/dev/null | grep -a -o -m1 'Linux version [^ ]*' | awk '{print $3}')
+			[ -n "$rel" ] && break
+		done
+		# ls -p prints /inode/mode/uid/gid/name/size/ per entry: the name is field 6
+		mods=$(debugfs -R "ls -p /lib/modules" "$TMP/root.img" 2>/dev/null | awk -F/ '$6 ~ /^[0-9]/ {print $6}' | sort -u)
+		if [ -z "$rel" ]; then
+			# an unknown compression is not a broken artifact: say so, do not fail the build
+			printf '    unknown   could not read the kernel release from /vmlinuz (compression?): kernel/modules match not checked\n'
+		elif [ "$(printf '%s\n' "$mods" | grep -c .)" -ne 1 ] || ! printf '%s\n' "$mods" | grep -qx "$rel"; then
+			bad "kernel $rel does not match the modules in /lib/modules ($(printf '%s' "$mods" | tr '\n' ' ')): module BTF will fail"
+		else
+			ok "kernel $rel and /lib/modules/$rel come from one build"
+		fi
+		if [ -n "$rel" ]; then
+			debugfs -R "stat /lib/modules/$rel/kernel/drivers/gpu/drm/panfrost/panfrost.ko" "$TMP/root.img" >/dev/null 2>&1 &&
+				ok "panfrost.ko (the GPU driver) is in the image" ||
+				bad "panfrost.ko is missing from /lib/modules/$rel: the GPU will not accelerate"
+		fi
 
 		# the effective kernel config is the one in the boot filesystem
 		debugfs -R "dump /config $TMP/config" "$TMP/boot.img" >/dev/null 2>&1
@@ -394,8 +397,7 @@ if [ -n "$IMAGE" ]; then
 			for sym in MMC_SDHCI_SPRD EXT4_FS SERIAL_SPRD DRM_SPRD DRM_PANEL_TD4160_HX \
 				   DRM_FBDEV_EMULATION FRAMEBUFFER_CONSOLE TOUCHSCREEN_OVT_TCM_SPI \
 				   CHARGER_BQ2415X CHARGER_EXTCON_DETECT USB_MUSB_SPRD TYPEC_SC27XX_PD \
-				   USB_CONFIGFS USB_CONFIGFS_NCM USB_LIBCOMPOSITE PSTORE_RAM \
-				   SCSI_UFS_SPRD; do
+				   USB_CONFIGFS USB_CONFIGFS_NCM USB_LIBCOMPOSITE PSTORE_RAM; do
 				cfg "$sym" "$TMP/config" || { bad "the built config lacks CONFIG_$sym=y|m"; symfail=1; }
 			done
 			[ "$symfail" = 0 ] && ok "the built config has every symbol the features need"
@@ -414,9 +416,9 @@ if [ -n "$IMAGE" ]; then
 		fi
 	fi
 
-	# the login the README documents: user <job-rom.yml's --password>, root locked
+	# the login the README documents: user <rom.yml's --password>, root locked
 	if [ -s "$TMP/root.img" ]; then
-		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/job-rom.yml" |
+		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/rom.yml" |
 			head -1 | cut -d' ' -f2)
 		debugfs -R "dump /etc/shadow $TMP/shadow" "$TMP/root.img" >/dev/null 2>&1
 		if [ -s "$TMP/shadow" ]; then
@@ -431,9 +433,9 @@ if [ -n "$IMAGE" ]; then
 				salt=$(echo "$userf" | cut -d'$' -f3)
 				if command -v openssl >/dev/null 2>&1 && [ -n "$pw" ] &&
 				   [ "$(openssl passwd -6 -salt "$salt" "$pw" 2>/dev/null)" = "$userf" ]; then
-					ok "user's password is job-rom.yml's --password ($pw)"
+					ok "user's password is rom.yml's --password ($pw)"
 				else
-					bad "user's password is not job-rom.yml's --password"
+					bad "user's password is not rom.yml's --password"
 				fi ;;
 			'') bad "user has no password" ;;
 			*)  printf '    note      user has a password (%s-crypt); not checked offline\n' \
@@ -445,14 +447,12 @@ if [ -n "$IMAGE" ]; then
 	fi
 
 	# the UI: buffyboard's service must be installed and enabled, or phosh's
-	# stack with greetd and the GPU/wait-drm drop-ins. Which buffyboard service
-	# depends on the init system: systemd (unit + preset) or OpenRC (init
-	# script added to the default runlevel by the UI's openrc subpackage).
+	# stack with greetd and the software-renderer drop-in. Which buffyboard
+	# service depends on the init system: systemd (unit + preset) or OpenRC
+	# (init script added to the default runlevel by the UI's openrc subpackage).
 	if [ -s "$TMP/root.img" ]; then
-		# job-rom.yml has ui = ${{ inputs.ui || 'phosh' }}; take the fallback
-		# for a plain run, or UI=... to check an image built for another UI.
-		ui=${UI:-$(sed -n "s/.*inputs\.ui || '\([^']*\)'.*/\1/p" \
-			"$ROOT/.github/workflows/job-rom.yml" | head -1)}
+		ui=$(grep -E '^ *ui = ' "$ROOT/.github/workflows/rom.yml" | head -1 |
+			awk '{print $3}')
 		if debugfs -R "stat /usr/lib/systemd/systemd" "$TMP/root.img" 2>/dev/null | grep -q .; then
 			init=systemd
 		elif debugfs -R "stat /sbin/openrc" "$TMP/root.img" 2>/dev/null | grep -q .; then
@@ -498,11 +498,7 @@ if [ -n "$IMAGE" ]; then
 				bad "the phosh image has no phosh shell (/usr/bin/phosh or /usr/libexec/phosh)"
 			fi
 			for f in /usr/bin/phosh-session /usr/bin/phoc /usr/bin/greetd \
-				 /usr/libexec/x6525-wait-drm \
-				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf \
-				 /etc/systemd/system/greetd.service.d/20-x6525-wait-drm.conf \
-				 /etc/systemd/system/greetd.service.d/30-x6525-gpu.conf \
-				 /usr/bin/x6525-display-report; do
+				 /etc/systemd/system/greetd.service.d/10-x6525-software.conf; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the phosh image has $f" ||
 					bad "the phosh image has no $f"
@@ -520,7 +516,6 @@ if [ -n "$IMAGE" ]; then
 				 /usr/bin/kwin_wayland /usr/bin/plasmashell \
 				 /usr/share/wayland-sessions/plasma-mobile.desktop \
 				 /usr/lib/systemd/system/plasma-mobile.service \
-				 /usr/libexec/x6525-wait-drm \
 				 /etc/systemd/system/plasma-mobile.service.d/10-x6525-drm.conf; do
 				debugfs -R "stat $f" "$TMP/root.img" 2>/dev/null | grep -q . &&
 					ok "the plasma image has $f" ||
@@ -537,7 +532,7 @@ if [ -n "$IMAGE" ]; then
 				bad "no enabled plasma display manager (display-manager alias or graphical.target wants)"
 			fi ;;
 		*)
-			bad "job-rom.yml selects no known UI (ui = ${ui:-none})" ;;
+			bad "rom.yml selects no known UI (ui = ${ui:-none})" ;;
 		esac
 	fi
 

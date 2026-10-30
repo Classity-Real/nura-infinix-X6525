@@ -1,0 +1,117 @@
+From 4bbe9a4d1bbd3f5fa34e15045d0e5ff6cdea8065 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 03:00:31 +0800
+Subject: [PATCH] media: sprd: vsp: dump the register ranges the vendor library
+ uses
+
+The first dump showed that the first 0x80 bytes of the window are the IOMMU's registers
+(the codec's own registers are not there). Dump the IOMMU, 0x1000, 0x1200, 0x2080,
+0x2400, 0x2480 and the bitstream module at 0x8000, and 0x400 bytes for the JPEG codec.
+---
+ drivers/media/platform/sprd/vsp/vsp.c | 53 ++++++++++++++++++++++-----
+ 1 file changed, 44 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/media/platform/sprd/vsp/vsp.c b/drivers/media/platform/sprd/vsp/vsp.c
+index 07c706c0f..f5a75e3a0 100644
+--- a/drivers/media/platform/sprd/vsp/vsp.c
++++ b/drivers/media/platform/sprd/vsp/vsp.c
+@@ -7,7 +7,7 @@
+  * register map is not documented and has to be found out step by step.
+  *
+  * debugfs: /sys/kernel/debug/sprd-vsp/regs (sprd-jpg/regs for the JPEG codec) powers the block, pulses its
+- * reset and dumps the first VSP_DUMP_SIZE bytes of the register window.
++ * reset and dumps the register ranges listed in the match data.
+  */
+ 
+ #include <linux/clk.h>
+@@ -21,14 +21,20 @@
+ #include <linux/reset.h>
+ #include <linux/seq_file.h>
+ 
+-#define VSP_DUMP_SIZE	0x200
++struct sprd_vsp_range {
++	u32 start;
++	u32 len;
++};
+ 
+ struct sprd_vsp_data {
+ 	const char *name;
++	const struct sprd_vsp_range *ranges;
++	int num_ranges;
+ };
+ 
+ struct sprd_vsp {
+ 	struct device *dev;
++	const struct sprd_vsp_data *data;
+ 	void __iomem *base;
+ 	struct clk_bulk_data *clks;
+ 	int num_clks;
+@@ -66,16 +72,20 @@ static int sprd_vsp_runtime_suspend(struct device *dev)
+ static int sprd_vsp_regs_show(struct seq_file *s, void *unused)
+ {
+ 	struct sprd_vsp *vsp = s->private;
+-	int ret, i;
++	int ret, r, i;
+ 
+ 	ret = pm_runtime_resume_and_get(vsp->dev);
+ 	if (ret)
+ 		return ret;
+ 
+-	for (i = 0; i < VSP_DUMP_SIZE; i += 16)
+-		seq_printf(s, "%04x: %08x %08x %08x %08x\n", i,
+-			   readl(vsp->base + i), readl(vsp->base + i + 4),
+-			   readl(vsp->base + i + 8), readl(vsp->base + i + 12));
++	for (r = 0; r < vsp->data->num_ranges; r++) {
++		const struct sprd_vsp_range *rg = &vsp->data->ranges[r];
++
++		for (i = rg->start; i < rg->start + rg->len; i += 16)
++			seq_printf(s, "%04x: %08x %08x %08x %08x\n", i,
++				   readl(vsp->base + i), readl(vsp->base + i + 4),
++				   readl(vsp->base + i + 8), readl(vsp->base + i + 12));
++	}
+ 
+ 	pm_runtime_put(vsp->dev);
+ 
+@@ -95,6 +105,7 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 
+ 	vsp->dev = dev;
++	vsp->data = data;
+ 	platform_set_drvdata(pdev, vsp);
+ 
+ 	vsp->base = devm_platform_ioremap_resource(pdev, 0);
+@@ -141,8 +152,32 @@ static const struct dev_pm_ops sprd_vsp_pm_ops = {
+ 	SET_RUNTIME_PM_OPS(sprd_vsp_runtime_suspend, sprd_vsp_runtime_resume, NULL)
+ };
+ 
+-static const struct sprd_vsp_data sprd_vsp_vsp_data = { .name = "sprd-vsp" };
+-static const struct sprd_vsp_data sprd_vsp_jpg_data = { .name = "sprd-jpg" };
++/*
++ * The first 0x80 bytes of the VSP window are the registers of its IOMMU (the
++ * stock device tree puts "sprd,iommuvaul6-vsp" at 0x32000000 with size 0x80).
++ * The vendor's userspace library addresses the codec itself at 0x1000-0x1060
++ * (reset, bus idle, interrupt, bitstream module setup), 0x2000-0x24ff and the
++ * bitstream module at 0x8000-0x8030.
++ */
++static const struct sprd_vsp_range sprd_vsp_vsp_ranges[] = {
++	{ 0x0000, 0x0100 }, { 0x1000, 0x0080 }, { 0x1200, 0x0020 },
++	{ 0x2080, 0x0020 }, { 0x2400, 0x0010 }, { 0x2480, 0x0010 },
++	{ 0x8000, 0x0030 },
++};
++static const struct sprd_vsp_range sprd_vsp_jpg_ranges[] = {
++	{ 0x0000, 0x0400 },
++};
++
++static const struct sprd_vsp_data sprd_vsp_vsp_data = {
++	.name = "sprd-vsp",
++	.ranges = sprd_vsp_vsp_ranges,
++	.num_ranges = ARRAY_SIZE(sprd_vsp_vsp_ranges),
++};
++static const struct sprd_vsp_data sprd_vsp_jpg_data = {
++	.name = "sprd-jpg",
++	.ranges = sprd_vsp_jpg_ranges,
++	.num_ranges = ARRAY_SIZE(sprd_vsp_jpg_ranges),
++};
+ 
+ static const struct of_device_id sprd_vsp_of_match[] = {
+ 	{ .compatible = "sprd,ums9230-vsp", .data = &sprd_vsp_vsp_data },

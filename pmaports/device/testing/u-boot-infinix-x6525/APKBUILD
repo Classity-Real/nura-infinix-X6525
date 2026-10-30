@@ -2,23 +2,17 @@
 maintainer="Seuj09 <jeus110310@gmail.com>"
 pkgname=u-boot-infinix-x6525
 # Built from the port's own fork of ums9230-mainline/u-boot, branch x6525,
-# which is the fork's ums9230 branch plus the three board commits (device tree,
-# defconfig and environment) -- the same files this repo carries in uboot/ and
-# patches/upstream-uboot/, which is what CI builds. Point url and _commit back
-# at codeberg.org/ums9230-mainline/u-boot once the board is merged there.
+# which is the fork's ums9230 branch plus the board commits (device tree,
+# defconfig, environment, the pmicwdt command and the prodnv MAC preboot) --
+# the same files this repo carries in uboot/ and patches/upstream-uboot/,
+# which is what CI builds. Point url and _commit back at
+# codeberg.org/ums9230-mainline/u-boot once the board is merged there.
 #
 # pkgver is <u-boot version>_git<commit date>, as jolla-c2 does; _commit is the
 # x6525 tip. GitHub's commit archives are regenerated on demand, so the hash
 # below is for that tarball as fetched today - check it if it ever fails.
-#
-# The UFS enablement (2026-10-24) lives only in the three board files staged
-# next to this APKBUILD: the fork cannot be bumped from here, so prepare()
-# copies the staged files over the tarball's older copies before the build.
-# They are the same bytes this repo carries in uboot/, which CI builds from
-# the patch chain in patches/upstream-uboot/. The tarball hash stays as is -
-# keep it the first sha512sums line.
-pkgver=2025.07_git20261017
-pkgrel=6
+pkgver=2025.07_git20261024
+pkgrel=4
 pkgdesc="U-Boot bootloader for the Infinix X6525"
 url="https://github.com/Seuj09/ums9230-mainline-u-boot"
 arch="aarch64"
@@ -31,23 +25,11 @@ makedepends="
 	flex
 	openssl-dev
 "
-_commit="434a9c96ba4b3d42d9e95ee5eb2fd9fc956c0ac2"
-source="
-	$pkgname-$pkgver.tar.gz::$url/archive/$_commit.tar.gz
-	infinix-x6525_defconfig
-	ums9230-infinix-x6525.dts
-	infinix-x6525.env
-"
+_commit="6d247043391aa8ed7d55cfadfd60908077a01bad"
+source="$pkgname-$pkgver.tar.gz::$url/archive/$_commit.tar.gz"
 options="!check !tracedeps pmb:cross-native"
 # GitHub names the extracted directory <repo>-<commit>
 builddir="$srcdir/ums9230-mainline-u-boot-$_commit"
-
-prepare() {
-	default_prepare
-	cp "$srcdir"/infinix-x6525_defconfig "$builddir"/configs/
-	cp "$srcdir"/ums9230-infinix-x6525.dts "$builddir"/dts/
-	cp "$srcdir"/infinix-x6525.env "$builddir"/board/unisoc/ums9230/
-}
 
 build() {
 	make ARCH=arm infinix-x6525_defconfig
@@ -60,8 +42,5 @@ package() {
 }
 
 sha512sums="
-7aefacc983b9cb41c17e961278a911fd4604b4b5483ef85f09ebff3bce44b1411298d1464c3ad0abbb513514f49213c0a20a9906cb749ff47371d28a7b28b051  $pkgname-$pkgver.tar.gz
-510dfbe9dd089e98d3ff852022a8be832e346d3ef0b1d721ea19618366e1ba91eeebc721379408ff1764e30bbf0e68d8eedca5e2d22b1ec543afc2b8e70f8bc8  infinix-x6525_defconfig
-808cfe2bffc0450c05ffcc272ddbf8497520b3fc483d64244264a0702486fef11516ffaf5d9d94016e08a82da6d38034b53cdcf02e4edbd1f62e1642719f55ac  ums9230-infinix-x6525.dts
-a8ecda00c49b5723c9e12e2c05622fcd1f526e151b3bb8328921a8cfa2e026a47c13a815b11db461873a3904dc1d66a316bbaf06c7dd4bc911374219ba4fa794  infinix-x6525.env
+a63b38751f67db9cf415d139bc0eca3f3d98547c89438b31e9ef7627419adde9aeac03a7d1e4061b1ed3c10daa8caa6098c5b4f3ea61823446f8e10d2a7bee8a  $pkgname-$pkgver.tar.gz
 "
