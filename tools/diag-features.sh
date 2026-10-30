@@ -28,7 +28,7 @@ $S dmesg | grep -iE 'sc23xx|wlan.*(ap|beacon|mode|fail)|start_ap|wifi.*fail' | t
 echo; echo "== 3. Bluetooth"
 have bluetoothctl && $S bluetoothctl show 2>&1 | head -12
 have hciconfig && $S hciconfig -a 2>&1 | head -8
-$S rfkill list bluetooth 2>&1
+have rfkill && $S rfkill list bluetooth 2>&1 || echo "rfkill: not installed"
 $S dmesg | grep -iE 'bluetooth|btsprd|hci0|bd ?address|local-bd|random|pskey|opcode' | tail -20
 echo "-- address source (prodnv file, /var/lib file, device-tree property):"
 ls -l /var/lib/x6525/ 2>&1 | tail -n +2
@@ -41,8 +41,8 @@ systemctl status x6525-modem-nv --no-pager 2>&1 | head -8
 $S dmesg | grep -iE 'sprd_modem|remoteproc|pubcp|modem' | tail -25
 echo "-- remoteproc state:"; for r in /sys/class/remoteproc/*; do [ -e "$r" ] && echo "$(basename "$r"): $(cat "$r/name" 2>/dev/null) $(cat "$r/state" 2>/dev/null)"; done
 echo "-- rpmsg channels (names decide whether rpmsg_wwan can bind):"; ls /sys/bus/rpmsg/devices/ 2>&1
-echo "-- tty/wwan nodes:"; ls /dev | grep -iE 'tty|wwan' | tr '\n' ' '; echo
-have mmcli && $S mmcli -L 2>&1 | head -5 || echo "ModemManager (mmcli): not installed"
+echo "-- tty/wwan nodes:"; for n in /dev/ttyS* /dev/ttyBT* /dev/ttyUSB* /dev/ttyACM* /dev/*wwan*; do [ -e "$n" ] && printf '%s ' "$n"; done; echo
+if have mmcli; then $S mmcli -L 2>&1 | head -5; else echo "ModemManager (mmcli): not installed"; fi
 
 echo; echo "== 5. services"
 systemctl --failed --no-pager 2>&1 | head -8

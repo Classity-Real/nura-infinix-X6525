@@ -17,7 +17,7 @@ $S hciconfig -a 2>&1 | head -12; $S bluetoothctl list 2>&1 | head -3
 command -v btmon >/dev/null || echo "(btmon not installed: sudo apk add bluez-btmon for a full HCI trace)"
 $S bluetoothctl show 2>&1 | head -15
 echo; echo "== 4. firmware, MAC service and files"
-ls -l /lib/firmware/sprd/ 2>&1 | grep -iE 'bt|wcn' | head
+for f in /lib/firmware/sprd/*; do case "$f" in *bt*|*wcn*) ls -l "$f";; esac; done 2>&1 | head
 systemctl status x6525-prodnv-mac --no-pager 2>&1 | head -12
 $S ls -l /mnt/prodnv/btmac.txt /var/lib/x6525*/ 2>&1 | head
 echo; echo "== 5. one power-on attempt, with the logs watched"
