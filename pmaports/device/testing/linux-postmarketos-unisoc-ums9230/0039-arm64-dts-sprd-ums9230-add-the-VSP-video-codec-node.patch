@@ -1,0 +1,51 @@
+From 15614961e069e6ba217c7a7b409f1f9fa80a9669 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Thu, 29 Oct 2026 18:42:09 +0800
+Subject: [PATCH] arm64: dts: sprd: ums9230: add the VSP video codec node
+
+The node, clocks, resets and interrupt are from the stock device tree
+(video-codec@32000000, SPI 34, VSP resets in the AP AHB block); the codec
+is under both the MM and the VSP power domain.
+---
+ arch/arm64/boot/dts/sprd/ums9230.dtsi | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230.dtsi b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+index c9c14fe71..33101def6 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230.dtsi
++++ b/arch/arm64/boot/dts/sprd/ums9230.dtsi
+@@ -848,6 +848,22 @@ port@1 {
+ 			};
+ 		};
+ 
++		video-codec@32000000 {
++			compatible = "sprd,ums9230-vsp";
++			reg = <0x32000000 0xc000>;
++			interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&apahb_gate CLK_VSP_EB>, <&ap_clk CLK_VSP>;
++			clock-names = "enable", "codec";
++			assigned-clocks = <&ap_clk CLK_VSP>;
++			assigned-clock-parents = <&pll1 CLK_TWPLL_256M>;
++			resets = <&apahb_gate RESET_AP_AHB_VSP_GLOBAL_SOFT_RST>,
++				 <&apahb_gate RESET_AP_AHB_VSP_SOFT_RST>;
++			reset-names = "global", "core";
++			power-domains = <&pmu UMS9230_POWER_DOMAIN_MM>,
++					<&pmu UMS9230_POWER_DOMAIN_AP_VSP>;
++			power-domain-names = "mm", "vsp";
++		};
++
+ 		isp@3a000000 {
+ 			compatible = "sprd,ums9230-isp";
+ 			reg = <0x3a000000 0x40000>;
+@@ -1175,6 +1191,11 @@ power-domain@UMS9230_POWER_DOMAIN_MM {
+ 					#power-domain-cells = <0>;
+ 				};
+ 
++				power-domain@UMS9230_POWER_DOMAIN_AP_VSP {
++					reg = <UMS9230_POWER_DOMAIN_AP_VSP>;
++					#power-domain-cells = <0>;
++				};
++
+ 				power-domain@UMS9230_POWER_DOMAIN_PUBCP {
+ 					reg = <UMS9230_POWER_DOMAIN_PUBCP>;
+ 					#power-domain-cells = <0>;

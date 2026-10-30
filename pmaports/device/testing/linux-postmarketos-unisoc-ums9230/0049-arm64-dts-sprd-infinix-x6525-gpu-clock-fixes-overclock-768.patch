@@ -1,0 +1,16 @@
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 72b3ee1..a6f9b99 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -827,6 +827,11 @@
+ 			opp-hz = /bits/ 64 <614400000>;
+ 			opp-microvolt = <750000>;
+ 		};
++
++		opp-768000000 {
++			opp-hz = /bits/ 64 <768000000>;
++			opp-microvolt = <800000>;
++		};
+ 	};
+ };
+ 

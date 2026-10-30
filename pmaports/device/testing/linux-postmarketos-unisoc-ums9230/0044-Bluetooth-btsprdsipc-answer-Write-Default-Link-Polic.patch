@@ -1,0 +1,68 @@
+From c0002b331fe45cb615ae6c5190aa0426ba10421c Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 03:11:30 +0800
+Subject: [PATCH] Bluetooth: btsprdsipc: answer Write Default Link Policy
+ locally
+
+The controller firmware rejects the command with status 0x12 although its supported-commands
+bitmap lists it. HCI initialisation aborts on the first failing command, so hci0 could not be
+powered on ("Opcode 0x080f failed: -22") and BlueZ never got a controller. Complete the command
+with a successful Command Complete instead of sending it.
+---
+ drivers/bluetooth/btsprdsipc.c | 37 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
+index 571dfacb9..185484878 100644
+--- a/drivers/bluetooth/btsprdsipc.c
++++ b/drivers/bluetooth/btsprdsipc.c
+@@ -54,12 +54,49 @@ static int btsprdsipc_callback(struct rpmsg_device *rpdev, void *data,
+ 	return count;
+ }
+ 
++/*
++ * The controller firmware rejects "Write Default Link Policy Settings" with
++ * status 0x12 (invalid parameters) although its supported-commands bitmap
++ * claims the command, and HCI initialisation gives up on the first failing
++ * command, so hci0 could never be powered on ("Opcode 0x080f failed: -22").
++ * The default link policy only matters for ACL link role/mode negotiation,
++ * which the controller handles by itself, so answer the command locally with
++ * a successful Command Complete instead of sending it.
++ */
++static int btsprdsipc_fake_cmd_complete(struct hci_dev *hdev, struct sk_buff *cmd)
++{
++	struct hci_ev_cmd_complete *ev;
++	struct hci_event_hdr *hdr;
++	struct sk_buff *skb;
++
++	skb = bt_skb_alloc(sizeof(*hdr) + sizeof(*ev) + 1, GFP_KERNEL);
++	if (!skb)
++		return -ENOMEM;
++
++	hdr = skb_put(skb, sizeof(*hdr));
++	hdr->evt = HCI_EV_CMD_COMPLETE;
++	hdr->plen = sizeof(*ev) + 1;
++	ev = skb_put(skb, sizeof(*ev));
++	ev->ncmd = 1;
++	ev->opcode = cpu_to_le16(hci_skb_opcode(cmd));
++	skb_put_u8(skb, 0x00);	/* status: success */
++
++	hci_skb_pkt_type(skb) = HCI_EVENT_PKT;
++	kfree_skb(cmd);
++
++	return hci_recv_frame(hdev, skb);
++}
++
+ static int btsprdsipc_send(struct hci_dev *hdev, struct sk_buff *skb)
+ {
+ 	struct btsprdsipc *bts = hci_get_drvdata(hdev);
+ 	unsigned int len;
+ 	int ret;
+ 
++	if (hci_skb_pkt_type(skb) == HCI_COMMAND_PKT &&
++	    hci_skb_opcode(skb) == HCI_OP_WRITE_DEF_LINK_POLICY)
++		return btsprdsipc_fake_cmd_complete(hdev, skb);
++
+ 	/* Prepend skb with frame type */
+ 	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
+ 

@@ -1,0 +1,64 @@
+From 9c7012e39daf24f2e14f7d599d0b9c4947936b93 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 28 Oct 2026 12:06:59 +0800
+Subject: [PATCH 2/2] arm64: dts: sprd: infinix-x6525: drive the OV8856
+ power-down pin from the driver
+
+Replace the permanent gpio-hog with powerdown-gpios on the sensor node. The
+ov8856 driver (previous patch in this series) holds the pin high (standby)
+while the sensor is off and releases it once the supplies and clock are up,
+so the pin is no longer held low with the rails switched off.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../boot/dts/sprd/ums9230-infinix-x6525.dts   | 20 ++++---------------
+ 1 file changed, 4 insertions(+), 16 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 779e4255f..9d1b2f572 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -345,20 +345,6 @@ charger-en-hog {
+ 		output-low;
+ 		line-name = "charger_en";
+ 	};
+-
+-	/*
+-	 * The front OV8856's power-down pin. The mainline ov8856 driver
+-	 * knows reset but not power-down, so nothing would drive this line;
+-	 * the vendor stack pulls it low to bring the sensor out of standby.
+-	 * Hold it low for the lifetime of the system - the rails are still
+-	 * switched by the driver, so this only keeps the pin from floating.
+-	 */
+-	ov8856-pwdn-hog {
+-		gpio-hog;
+-		gpios = <46 GPIO_ACTIVE_HIGH>;
+-		output-low;
+-		line-name = "ov8856_pwdn";
+-	};
+ };
+ 
+ &i2c4 {
+@@ -575,8 +561,9 @@ &sc2730_fgu {
+  * (sprd,phyid 2, so the two-lane M port). Its vendor library
+  * (libsensor_ov8856_front.so) runs the part at 24 MHz, but the mainline
+  * driver only has register tables for 19.2 MHz, and CLK_SENSOR0 can supply
+- * either, so the node asks for 19.2 MHz. The mainline driver has no
+- * power-down handling at all, so the pin is held low by a gpio-hog below.
++ * either, so the node asks for 19.2 MHz. The ov8856 driver
++ * drives the power-down pin itself (powerdown-gpios), after the supplies and
++ * the clock are up.
+  * The sensor-main2 socket is the decorative second rear lens
+  * ("fakeserial" in the HAL).
+  */
+@@ -590,6 +577,7 @@ camera@10 {
+ 		compatible = "ovti,ov8856";
+ 		reg = <0x10>;
+ 		reset-gpios = <&ap_gpio 44 GPIO_ACTIVE_LOW>;
++		powerdown-gpios = <&ap_gpio 46 GPIO_ACTIVE_HIGH>;
+ 
+ 		clocks = <&mm_gate CLK_MM_SENSOR0_EB>;
+ 		clock-names = "xvclk";
+-- 
+2.43.0
+

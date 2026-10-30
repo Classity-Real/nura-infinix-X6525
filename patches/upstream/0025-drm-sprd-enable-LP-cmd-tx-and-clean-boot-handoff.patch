@@ -1,0 +1,149 @@
+From b6a666f9e4b72c499d3a181d001dabe49bc2bbff Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 25 Oct 2026 08:05:53 +0000
+Subject: [PATCH] drm/sprd: enable LP cmd tx and clean boot handoff
+
+During sprd_dsi_bridge_pre_enable(), the D-PHY HS clock lane is not enabled yet (it is enabled in sprd_dsi_bridge_enable()), so panel init commands sent in DSI_MODE_CMD require Low-Power command transmission (CMD_MODE_ALL_LP in CMD_MODE_CFG), and DCS commands sent after switching to DSI_MODE_VIDEO (such as DCS 0x51 backlight updates) require LP_CMD_EN in VID_MODE_CFG and VBLK_CMD_TRANS_LIMIT = 0x80. Also fix the FRAME_BTA_ACK_EN shift (bit 14, not 15), enable the DPU dpi clock, clear all 8 hardware DPU layers after stopping the bootloader splash so stale addresses do not fault the IOMMU before the first plane commit, and remove conflicting simpledrm devices before registering sprd-drm.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ drivers/gpu/drm/sprd/sprd_dpu.c | 14 +++++++++++++-
+ drivers/gpu/drm/sprd/sprd_dpu.h |  1 +
+ drivers/gpu/drm/sprd/sprd_drm.c |  5 +++++
+ drivers/gpu/drm/sprd/sprd_dsi.c | 12 +++++++++---
+ 4 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/sprd/sprd_dpu.c b/drivers/gpu/drm/sprd/sprd_dpu.c
+index d481b9f..4ba8e9a 100644
+--- a/drivers/gpu/drm/sprd/sprd_dpu.c
++++ b/drivers/gpu/drm/sprd/sprd_dpu.c
+@@ -398,6 +398,7 @@ static void sprd_dpu_init(struct sprd_dpu *dpu)
+ 	struct dpu_context *ctx = &dpu->ctx;
+ 	u32 int_mask = 0;
+ 	u32 dpu_version = readl(ctx->base + REG_DPU_VERSION);
++	int i;
+ 
+ 	writel(0x00, ctx->base + REG_BG_COLOR);
+ 
+@@ -444,10 +445,15 @@ static void sprd_dpu_init(struct sprd_dpu *dpu)
+ 	/*
+ 	 * The DPU is usually enabled by the bootloader to show
+ 	 * a splash screen. Stop it here when the kernel initializes
+-	 * the display.
++	 * the display, and disable all hardware layers so stale
++	 * bootloader addresses do not fault the IOMMU when the DPU
++	 * starts before the first plane commit.
+ 	 */
+ 	if (!ctx->stopped)
+ 		sprd_dpu_stop(dpu);
++
++	for (i = 0; i < 8; i++)
++		layer_reg_wr(ctx, REG_LAY_CTRL, 0x00, i);
+ }
+ 
+ static void sprd_dpu_fini(struct sprd_dpu *dpu)
+@@ -801,6 +807,12 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
+ 		return PTR_ERR(ctx->clk);
+ 	}
+ 
++	ctx->dpi_clk = devm_clk_get_optional_enabled(dev, "dpi");
++	if (IS_ERR(ctx->dpi_clk)) {
++		dev_err(dev, "failed to get DPU dpi clock\n");
++		return PTR_ERR(ctx->dpi_clk);
++	}
++
+ 	/* disable and clear interrupts before register dpu IRQ. */
+ 	writel(0x00, ctx->base + REG_DPU_INT_EN);
+ 	writel(0xff, ctx->base + REG_DPU_INT_CLR);
+diff --git a/drivers/gpu/drm/sprd/sprd_dpu.h b/drivers/gpu/drm/sprd/sprd_dpu.h
+index d48b922..2213b7c 100644
+--- a/drivers/gpu/drm/sprd/sprd_dpu.h
++++ b/drivers/gpu/drm/sprd/sprd_dpu.h
+@@ -45,6 +45,7 @@ enum {
+ struct dpu_context {
+ 	void __iomem *base;
+ 	struct clk *clk;
++	struct clk *dpi_clk;
+ 	int irq;
+ 	u8 if_type;
+ 	struct videomode vm;
+diff --git a/drivers/gpu/drm/sprd/sprd_drm.c b/drivers/gpu/drm/sprd/sprd_drm.c
+index e3bbb7f..db4aa80 100644
+--- a/drivers/gpu/drm/sprd/sprd_drm.c
++++ b/drivers/gpu/drm/sprd/sprd_drm.c
+@@ -3,6 +3,7 @@
+  * Copyright (C) 2020 Unisoc Inc.
+  */
+ 
++#include <linux/aperture.h>
+ #include <linux/component.h>
+ #include <linux/dma-mapping.h>
+ #include <linux/iommu.h>
+@@ -161,6 +162,10 @@ static int sprd_drm_bind(struct device *dev)
+ 	/* init kms poll for handling hpd */
+ 	drm_kms_helper_poll_init(drm);
+ 
++	ret = aperture_remove_all_conflicting_devices(DRIVER_NAME);
++	if (ret)
++		goto err_kms_helper_poll_fini;
++
+ 	ret = drm_dev_register(drm, 0);
+ 	if (ret < 0)
+ 		goto err_kms_helper_poll_fini;
+diff --git a/drivers/gpu/drm/sprd/sprd_dsi.c b/drivers/gpu/drm/sprd/sprd_dsi.c
+index 0edb626..17a4ef8 100644
+--- a/drivers/gpu/drm/sprd/sprd_dsi.c
++++ b/drivers/gpu/drm/sprd/sprd_dsi.c
+@@ -58,15 +58,18 @@
+ #define LP_HBP_EN BIT(12)
+ #define LP_HFP_EN BIT(13)
+ #define FRAME_BTA_ACK_EN BIT(14)
++#define LP_CMD_EN BIT(15)
+ 
+ #define TIMEOUT_CNT_CLK_CONFIG 0x40
+ #define HTX_TO_CONFIG 0x44
+ #define LRX_H_TO_CONFIG 0x48
+ 
+ #define TX_ESC_CLK_CONFIG 0x5C
++#define VBLK_CMD_TRANS_LIMIT 0x64
+ 
+ #define CMD_MODE_CFG 0x68
+ #define TEAR_FX_EN BIT(0)
++#define CMD_MODE_ALL_LP (GENMASK(14, 8) | GENMASK(19, 16) | BIT(24))
+ 
+ #define GEN_HDR 0x6C
+ #define GEN_DT GENMASK(5, 0)
+@@ -399,6 +402,7 @@ static void sprd_dsi_init(struct dsi_context *ctx)
+ 	writel(0xffffffff, ctx->base + MASK_PROTOCOL_INT);
+ 	writel(0xffffffff, ctx->base + MASK_INTERNAL_INT);
+ 	writel(1, ctx->base + DSI_MODE_CFG);
++	dsi_reg_up(ctx, CMD_MODE_CFG, CMD_MODE_ALL_LP, CMD_MODE_ALL_LP);
+ 	dsi_reg_up(ctx, EOTP_EN, RX_EOTP_EN, 0);
+ 	dsi_reg_up(ctx, EOTP_EN, TX_EOTP_EN, 0);
+ 	dsi_reg_up(ctx, RX_PKT_CHECK_CONFIG, RX_PKT_ECC_EN, RX_PKT_ECC_EN);
+@@ -475,7 +479,7 @@ static int sprd_dsi_dpi_video(struct dsi_context *ctx)
+ 		vm->hback_porch;
+ 
+ 	writel(0, ctx->base + SOFT_RESET);
+-	dsi_reg_wr(ctx, VID_MODE_CFG, FRAME_BTA_ACK_EN, 15, ctx->frame_ack_en);
++	dsi_reg_wr(ctx, VID_MODE_CFG, FRAME_BTA_ACK_EN, 14, ctx->frame_ack_en);
+ 	dsi_reg_wr(ctx, DPI_VIDEO_FORMAT, DPI_VIDEO_MODE_FORMAT, 0, coding);
+ 	dsi_reg_wr(ctx, VID_MODE_CFG, VID_MODE_TYPE, 0, ctx->burst_mode);
+ 	byte_cycle = 95 * hline * ratio_x1000 / 100000;
+@@ -490,9 +494,11 @@ static int sprd_dsi_dpi_video(struct dsi_context *ctx)
+ 	dsi_reg_wr(ctx, VIDEO_VBLK_LINES, VFP_LINES, 0, vm->vfront_porch);
+ 	dsi_reg_wr(ctx, VIDEO_VBLK_LINES, VBP_LINES, 10, vm->vback_porch);
+ 	dsi_reg_wr(ctx, VIDEO_VBLK_LINES, VSA_LINES, 20, vm->vsync_len);
++	writel(0x80, ctx->base + VBLK_CMD_TRANS_LIMIT);
+ 	dsi_reg_up(ctx, VID_MODE_CFG, LP_HBP_EN | LP_HFP_EN | LP_VACT_EN |
+-			LP_VFP_EN | LP_VBP_EN | LP_VSA_EN, LP_HBP_EN | LP_HFP_EN |
+-			LP_VACT_EN | LP_VFP_EN | LP_VBP_EN | LP_VSA_EN);
++			LP_VFP_EN | LP_VBP_EN | LP_VSA_EN | LP_CMD_EN,
++			LP_HBP_EN | LP_HFP_EN | LP_VACT_EN | LP_VFP_EN |
++			LP_VBP_EN | LP_VSA_EN | LP_CMD_EN);
+ 
+ 	hs_to = (hline * vm->vactive) + (2 * bpp_x100) / 100;
+ 	for (div = 0x80; (div < hs_to) && (div > 2); div--) {
+-- 
+2.47.3
+

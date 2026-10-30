@@ -1,0 +1,47 @@
+From b2c3d4e5f60718293a4b5c6d7e8f90123456789a Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Tue, 27 Oct 2026 19:41:00 +0000
+Subject: [PATCH] Bluetooth: btsprdsipc: set drvdata before registering HCI device
+
+btsprdsipc_probe() called dev_set_drvdata(&rpdev->dev, bts) only after
+hci_register_dev(hdev) returned.
+
+During hci_register_dev(), the HCI setup state machine runs synchronously
+via hci_dev_setup_sync(), which invokes hdev->set_bdaddr() to send vendor
+configuration commands (0xfca0, 0xfca2, etc.). If the controller responds
+or an incoming packet arrives while inside hci_register_dev(),
+btsprdsipc_callback() is invoked and attempts to retrieve the driver data
+with dev_get_drvdata(&rpdev->dev). Because drvdata was not yet set,
+it returned NULL and resulted in a null-pointer dereference.
+
+Set dev_set_drvdata(&rpdev->dev, bts) before calling hci_register_dev(),
+and clear it if hci_register_dev() fails.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ drivers/bluetooth/btsprdsipc.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/bluetooth/btsprdsipc.c b/drivers/bluetooth/btsprdsipc.c
+index 50b1489..8a7c29b 100644
+--- a/drivers/bluetooth/btsprdsipc.c
++++ b/drivers/bluetooth/btsprdsipc.c
+@@ -236,11 +236,13 @@ static int btsprdsipc_probe(struct rpmsg_device *rpdev)
+ 
+ 	hci_set_quirk(hdev, HCI_QUIRK_USE_BDADDR_PROPERTY);
+ 
++	dev_set_drvdata(&rpdev->dev, bts);
++
+ 	ret = hci_register_dev(hdev);
+-	if (ret < 0)
++	if (ret < 0) {
++		dev_set_drvdata(&rpdev->dev, NULL);
+ 		goto hci_free_dev;
+-
+-	dev_set_drvdata(&rpdev->dev, bts);
++	}
+ 
+ 	return 0;
+ 
+-- 
+2.43.0

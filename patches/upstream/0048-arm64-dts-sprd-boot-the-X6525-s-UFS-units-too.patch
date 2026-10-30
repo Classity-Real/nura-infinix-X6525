@@ -1,0 +1,25 @@
+diff --git a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+index 72b3ee1..b95cab0 100644
+--- a/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
++++ b/arch/arm64/boot/dts/sprd/ums9230-infinix-x6525.dts
+@@ -863,6 +863,20 @@
+ 	};
+ };
+ 
++/*
++ * UFS - the alternate internal storage. Some X6525 units shipped with a UFS
++ * part instead of the eMMC above; they boot the same image with just this
++ * node (the cmdline names its controller, androidboot.boot_devices=
++ * ...20200000.ufs). vcc is the same core rail the eMMC runs on, and the
++ * kernel already carries CONFIG_SCSI_UFS_SPRD. This mirrors the reeder's
++ * board dts; on an eMMC unit the controller probes, finds nothing and
++ * drops out.
++ */
++&ufs {
++	vcc-supply = <&vddemmccore>;
++	status = "okay";
++};
++
+ &modem {
+ 	status = "okay";
+ };

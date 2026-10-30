@@ -1,0 +1,241 @@
+From a6157e9ce979b07ab41c115399265a0793247faa Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Fri, 30 Oct 2026 02:53:28 +0800
+Subject: [PATCH] media: sprd: vsp: also bind the UMS9230 JPEG codec
+
+Take the clocks and resets from the device tree instead of fixed names, so the same
+power/clock/reset bring-up and register dump works for the JPEG codec (debugfs
+sprd-jpg/regs). Adds its dt-bindings document.
+---
+ .../bindings/media/sprd,ums9230-jpg.yaml      | 64 +++++++++++++++++++
+ drivers/media/platform/sprd/vsp/Kconfig       |  4 +-
+ drivers/media/platform/sprd/vsp/vsp.c         | 55 +++++++++-------
+ 3 files changed, 98 insertions(+), 25 deletions(-)
+ create mode 100644 Documentation/devicetree/bindings/media/sprd,ums9230-jpg.yaml
+
+diff --git a/Documentation/devicetree/bindings/media/sprd,ums9230-jpg.yaml b/Documentation/devicetree/bindings/media/sprd,ums9230-jpg.yaml
+new file mode 100644
+index 000000000..a2d9a72e2
+--- /dev/null
++++ b/Documentation/devicetree/bindings/media/sprd,ums9230-jpg.yaml
+@@ -0,0 +1,64 @@
++# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/media/sprd,ums9230-jpg.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Unisoc UMS9230 JPEG codec
++
++maintainers:
++  - Seuj09 <jeus110310@gmail.com>
++
++description:
++  The JPEG codec block of the Unisoc UMS9230 and related SoCs. It is part of
++  the multimedia subsystem and shares its power domain.
++
++properties:
++  compatible:
++    const: sprd,ums9230-jpg
++
++  reg:
++    maxItems: 1
++
++  interrupts:
++    maxItems: 1
++
++  clocks:
++    items:
++      - description: Multimedia clock generator gate
++      - description: Clock gate of the codec
++      - description: Codec clock (mux of the 76.8, 128, 256 and 384 MHz TWPLL outputs)
++
++  resets:
++    items:
++      - description: Soft reset of the codec
++
++  power-domains:
++    maxItems: 1
++
++required:
++  - compatible
++  - reg
++  - interrupts
++  - clocks
++  - resets
++  - power-domains
++
++additionalProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/interrupt-controller/arm-gic.h>
++    #include <dt-bindings/clock/sprd,ums9230-clk.h>
++    #include <dt-bindings/reset/sprd,ums9230-reset.h>
++    #include <dt-bindings/power/sprd,ums9230-power.h>
++
++    jpeg-codec@36000000 {
++        compatible = "sprd,ums9230-jpg";
++        reg = <0x36000000 0xc000>;
++        interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>;
++        clocks = <&mm_gate CLK_MM_CKG_EB>, <&mm_gate CLK_MM_JPG_EB>,
++                 <&mm_clk CLK_JPG>;
++        resets = <&mm_gate RESET_MM_AHB_JPG_SOFT_RST_MASK>;
++        power-domains = <&pmu UMS9230_POWER_DOMAIN_MM>;
++    };
+diff --git a/drivers/media/platform/sprd/vsp/Kconfig b/drivers/media/platform/sprd/vsp/Kconfig
+index 4ec04eaee..fe9055bfb 100644
+--- a/drivers/media/platform/sprd/vsp/Kconfig
++++ b/drivers/media/platform/sprd/vsp/Kconfig
+@@ -1,13 +1,13 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ 
+ config VIDEO_SPRD_VSP
+-	tristate "Unisoc VSP video codec bring-up driver"
++	tristate "Unisoc VSP video and JPEG codec bring-up driver"
+ 	depends on ARCH_SPRD || COMPILE_TEST
+ 	depends on PM
+ 	depends on DEBUG_FS
+ 	select PM_GENERIC_DOMAINS
+ 	help
+-	  Powers up the video codec block (VSP) of the Unisoc UMS9230 and
++	  Powers up the video codec (VSP) and JPEG codec blocks of the Unisoc UMS9230 and
+ 	  exposes a register dump in debugfs. It does not decode anything
+ 	  yet; it is the first step towards a stateless V4L2 decoder.
+ 
+diff --git a/drivers/media/platform/sprd/vsp/vsp.c b/drivers/media/platform/sprd/vsp/vsp.c
+index 3698182ac..07c706c0f 100644
+--- a/drivers/media/platform/sprd/vsp/vsp.c
++++ b/drivers/media/platform/sprd/vsp/vsp.c
+@@ -1,12 +1,12 @@
+ // SPDX-License-Identifier: GPL-2.0
+ /*
+- * Unisoc UMS9230 video codec (VSP): power, clock and reset bring-up.
++ * Unisoc UMS9230 video codec (VSP) and JPEG codec: power, clock and reset bring-up.
+  *
+  * This only brings the block up and lets a developer look at its registers
+  * through debugfs. There is no decoding and no interrupt handling yet: the
+  * register map is not documented and has to be found out step by step.
+  *
+- * debugfs: /sys/kernel/debug/sprd-vsp/regs powers the block, pulses its
++ * debugfs: /sys/kernel/debug/sprd-vsp/regs (sprd-jpg/regs for the JPEG codec) powers the block, pulses its
+  * reset and dumps the first VSP_DUMP_SIZE bytes of the register window.
+  */
+ 
+@@ -23,11 +23,16 @@
+ 
+ #define VSP_DUMP_SIZE	0x200
+ 
++struct sprd_vsp_data {
++	const char *name;
++};
++
+ struct sprd_vsp {
+ 	struct device *dev;
+ 	void __iomem *base;
+-	struct clk_bulk_data clks[2];
+-	struct reset_control_bulk_data rsts[2];
++	struct clk_bulk_data *clks;
++	int num_clks;
++	struct reset_control *rsts;
+ 	struct dev_pm_domain_list *pds;
+ 	struct dentry *dir;
+ };
+@@ -37,13 +42,13 @@ static int sprd_vsp_runtime_resume(struct device *dev)
+ 	struct sprd_vsp *vsp = dev_get_drvdata(dev);
+ 	int ret;
+ 
+-	ret = clk_bulk_prepare_enable(ARRAY_SIZE(vsp->clks), vsp->clks);
++	ret = clk_bulk_prepare_enable(vsp->num_clks, vsp->clks);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = reset_control_bulk_deassert(ARRAY_SIZE(vsp->rsts), vsp->rsts);
++	ret = reset_control_deassert(vsp->rsts);
+ 	if (ret)
+-		clk_bulk_disable_unprepare(ARRAY_SIZE(vsp->clks), vsp->clks);
++		clk_bulk_disable_unprepare(vsp->num_clks, vsp->clks);
+ 
+ 	return ret;
+ }
+@@ -52,8 +57,8 @@ static int sprd_vsp_runtime_suspend(struct device *dev)
+ {
+ 	struct sprd_vsp *vsp = dev_get_drvdata(dev);
+ 
+-	reset_control_bulk_assert(ARRAY_SIZE(vsp->rsts), vsp->rsts);
+-	clk_bulk_disable_unprepare(ARRAY_SIZE(vsp->clks), vsp->clks);
++	reset_control_assert(vsp->rsts);
++	clk_bulk_disable_unprepare(vsp->num_clks, vsp->clks);
+ 
+ 	return 0;
+ }
+@@ -81,6 +86,7 @@ DEFINE_SHOW_ATTRIBUTE(sprd_vsp_regs);
+ static int sprd_vsp_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
++	const struct sprd_vsp_data *data = device_get_match_data(dev);
+ 	struct sprd_vsp *vsp;
+ 	int ret;
+ 
+@@ -95,18 +101,16 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 	if (IS_ERR(vsp->base))
+ 		return PTR_ERR(vsp->base);
+ 
+-	vsp->clks[0].id = "enable";
+-	vsp->clks[1].id = "codec";
+-	ret = devm_clk_bulk_get(dev, ARRAY_SIZE(vsp->clks), vsp->clks);
+-	if (ret)
++	/* the clocks are enabled in the order the device tree lists them */
++	ret = devm_clk_bulk_get_all(dev, &vsp->clks);
++	if (ret < 0)
+ 		return dev_err_probe(dev, ret, "failed to get the clocks\n");
++	vsp->num_clks = ret;
+ 
+-	vsp->rsts[0].id = "global";
+-	vsp->rsts[1].id = "core";
+-	ret = devm_reset_control_bulk_get_exclusive(dev, ARRAY_SIZE(vsp->rsts),
+-						    vsp->rsts);
+-	if (ret)
+-		return dev_err_probe(dev, ret, "failed to get the resets\n");
++	vsp->rsts = devm_reset_control_array_get_exclusive(dev);
++	if (IS_ERR(vsp->rsts))
++		return dev_err_probe(dev, PTR_ERR(vsp->rsts),
++				     "failed to get the resets\n");
+ 
+ 	/* both the multimedia and the VSP domain have to be on */
+ 	ret = devm_pm_domain_attach_list(dev, NULL, &vsp->pds);
+@@ -117,10 +121,11 @@ static int sprd_vsp_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	vsp->dir = debugfs_create_dir("sprd-vsp", NULL);
++	vsp->dir = debugfs_create_dir(data->name, NULL);
+ 	debugfs_create_file("regs", 0400, vsp->dir, vsp, &sprd_vsp_regs_fops);
+ 
+-	dev_info(dev, "video codec ready; cat /sys/kernel/debug/sprd-vsp/regs powers it and dumps its registers\n");
++	dev_info(dev, "ready; cat /sys/kernel/debug/%s/regs powers it and dumps its registers\n",
++		 data->name);
+ 
+ 	return 0;
+ }
+@@ -136,8 +141,12 @@ static const struct dev_pm_ops sprd_vsp_pm_ops = {
+ 	SET_RUNTIME_PM_OPS(sprd_vsp_runtime_suspend, sprd_vsp_runtime_resume, NULL)
+ };
+ 
++static const struct sprd_vsp_data sprd_vsp_vsp_data = { .name = "sprd-vsp" };
++static const struct sprd_vsp_data sprd_vsp_jpg_data = { .name = "sprd-jpg" };
++
+ static const struct of_device_id sprd_vsp_of_match[] = {
+-	{ .compatible = "sprd,ums9230-vsp" },
++	{ .compatible = "sprd,ums9230-vsp", .data = &sprd_vsp_vsp_data },
++	{ .compatible = "sprd,ums9230-jpg", .data = &sprd_vsp_jpg_data },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(of, sprd_vsp_of_match);
+@@ -153,5 +162,5 @@ static struct platform_driver sprd_vsp_driver = {
+ };
+ module_platform_driver(sprd_vsp_driver);
+ 
+-MODULE_DESCRIPTION("Unisoc UMS9230 video codec (VSP) bring-up driver");
++MODULE_DESCRIPTION("Unisoc UMS9230 video and JPEG codec bring-up driver");
+ MODULE_LICENSE("GPL");
