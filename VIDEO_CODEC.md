@@ -142,3 +142,33 @@ mainline Unisoc VAU driver (`sprd-iommu`, compatible `sprd,iommu-v1`): word 0 = 
 This gives scatter-gather buffers for the decoder; whether the codec's bus master is translated is only
 testable once the codec runs. The fallback without it is CMA (32 MiB, `CONFIG_CMA_SIZE_MBYTES=32`) with
 the IOMMU in bypass, as the stock library's `cfg_vaor_bypass_en` does.
+
+## Step 3 (partial): how a decode job completes
+Checked in the stock `libomx_avcdec_hw_sprd.so` (disassembly, not yet confirmed on hardware):
+
+- **The library does not poll a register to finish a job.** `VSP_POLL_COMPLETE` calls `ioctl(fd, 0x6d07,
+  &status)` and sleeps in the kernel until the interrupt fires; it retries up to 9 times while bit 30 of
+  the status is set, then branches on the status value (2 or 4 = done, anything else = error path that
+  logs and reads the interrupt status). So the kernel module owns the wait: a V4L2 driver can do the same
+  with a completion on the VSP interrupt (SPI 34).
+- **Bus-idle and similar checks use a generic poll helper** (`vsp_read_reg_poll`): read the register at
+  an offset, mask it, wait for an expected value, bounded count. Offsets passed through it include
+  `0x101c` (DDR bus idle, mask `0x101`). Ioctl `0x6d09` is the timeout path that sets a flag in the
+  context (`|= 8`).
+- **Ioctl numbers seen from userspace** (magic `'m'`): `0x6d00`-`0x6d0f`, plus `0x40046d01` (a 4-byte
+  write). `ACQUIRE` uses `0x6d05`, `0x40046d01`, `0x6d03`, then the bus-idle check, then `0x6d08`. The names
+  (`VSP_ACQUAIRE`, `RELEASE`, `ENABLE`, `DISABLE`, `RESET`, `COMPLETE`, `HW_INFO`, `GET_FREQ`, `GET_IOVA`,
+  `FREE_IOVA`, `SET_SCENE_MODE`) are in `vsp.ko`, but **the number-to-name mapping is not confirmed**: the
+  dispatcher uses a jump table, and matching it needs a longer pass over `vsp_ioctl` (`/tmp/vsp_ioctl.dis`
+  is produced by `llvm-objdump -d vsp.ko`).
+
+**Still missing for a decoder:** the per-macroblock and reference-frame register writes, and what
+`H264Dec_cfg_bsm` loads into the bitstream module at `0x8000`. Those need the same function-by-function
+pass, and then experiments on the phone. Step 3 is not done.
+
+**What the next phone dump should answer** (after `VSP_TESTS.md` test 4, with patch 0043):
+- Does `0x1028` (interrupt status) read as plausible values, and does it change after `modprobe`?
+- Does `0x101c` read as a bus-idle value (`mask 0x101` bits clear when idle)?
+- Does `0x8000` read as a stable value (the bitstream module's configuration)?
+Structured values there would confirm the offsets. Constant or `ffffffff` values would mean the core is
+still gated or in reset, and step 1's clock/reset sequence needs another look.
