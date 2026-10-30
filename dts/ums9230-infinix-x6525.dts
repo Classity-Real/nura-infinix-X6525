@@ -43,10 +43,9 @@
 	aliases {
 		serial0 = &uart0;
 		serial1 = &uart1;		/* ttyS1 [T: console=ttyS1,115200n8] */
-		/* this unit's internal storage is the eMMC, so it is the first
-		 * mmc device: sprdboot.flash=emmc and androidboot.boot_devices=
-		 * .../201d0000.sdio, sdio0 is the microSD slot; a UFS unit names
-		 * the UFS controller (androidboot.boot_devices=...20200000.ufs) */
+		/* the internal storage is the eMMC, so it is the first mmc
+		 * device: sprdboot.flash=emmc and androidboot.boot_devices=
+		 * .../201d0000.sdio, sdio0 is the microSD slot */
 		mmc0 = &sdio3;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
@@ -203,9 +202,7 @@
  * (sprdboot.flash=emmc) on sdio3 (androidboot.boot_devices=.../201d0000.sdio),
  * while sdio0 is the microSD slot (downstream 1h10-go adds a card-detect to it).
  * The reeder is the opposite way round: UFS internally, sdio0 for the card, so
- * its storage-node values cannot be copied. The X6525 also shipped with UFS
- * units: they boot the same image with the &ufs node at the end of this
- * section.
+ * its storage nodes cannot be copied.
  */
 &sdio0 {
 	/* microSD slot, the rescue boot path. The timing values are the running
@@ -265,20 +262,6 @@
 	status = "okay";
 };
 
-/*
- * UFS - the alternate internal storage. Some X6525 units shipped with a UFS
- * part instead of the eMMC above; they boot the same image with just this
- * node (the cmdline names its controller, androidboot.boot_devices=
- * ...20200000.ufs). vcc is the same core rail the eMMC runs on, and the
- * kernel already carries CONFIG_SCSI_UFS_SPRD. This mirrors the reeder's
- * board dts; on an eMMC unit the controller probes, finds nothing and
- * drops out.
- */
-&ufs {
-	vcc-supply = <&vddemmccore>;
-	status = "okay";
-};
-
 /* ---- USB ----------------------------------------------------------------
  * The SoC USB controller is MUSB (sprd,ums9230-musb) - same as the reeder, and
  * the reason USB_MUSB_HDRC/SPRD must be built in for pmOS USB networking.
@@ -320,6 +303,14 @@
 	usb_detect: usb-charger-detect {
 		compatible = "linux,extcon-charger-detect";
 		extcon = <&vbus_extcon>;
+		/*
+		 * Only VBUS is known, so every source gets this limit. 2 A is
+		 * read as a dedicated charger (input limit lifted), which a
+		 * wall charger needs; a PC port is then not held to 500 mA.
+		 * Use <500000> to be safe on PC ports at the cost of 500 mA
+		 * charging from a wall charger too, until BC1.2 detection exists.
+		 */
+		default-microamp = <2000000>;
 	};
 };
 
@@ -362,20 +353,6 @@
 		output-low;
 		line-name = "charger_en";
 	};
-
-	/*
-	 * The front OV8856's power-down pin. The mainline ov8856 driver
-	 * knows reset but not power-down, so nothing would drive this line;
-	 * the vendor stack pulls it low to bring the sensor out of standby.
-	 * Hold it low for the lifetime of the system - the rails are still
-	 * switched by the driver, so this only keeps the pin from floating.
-	 */
-	ov8856-pwdn-hog {
-		gpio-hog;
-		gpios = <46 GPIO_ACTIVE_HIGH>;
-		output-low;
-		line-name = "ov8856_pwdn";
-	};
 };
 
 &i2c4 {
@@ -414,10 +391,16 @@
 	charger: charger@6a {
 		compatible = "ti,bq24158";
 		reg = <0x6a>;
-		ti,current-limit = <2000>;		/* mA, vendor 100000 uA */
+		ti,current-limit = <100>;		/* mA, vendor 100000 uA */
 		ti,weak-battery-voltage = <3400>;	/* mV */
 		ti,battery-regulation-voltage = <4400>;	/* mV */
-		ti,charge-current = <2000>;		/* mA, vendor 650000 uA */
+		/*
+		 * 650 mA was the vendor's value for a plain USB source; the
+		 * register (3 bits, 56 mohm sense) tops out at 1507 mA, which
+		 * is what 1550 selects. The input limit still follows the
+		 * source (see usb_detect).
+		 */
+		ti,charge-current = <1550>;		/* mA, register max 1507 */
 		ti,termination-current = <60>;		/* mA, vendor 60000 uA */
 		ti,resistor-sense = <56>;		/* mohm */
 		ti,usb-charger-detection = <&usb_detect>;
@@ -592,8 +575,9 @@
  * (sprd,phyid 2, so the two-lane M port). Its vendor library
  * (libsensor_ov8856_front.so) runs the part at 24 MHz, but the mainline
  * driver only has register tables for 19.2 MHz, and CLK_SENSOR0 can supply
- * either, so the node asks for 19.2 MHz. The mainline driver has no
- * power-down handling at all, so the pin is held low by a gpio-hog below.
+ * either, so the node asks for 19.2 MHz. The ov8856 driver
+ * drives the power-down pin itself (powerdown-gpios), after the supplies and
+ * the clock are up.
  * The sensor-main2 socket is the decorative second rear lens
  * ("fakeserial" in the HAL).
  */
@@ -607,12 +591,14 @@
 		compatible = "ovti,ov8856";
 		reg = <0x10>;
 		reset-gpios = <&ap_gpio 44 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&ap_gpio 46 GPIO_ACTIVE_HIGH>;
 
 		clocks = <&mm_gate CLK_MM_SENSOR0_EB>;
 		clock-names = "xvclk";
 		clock-frequency = <19200000>;
 		assigned-clocks = <&mm_clk CLK_SENSOR0>;
 		assigned-clock-parents = <&pll1 CLK_TWPLL_96M>;
+		assigned-clock-rates = <19200000>;
 
 		dovdd-supply = <&vddcamio>;
 		avdd-supply = <&vddcama0>;
@@ -817,11 +803,11 @@
 /*
  * GPU DVFS. The frequencies and voltages are the stock kernel's own table for
  * this GPU (operating-points in its gpu@23100000 node): 384 MHz @ 0.70 V,
- * 512 MHz and 614.4 MHz @ 0.75 V, 768 MHz @ 0.80 V. The stock table also has
- * 850 MHz @ 0.80 V, which the mainline GPU clock has no fixed parent for - it
- * would need the GPU PLL to be programmed - so it is left out until that path
- * is tested. Without an OPP table Panfrost runs at whatever rate the
- * bootloader left and never scales.
+ * 512 MHz and 614.4 MHz @ 0.75 V. The stock table also has 768 MHz and
+ * 850 MHz, but the stock driver disables both on T606 (the part is capped at
+ * GPLL = 650 MHz), so they are left out; 650 MHz @ 0.80 V needs GPLL to be
+ * programmed and is left out until that path is tested. Without an OPP table
+ * Panfrost runs at whatever rate the bootloader left and never scales.
  */
 / {
 	gpu_opp_table: opp-table {
@@ -841,11 +827,6 @@
 			opp-hz = /bits/ 64 <614400000>;
 			opp-microvolt = <750000>;
 		};
-
-		opp-768000000 {
-			opp-hz = /bits/ 64 <768000000>;
-			opp-microvolt = <800000>;
-		};
 	};
 };
 
@@ -853,6 +834,9 @@
 	mali-supply = <&vddgpu>;
 	operating-points-v2 = <&gpu_opp_table>;
 	#cooling-cells = <2>;
+	/* the memory clock otherwise stays on its 26 MHz reset parent */
+	assigned-clocks = <&gpu_clk CLK_GPU_MEM>;
+	assigned-clock-parents = <&pll1 CLK_TWPLL_512M>;
 	status = "okay";
 };
 
