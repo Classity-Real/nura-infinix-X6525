@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# kernel sources are cloned by the build workflow
+/kernel/

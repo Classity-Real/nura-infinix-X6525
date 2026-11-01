@@ -57,7 +57,9 @@ else
 	else fail "$cp holds NO render node: it is composing on the CPU (pixman/QPainter) or on the display card only"; fi
 	if printf '%s\n' "$maps" | grep -qE 'panfrost_dri|libgallium|kmsro_dri|libvulkan_panfrost'; then pass "$cp has the Mesa Panfrost/gallium driver mapped"
 	elif [ -n "$maps" ]; then fail "no Panfrost Mesa driver mapped in $cp"; fi
-	if printf '%s\n' "$maps" | grep -qE 'libLLVM|swrast|llvmpipe|libvulkan_lvp|lvp_icd'; then fail "$cp has LLVM/swrast mapped: software rendering is in use"
+	# libLLVM alone proves nothing: recent Mesa links it into the one library every gallium driver shares
+	sw=$(printf '%s\n' "$maps" | grep -E 'swrast|llvmpipe|libvulkan_lvp|lvp_icd' | head -1)
+	if [ -n "$sw" ]; then fail "$cp has a software rasterizer mapped ($sw): software rendering is in use"
 	elif [ -n "$maps" ]; then pass "no LLVM/swrast in $cp"; fi
 	env=$($S tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null | grep -E '^(WLR_|KWIN_|LIBGL_|GSK_|MESA_|EGL_)')
 	[ -n "$env" ] && printf '%s\n' "$env" | sed 's/^/      env /'
@@ -103,7 +105,7 @@ cs=$($S cat /sys/kernel/debug/clk/clk_summary 2>/dev/null | grep -iE 'gpu')
 if [ -z "$cs" ]; then info "clk_summary not readable (needs root and debugfs)"
 else
 	printf '%s\n' "$cs" | sed 's/^/      /'
-	printf '%s\n' "$cs" | grep -iE 'gpu.*(core|mem)' | awk '{ if ($(NF-3)+0 > 0 && $(NF-3)+0 <= 26000000) bad=1 } END{exit bad}' &&
+	printf '%s\n' "$cs" | grep -iE 'gpu.*(core|mem)' | awk '{ if ($5+0 > 0 && $5+0 <= 26000000) bad=1 } END{exit bad}' &&
 		pass "GPU core/mem clocks run above 26 MHz" || fail "a GPU clock is still at <= 26 MHz (patches 0028/0029 not effective)"
 fi
 

@@ -22,6 +22,10 @@ DPKG=$ROOT/pmaports/device/testing/device-infinix-x6525
 UPKG=$ROOT/pmaports/device/testing/u-boot-infinix-x6525
 FWPKG=$ROOT/pmaports/device/testing/firmware-infinix-x6525
 DTS=$ROOT/dts/ums9230-infinix-x6525.dts
+# The ROM job used to live in rom.yml; the dispatcher split it into
+# ci.yml + job-rom.yml. Accept either layout.
+ROM=$ROOT/.github/workflows/rom.yml
+[ -f "$ROM" ] || ROM=$ROOT/.github/workflows/job-rom.yml
 IMAGE=
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -166,8 +170,8 @@ feature "on-screen keyboard / UI service"
 # shell, startplasmamobile/startplasma-wayland (KWin Wayland) and
 # plasma-mobile.service. All three have their own service-manager defaults,
 # so rom.yml pins it explicitly.
-need "rom.yml selects a known UI"                grep -Eq '^ *ui = (buffyboard|phosh|plasma-mobile)' "$ROOT/.github/workflows/rom.yml"
-need "rom.yml pins the service manager"          grep -q '^ *service_manager = systemd' "$ROOT/.github/workflows/rom.yml"
+need "rom.yml selects a known UI"                grep -Eq "(^ *ui = (buffyboard|phosh|plasma-mobile))|(inputs\.ui \|\| 'phosh')" "$ROM"
+need "rom.yml pins the service manager"          grep -Eq "^ *'?service_manager = systemd" "$ROM"
 need "CONFIG_INPUT_UINPUT=y (key injection)"     cfg INPUT_UINPUT "$CFG"
 need "CONFIG_FRAMEBUFFER_CONSOLE=y"              cfg FRAMEBUFFER_CONSOLE "$CFG"
 need "simple-framebuffer node in the DTS"        dt 'simple-framebuffer'
@@ -418,7 +422,7 @@ if [ -n "$IMAGE" ]; then
 
 	# the login the README documents: user <rom.yml's --password>, root locked
 	if [ -s "$TMP/root.img" ]; then
-		pw=$(grep -oE -- '--password [^ ;"]+' "$ROOT/.github/workflows/rom.yml" |
+		pw=$(grep -oE -- '--password [^ ;"]+' "$ROM" |
 			head -1 | cut -d' ' -f2)
 		debugfs -R "dump /etc/shadow $TMP/shadow" "$TMP/root.img" >/dev/null 2>&1
 		if [ -s "$TMP/shadow" ]; then
@@ -451,8 +455,8 @@ if [ -n "$IMAGE" ]; then
 	# service depends on the init system: systemd (unit + preset) or OpenRC
 	# (init script added to the default runlevel by the UI's openrc subpackage).
 	if [ -s "$TMP/root.img" ]; then
-		ui=$(grep -E '^ *ui = ' "$ROOT/.github/workflows/rom.yml" | head -1 |
-			awk '{print $3}')
+		ui=$(grep -E '^ *ui = ' "$ROM" | head -1 |
+			sed -E "s/.*\|\| *'([a-z-]+)'.*/\1/; s/.*ui = ([a-z-]+).*/\1/")
 		if debugfs -R "stat /usr/lib/systemd/systemd" "$TMP/root.img" 2>/dev/null | grep -q .; then
 			init=systemd
 		elif debugfs -R "stat /sbin/openrc" "$TMP/root.img" 2>/dev/null | grep -q .; then

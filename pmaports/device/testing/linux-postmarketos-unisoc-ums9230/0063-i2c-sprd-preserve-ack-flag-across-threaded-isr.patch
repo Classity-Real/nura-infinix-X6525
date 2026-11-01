@@ -1,0 +1,71 @@
+From 3a101f3f9cb139eef79a29a43a0eecba243cbe2a Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 20:30:00 +0800
+Subject: [PATCH] i2c: sprd: preserve ACK flag across threaded ISR
+
+In sprd_i2c_isr, when a NACK is received, sprd_i2c_clear_irq() is called
+to clear the hardware interrupt. Clearing the interrupt also clears the
+I2C_RX_ACK status bit in the I2C_STATUS register.
+
+When the threaded interrupt handler sprd_i2c_isr_thread runs, it re-read
+I2C_STATUS, found I2C_RX_ACK was 0, and evaluated ack = true. This masked
+all NACK conditions, making failed transfers appear successful with empty
+FIFO residue and causing i2cdetect to report every address as present.
+
+Store the ACK state in struct sprd_i2c within the hardirq handler before
+clearing the interrupt, and check that stored flag in sprd_i2c_isr_thread.
+
+Signed-off-by: Seuj09 <jeus110310@gmail.com>
+---
+ drivers/i2c/busses/i2c-sprd.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-sprd.c b/drivers/i2c/busses/i2c-sprd.c
+index 4c53fc3..2a8db85 100644
+--- a/drivers/i2c/busses/i2c-sprd.c
++++ b/drivers/i2c/busses/i2c-sprd.c
+@@ -90,6 +90,7 @@ struct sprd_i2c {
+ 	u32 count;
+ 	int irq;
+ 	int err;
++	bool ack_flag;
+ };
+ 
+ static void sprd_i2c_set_count(struct sprd_i2c *i2c_dev, u32 count)
+@@ -371,7 +372,7 @@ static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
+ {
+ 	struct sprd_i2c *i2c_dev = dev_id;
+ 	struct i2c_msg *msg = i2c_dev->msg;
+-	bool ack = !(readl(i2c_dev->base + I2C_STATUS) & I2C_RX_ACK);
++	bool ack = i2c_dev->ack_flag;
+ 	u32 i2c_tran;
+ 
+ 	if (msg->flags & I2C_M_RD)
+@@ -415,7 +416,6 @@ static irqreturn_t sprd_i2c_isr(int irq, void *dev_id)
+ {
+ 	struct sprd_i2c *i2c_dev = dev_id;
+ 	struct i2c_msg *msg = i2c_dev->msg;
+-	bool ack = !(readl(i2c_dev->base + I2C_STATUS) & I2C_RX_ACK);
+ 	u32 i2c_tran;
+ 
+ 	if (msg->flags & I2C_M_RD)
+@@ -423,6 +423,8 @@ static irqreturn_t sprd_i2c_isr(int irq, void *dev_id)
+ 	else
+ 		i2c_tran = i2c_dev->count;
+ 
++	i2c_dev->ack_flag = !(readl(i2c_dev->base + I2C_STATUS) & I2C_RX_ACK);
++
+ 	/*
+ 	 * If we did not get one ACK from target when writing data, then we
+ 	 * should finish this transmission since we got some errors.
+@@ -434,7 +436,7 @@ static irqreturn_t sprd_i2c_isr(int irq, void *dev_id)
+ 	 * means we can read all data in one time, then we can finish this
+ 	 * transmission too.
+ 	 */
+-	if (!i2c_tran || !ack) {
++	if (!i2c_tran || !i2c_dev->ack_flag) {
+ 		sprd_i2c_clear_start(i2c_dev);
+ 		sprd_i2c_clear_irq(i2c_dev);
+ 	}
+-- 
+2.43.0

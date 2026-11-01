@@ -28,6 +28,7 @@
 /dts-v1/;
 
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/media/sprd-camsys.h>
@@ -43,9 +44,10 @@
 	aliases {
 		serial0 = &uart0;
 		serial1 = &uart1;		/* ttyS1 [T: console=ttyS1,115200n8] */
-		/* the internal storage is the eMMC, so it is the first mmc
-		 * device: sprdboot.flash=emmc and androidboot.boot_devices=
-		 * .../201d0000.sdio, sdio0 is the microSD slot */
+		/* this unit's internal storage is the eMMC, so it is the first
+		 * mmc device: sprdboot.flash=emmc and androidboot.boot_devices=
+		 * .../201d0000.sdio, sdio0 is the microSD slot; a UFS unit names
+		 * the UFS controller (androidboot.boot_devices=...20200000.ufs) */
 		mmc0 = &sdio3;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
@@ -128,6 +130,24 @@
 	 * is not reproduced yet.
 	 */
 
+	/*
+	 * Flashlight. The live tree has the flash drivers (sprd,flash-ocp8137 on
+	 * i2c5 0x63, flash-aw36515 on 0x64). The stock device tree confirms the
+	 * torch enable pin is ap_gpio 137 (0x89 in flash-torch-en-gpios).
+	 * No mainline driver exists for the I2C parts, but the enable alone lights
+	 * the LED at default current, so it is exposed as a plain GPIO LED:
+	 * Phosh's flashlight toggle and the shake service drive white:flash.
+	 */
+	leds {
+		compatible = "gpio-leds";
+
+		led-torch {
+			color = <LED_COLOR_ID_WHITE>;
+			function = LED_FUNCTION_FLASH;
+			gpios = <&ap_gpio 137 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
@@ -202,7 +222,9 @@
  * (sprdboot.flash=emmc) on sdio3 (androidboot.boot_devices=.../201d0000.sdio),
  * while sdio0 is the microSD slot (downstream 1h10-go adds a card-detect to it).
  * The reeder is the opposite way round: UFS internally, sdio0 for the card, so
- * its storage nodes cannot be copied.
+ * its storage-node values cannot be copied. The X6525 also shipped with UFS
+ * units: they boot the same image with the &ufs node at the end of this
+ * section.
  */
 &sdio0 {
 	/* microSD slot, the rescue boot path. The timing values are the running
@@ -259,6 +281,20 @@
 	/* No vqmmc-supply: vddsdio is the microSD slot's IO rail (it is
 	 * &sdio0's vqmmc above), and the running system's eMMC node names no
 	 * IO supply of its own - the port had the card slot's rail here. */
+	status = "okay";
+};
+
+/*
+ * UFS - the alternate internal storage. Some X6525 units shipped with a UFS
+ * part instead of the eMMC above; they boot the same image with just this
+ * node (the cmdline names its controller, androidboot.boot_devices=
+ * ...20200000.ufs). vcc is the same core rail the eMMC runs on, and the
+ * kernel already carries CONFIG_SCSI_UFS_SPRD. This mirrors the reeder's
+ * board dts; on an eMMC unit the controller probes, finds nothing and
+ * drops out.
+ */
+&ufs {
+	vcc-supply = <&vddemmccore>;
 	status = "okay";
 };
 
@@ -805,8 +841,10 @@
  * this GPU (operating-points in its gpu@23100000 node): 384 MHz @ 0.70 V,
  * 512 MHz and 614.4 MHz @ 0.75 V. The stock table also has 768 MHz and
  * 850 MHz, but the stock driver disables both on T606 (the part is capped at
- * GPLL = 650 MHz), so they are left out; 650 MHz @ 0.80 V needs GPLL to be
- * programmed and is left out until that path is tested. Without an OPP table
+ * GPLL = 650 MHz), so they are left out. The top step is that cap: 650 MHz @
+ * 0.80 V, taken from GPLL, which the gpu node programs to 650 MHz at probe
+ * (the composite GPU clock does not pass rate requests up to its parents).
+ * Nothing else in this tree uses GPLL's /20 aux output. Without an OPP table
  * Panfrost runs at whatever rate the bootloader left and never scales.
  */
 / {
@@ -827,6 +865,11 @@
 			opp-hz = /bits/ 64 <614400000>;
 			opp-microvolt = <750000>;
 		};
+
+		opp-650000000 {
+			opp-hz = /bits/ 64 <650000000>;
+			opp-microvolt = <800000>;
+		};
 	};
 };
 
@@ -835,8 +878,9 @@
 	operating-points-v2 = <&gpu_opp_table>;
 	#cooling-cells = <2>;
 	/* the memory clock otherwise stays on its 26 MHz reset parent */
-	assigned-clocks = <&gpu_clk CLK_GPU_MEM>;
-	assigned-clock-parents = <&pll1 CLK_TWPLL_512M>;
+	assigned-clocks = <&gpu_clk CLK_GPU_MEM>, <&pll1 CLK_GPLL>;
+	assigned-clock-parents = <&pll1 CLK_TWPLL_512M>, <0>;
+	assigned-clock-rates = <0>, <650000000>;
 	status = "okay";
 };
 
@@ -864,6 +908,11 @@
 };
 
 &modem {
+	/*
+	 * The modem part of the stock kernel command line, which the stock
+	 * kernel copies to the modem's cpcmdline region.
+	 */
+	sprd,cp-cmdline = "modem=shutdown androidboot.mode=normal ltemode=lcsfb rfboard.id=2 rfhw.id=41008 crystal=6 32k.less=1 marlin.clktype=1 power.from.extern=0 androidboot.pmic.chipid=2730 cpcmdline=end";
 	status = "okay";
 };
 

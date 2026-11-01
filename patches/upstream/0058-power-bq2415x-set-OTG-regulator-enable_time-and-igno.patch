@@ -1,0 +1,57 @@
+From d38f1e2f2e2128270fc33e7b81e24fb8e63ddd74 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 18:08:01 +0800
+Subject: [PATCH] power: bq2415x: set OTG regulator enable_time and ignore
+ self-feedback
+
+The AW32257/BQ24158 boost converter on the Infinix X6525 takes ~530 ms to ramp VBUS from 0 V to the SC2730 VBUS_OK threshold (~4.4 V). Because bq2415x_otg_desc did not specify enable_time, regulator_enable() returned immediately after the I2C write, causing both sc27xx_pd's 500 ms VBUS_OK poll and TCPM's 480 ms PD_T_PS_SOURCE_ON timer to expire ~30-50 ms before VBUS finished ramping, looping through ErrorRecovery every 2.4 seconds.
+
+Additionally, once 5 V OTG VBUS comes up, the board's extcon charger detector sees VBUS and notifies bq2415x_notifier_call() with a 500 mA host charger current, overwriting reported_mode while boosting.
+
+Fix both issues and ensure the 32-second safety timer is active in boost mode:
+1. Set .enable_time = 550000 (550 ms) on bq2415x_otg_desc so regulator_enable() waits for the boost soft-start ramp to complete.
+2. Ignore power_supply notifier events in bq2415x_notifier_call() while bq->mode == BQ2415X_MODE_BOOST.
+3. Call bq2415x_set_autotimer(bq, 1) in bq2415x_otg_enable() so the hardware watchdog timer continues to be refreshed even if a prior fault disabled autotimer.
+---
+ drivers/power/supply/bq2415x_charger.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/power/supply/bq2415x_charger.c b/drivers/power/supply/bq2415x_charger.c
+index 11ed41a..5d47de3 100644
+--- a/drivers/power/supply/bq2415x_charger.c
++++ b/drivers/power/supply/bq2415x_charger.c
+@@ -839,6 +839,14 @@ static int bq2415x_notifier_call(struct notifier_block *nb,
+ 
+ 	dev_dbg(bq->dev, "notifier call was called\n");
+ 
++	/*
++	 * When OTG boost mode is active, the 5 V sourced onto VBUS can trigger
++	 * our own extcon/charger detector. Ignore charger notifications while
++	 * boosting so reported_mode is not overwritten by self-feedback.
++	 */
++	if (bq->mode == BQ2415X_MODE_BOOST)
++		return NOTIFY_OK;
++
+ 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_MAX,
+ 			&prop);
+ 	if (ret != 0)
+@@ -1568,6 +1576,8 @@ static int bq2415x_otg_enable(struct regulator_dev *rdev)
+ 	if (bq->automode >= 0)
+ 		bq->automode = 0;
+ 
++	bq2415x_set_autotimer(bq, 1);
++
+ 	return bq2415x_set_mode(bq, BQ2415X_MODE_BOOST);
+ }
+ 
+@@ -1602,6 +1612,7 @@ static const struct regulator_desc bq2415x_otg_desc = {
+ 	.type = REGULATOR_VOLTAGE,
+ 	.owner = THIS_MODULE,
+ 	.ops = &bq2415x_otg_ops,
++	.enable_time = 550000,
+ };
+ 
+ static const struct regulator_init_data bq2415x_otg_init_data = {
+-- 
+2.56.0
+

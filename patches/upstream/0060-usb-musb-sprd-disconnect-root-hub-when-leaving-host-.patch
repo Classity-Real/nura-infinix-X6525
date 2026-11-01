@@ -1,0 +1,48 @@
+From 4de8641580df52c2f1ab82ea813f9c0de073357f Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 18:08:01 +0800
+Subject: [PATCH] usb: musb: sprd: disconnect root hub when leaving host role
+
+When transitioning out of USB_ROLE_HOST in sprd_otg_switch_set(), clearing MUSB_DEVCTL_SESSION in software and immediately calling phy_power_off(glue->phy) shuts down the UTMI PHY without generating a MUSB_INTR_DISCONNECT interrupt or notifying usbcore that the root hub port disconnected, leaving disconnected OTG devices stuck in sysfs/lsusb.
+
+Furthermore, if the PHY does not report VBusValid at the exact instant MUSB_INTR_CONNECT fires, musb_handle_intr_connect() leaves musb in OTG_STATE_A_IDLE, where musb_handle_intr_disconnect() ignores subsequent disconnect interrupts instead of calling musb_root_disconnect().
+
+Call musb_root_disconnect(musb) under musb->lock when leaving USB_ROLE_HOST and set OTG_STATE_A_HOST when entering USB_ROLE_HOST.
+---
+ drivers/usb/musb/sprd.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/musb/sprd.c b/drivers/usb/musb/sprd.c
+index 672c948..f862c0c 100644
+--- a/drivers/usb/musb/sprd.c
++++ b/drivers/usb/musb/sprd.c
+@@ -27,6 +27,7 @@ struct sprd_glue {
+ static int sprd_otg_switch_set(struct sprd_glue *glue, enum usb_role role)
+ {
+ 	struct musb *musb = glue->musb;
++	unsigned long flags;
+ 	u8 devctl;
+ 
+ 	if (role == glue->role)
+@@ -42,12 +43,17 @@ static int sprd_otg_switch_set(struct sprd_glue *glue, enum usb_role role)
+ 		phy_power_off(glue->phy);
+ 		/* wait for disconnect event */
+ 		msleep(20);
++		if (glue->role == USB_ROLE_HOST) {
++			spin_lock_irqsave(&musb->lock, flags);
++			musb_root_disconnect(musb);
++			spin_unlock_irqrestore(&musb->lock, flags);
++		}
+ 	}
+ 
+ 	switch (role) {
+ 	case USB_ROLE_HOST:
+ 		musb->is_active = 1;
+-		musb_set_state(musb, OTG_STATE_A_IDLE);
++		musb_set_state(musb, OTG_STATE_A_HOST);
+ 		MUSB_HST_MODE(musb);
+ 		devctl |= MUSB_DEVCTL_SESSION;
+ 		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+-- 
+2.56.0
+

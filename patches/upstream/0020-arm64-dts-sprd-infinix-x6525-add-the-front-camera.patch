@@ -10,7 +10,7 @@ the live device tree.
 
 The vendor library runs the part at 24 MHz, but the mainline ov8856
 driver has register tables only for 19.2 MHz, and CLK_SENSOR0 can supply
-that from TWPLL_96M, so the node asks for 19.2 MHz.
+that from TWPLL_96M, so the node asks for 19.2 MHz and assigns that rate.
 
 The driver has no power-down handling at all, so a gpio-hog holds the
 pin low; without it the line floats and the sensor stays in standby.
@@ -48,7 +48,7 @@ index 1528ac6f7..69e0a41be 100644
  };
  
  &i2c4 {
-@@ -555,10 +569,52 @@ &sc2730_fgu {
+@@ -555,10 +569,53 @@ &sc2730_fgu {
   * library (libsensor_s5k3l6.so, "s5k3l6_v1"); it runs the part at a 24 MHz
   * MCLK with four lanes and the three modes below.
   *
@@ -82,6 +82,7 @@ index 1528ac6f7..69e0a41be 100644
 +		clock-frequency = <19200000>;
 +		assigned-clocks = <&mm_clk CLK_SENSOR0>;
 +		assigned-clock-parents = <&pll1 CLK_TWPLL_96M>;
++		assigned-clock-rates = <19200000>;
 +
 +		dovdd-supply = <&vddcamio>;
 +		avdd-supply = <&vddcama0>;
@@ -104,7 +105,7 @@ index 1528ac6f7..69e0a41be 100644
  &i2c1 {
  	status = "okay";
  	clock-frequency = <400000>;
-@@ -611,6 +667,16 @@ csi_4lane_ep: endpoint {
+@@ -611,6 +668,16 @@ csi_4lane_ep: endpoint {
  				remote-endpoint = <&s5k3l6_ep>;
  			};
  		};
@@ -123,4 +124,3 @@ index 1528ac6f7..69e0a41be 100644
  
 -- 
 2.43.0
-

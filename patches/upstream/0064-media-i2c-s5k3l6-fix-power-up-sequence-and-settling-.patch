@@ -1,0 +1,101 @@
+From 232dea93478b4975fe14f6ec5d27e0cf9ab4664e Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 20:48:13 +0800
+Subject: [PATCH] media: i2c: s5k3l6: fix power-up sequence and settling delays
+
+---
+ drivers/media/i2c/s5k3l6.c | 49 ++++++++++++++++++++++----------------
+ 1 file changed, 29 insertions(+), 20 deletions(-)
+
+diff --git a/drivers/media/i2c/s5k3l6.c b/drivers/media/i2c/s5k3l6.c
+index 9132134..93acbd2 100644
+--- a/drivers/media/i2c/s5k3l6.c
++++ b/drivers/media/i2c/s5k3l6.c
+@@ -698,15 +698,20 @@ static int s5k3l6_identify_sensor(struct s5k3l6 *s5k3l6)
+ 	 */
+ 	for (i = 0; i < 5; i++) {
+ 		ret = cci_read(s5k3l6->regmap, S5K3L6_REG_CHIP_ID, &val, NULL);
+-		if (ret)
+-			return dev_err_probe(s5k3l6->dev, ret,
+-					     "failed to read chip id\n");
+-		dev_info(s5k3l6->dev, "chip id read %d: 0x%llx\n", i, val);
+-		if (val == S5K3L6_CHIP_ID)
+-			break;
+-		msleep(25);
++		if (!ret) {
++			dev_info(s5k3l6->dev, "chip id read %d: 0x%llx\n", i, val);
++			if (val == S5K3L6_CHIP_ID)
++				break;
++		} else {
++			dev_info(s5k3l6->dev, "chip id read %d failed: %d\n", i, ret);
++		}
++		msleep(20);
+ 	}
+ 
++	if (ret)
++		return dev_err_probe(s5k3l6->dev, ret,
++				     "failed to read chip id\n");
++
+ 	if (val != S5K3L6_CHIP_ID)
+ 		return dev_err_probe(s5k3l6->dev, -ENODEV,
+ 				     "chip id mismatch: %x != %llx\n",
+@@ -785,31 +790,35 @@ static int s5k3l6_power_on(struct device *dev)
+ 	struct s5k3l6 *s5k3l6 = to_s5k3l6(sd);
+ 	int ret;
+ 
++	/* Hold powerdown and reset asserted during supply ramp */
++	gpiod_set_value_cansleep(s5k3l6->powerdown_gpio, 1);
++	gpiod_set_value_cansleep(s5k3l6->reset_gpio, 1);
++
+ 	ret = regulator_bulk_enable(S5K3L6_NUM_SUPPLIES, s5k3l6->supplies);
+ 	if (ret)
+ 		return ret;
+ 
+-	usleep_range(10, 20);
+-
+-	ret = clk_prepare_enable(s5k3l6->mclk);
+-	if (ret)
+-		goto disable_regulators;
++	/* Allow power rails to stabilize */
++	usleep_range(2000, 3000);
+ 
++	/* Release powerdown and reset */
+ 	gpiod_set_value_cansleep(s5k3l6->powerdown_gpio, 0);
+-	usleep_range(USEC_PER_MSEC, 1200);
+-
+ 	gpiod_set_value_cansleep(s5k3l6->reset_gpio, 0);
+-	usleep_range(USEC_PER_MSEC, 1200);
++	usleep_range(2000, 3000);
+ 
+-	gpiod_set_value_cansleep(s5k3l6->reset_gpio, 1);
+-	usleep_range(400, 800);
+-	gpiod_set_value_cansleep(s5k3l6->reset_gpio, 0);
++	/* Enable MCLK after sensor core exits reset */
++	ret = clk_prepare_enable(s5k3l6->mclk);
++	if (ret)
++		goto disable_regulators;
+ 
+-	usleep_range(10 * USEC_PER_MSEC, 11 * USEC_PER_MSEC);
++	/* S5K3L6 requires settling time after MCLK before I2C access */
++	usleep_range(2000, 3000);
+ 
+ 	return 0;
+ 
+ disable_regulators:
++	gpiod_set_value_cansleep(s5k3l6->reset_gpio, 1);
++	gpiod_set_value_cansleep(s5k3l6->powerdown_gpio, 1);
+ 	regulator_bulk_disable(S5K3L6_NUM_SUPPLIES, s5k3l6->supplies);
+ 
+ 	return ret;
+@@ -871,7 +880,7 @@ static int s5k3l6_probe(struct i2c_client *client)
+ 				     "failed to get reset GPIO\n");
+ 
+ 	s5k3l6->powerdown_gpio =
+-		devm_gpiod_get_optional(s5k3l6->dev, "power-down", GPIOD_OUT_LOW);
++		devm_gpiod_get_optional(s5k3l6->dev, "power-down", GPIOD_OUT_HIGH);
+ 	if (IS_ERR(s5k3l6->powerdown_gpio))
+ 		return dev_err_probe(s5k3l6->dev,
+ 				     PTR_ERR(s5k3l6->powerdown_gpio),
+-- 
+2.56.0
+

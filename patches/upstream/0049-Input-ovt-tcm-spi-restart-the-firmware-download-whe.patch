@@ -1,0 +1,245 @@
+From 4bbc8fa6655a3067859e2a40dba8c23d4d61bc0c Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Fri, 30 Oct 2026 18:22:27 +0800
+Subject: [PATCH] Input: ovt-tcm-spi: restart the firmware download when a
+ panel reset leaves the part in ROM boot
+
+A panel reset (screen off/on from the power button) resets the touch IC. If the ROM-boot IDENTIFY report is missed, nothing restarts the download and touch stays dead until the next reset. Poll the part with CMD_IDENTIFY while it is quiet and reset + re-download if it is in ROM boot or silent.
+---
+ drivers/input/touchscreen/ovt-tcm-spi.c | 108 ++++++++++++++++++++++++++++++--
+ 1 file changed, 102 insertions(+), 6 deletions(-)
+
+--- a/drivers/input/touchscreen/ovt-tcm-spi.c
++++ b/drivers/input/touchscreen/ovt-tcm-spi.c
+@@ -41,6 +41,7 @@
+ #include <linux/gpio/consumer.h>
+ #include <linux/input.h>
+ #include <linux/input/mt.h>
++#include <linux/jiffies.h>
+ #include <linux/interrupt.h>
+ #include <linux/mod_devicetable.h>
+ #include <linux/module.h>
+@@ -58,6 +59,7 @@
+ #define RD_CHUNK_SIZE		256
+ #define WR_CHUNK_SIZE		256
+ #define RESPONSE_TIMEOUT_MS	3000
++#define WD_PERIOD_MS		2500
+ 
+ /* commands */
+ #define CMD_CONTINUE_WRITE		0x01
+@@ -184,6 +186,9 @@
+ 	struct work_struct hdl_work;	/* ROM-boot firmware download */
+ 	struct work_struct cfg_work;	/* config download + touch bring-up */
+ 	struct work_struct init_work;	/* first reset */
++	struct delayed_work wd_work;	/* self-heal after a panel reset */
++	unsigned long last_msg;		/* jiffies of the last message */
++	unsigned int wd_fails;
+ 	const char *fw_name;
+ 
+ 	struct mutex spi_lock;		/* one SPI transaction at a time */
+@@ -415,8 +420,9 @@
+  * Send a command and wait for the IRQ thread to deliver the response.
+  * *resp (if not NULL) receives a kmalloc'd copy of the response payload.
+  */
+-static int tcm_command(struct ovt_tcm *t, u8 cmd, const u8 *payload,
+-		       unsigned int len, u8 **resp, unsigned int *resp_len)
++static int tcm_command_timeout(struct ovt_tcm *t, u8 cmd, const u8 *payload,
++			       unsigned int len, u8 **resp, unsigned int *resp_len,
++			       unsigned int timeout_ms)
+ {
+ 	int ret;
+ 
+@@ -432,14 +438,11 @@
+ 		goto out;
+ 
+ 	if (!wait_for_completion_timeout(&t->resp_done,
+-					 msecs_to_jiffies(RESPONSE_TIMEOUT_MS))) {
+-		dev_err(&t->spi->dev, "command 0x%02x timed out\n", cmd);
++					 msecs_to_jiffies(timeout_ms))) {
+ 		ret = -ETIMEDOUT;
+ 		goto out;
+ 	}
+ 	if (t->resp_err) {
+-		dev_err(&t->spi->dev, "command 0x%02x failed, code 0x%02x\n",
+-			cmd, t->resp_code);
+ 		ret = -EIO;
+ 		kfree(t->resp_buf);
+ 		t->resp_buf = NULL;
+@@ -459,6 +462,19 @@
+ 	return ret;
+ }
+ 
++static int tcm_command(struct ovt_tcm *t, u8 cmd, const u8 *payload,
++		       unsigned int len, u8 **resp, unsigned int *resp_len)
++{
++	int ret = tcm_command_timeout(t, cmd, payload, len, resp, resp_len,
++				     RESPONSE_TIMEOUT_MS);
++	if (ret == -ETIMEDOUT)
++		dev_err(&t->spi->dev, "command 0x%02x timed out\n", cmd);
++	else if (ret == -EIO)
++		dev_err(&t->spi->dev, "command 0x%02x failed, code 0x%02x\n",
++			cmd, t->resp_code);
++	return ret;
++}
++
+ /* ---------------------------------------------------------- firmware ---- */
+ 
+ static int tcm_parse_image(struct ovt_tcm *t)
+@@ -1033,6 +1049,7 @@
+ 	    code == STATUS_CONTINUED_READ)
+ 		return IRQ_HANDLED;
+ 
++	WRITE_ONCE(t->last_msg, jiffies);
+ 	pending = READ_ONCE(t->pending_cmd);
+ 
+ 	if (code < REPORT_IDENTIFY) {
+@@ -1063,7 +1080,12 @@
+ 			t->resp_len = len;
+ 			payload = NULL;
+ 			complete(&t->resp_done);
+-			break;
++			/*
++			 * If in ROM bootloader mode, do not break: fall through
++			 * to queue the firmware download work immediately.
++			 */
++			if (t->id.mode != MODE_ROMBOOTLOADER)
++				break;
+ 		}
+ 		if (pending == CMD_ROMBOOT_RUN_BOOTLOADER_FW) {
+ 			/* the "response" to these is the device coming back */
+@@ -1104,27 +1126,29 @@
+ 	gpiod_set_value_cansleep(t->reset, 0);
+ }
+ 
+-static void tcm_init_work(struct work_struct *work)
++/* Reset the part and pick up its IDENTIFY report by hand if the IRQ missed it. */
++static void tcm_reset_and_identify(struct ovt_tcm *t)
+ {
+-	struct ovt_tcm *t = container_of(work, struct ovt_tcm, init_work);
+ 	u8 code, *payload;
+ 	unsigned int len;
+ 
++	t->got_identify = false;
+ 	tcm_hw_reset(t);
+-	enable_irq(t->spi->irq);
+ 	msleep(200);
+ 	/*
+ 	 * With a level-triggered interrupt the identify report has already
+ 	 * been picked up by the IRQ thread. With an edge, it may have been
+ 	 * missed while the handler was not requested: look once by hand.
+ 	 */
+-	if (!t->got_identify && !tcm_read_message(t, &code, &payload, &len)) {
++	if (!t->got_identify && !t->hdl_busy &&
++	    !tcm_read_message(t, &code, &payload, &len)) {
+ 		if (code == REPORT_IDENTIFY && len >= 2) {
+ 			memcpy(&t->id, payload,
+ 			       min_t(unsigned int, len, sizeof(t->id)));
+ 			t->got_identify = true;
+ 			if (t->id.mode == MODE_ROMBOOTLOADER && !t->hdl_busy) {
+ 				t->hdl_busy = true;
++				t->fw_status = (struct fw_status){ 0 };
+ 				queue_work(t->wq, &t->hdl_work);
+ 			}
+ 		}
+@@ -1134,6 +1158,83 @@
+ 		dev_warn(&t->spi->dev, "no identify report after reset\n");
+ }
+ 
++static void tcm_init_work(struct work_struct *work)
++{
++	struct ovt_tcm *t = container_of(work, struct ovt_tcm, init_work);
++
++	enable_irq(t->spi->irq);
++	tcm_reset_and_identify(t);
++	queue_delayed_work(t->wq, &t->wd_work, msecs_to_jiffies(WD_PERIOD_MS));
++}
++
++/*
++ * A panel reset (every screen off/on through the power button) resets the
++ * touch IC. If the resulting ROM-boot IDENTIFY report is lost - the IRQ is
++ * not guaranteed to see it - nothing ever restarts the firmware download and
++ * touch stays dead until the next reset. So, when the part has been quiet for
++ * a while, ask it who it is: a part that is in ROM boot, or does not answer
++ * twice in a row, gets brought back up.
++ */
++static void tcm_wd_work(struct work_struct *work)
++{
++	struct ovt_tcm *t = container_of(to_delayed_work(work), struct ovt_tcm,
++					 wd_work);
++	u8 *resp = NULL;
++	unsigned int rlen = 0;
++	bool recover = false;
++	int ret;
++
++	if (t->hdl_busy || t->suspended ||
++	    time_before(jiffies, READ_ONCE(t->last_msg) +
++				 msecs_to_jiffies(WD_PERIOD_MS)))
++		goto again;
++
++	/* 500 ms timeout so we don't stall the workqueue when the panel is blanked */
++	ret = tcm_command_timeout(t, CMD_IDENTIFY, NULL, 0, &resp, &rlen, 500);
++	if (ret) {
++		/*
++		 * If silent or unpowered, attempt recovery once after 2 failures.
++		 * If already not ready (e.g. screen blanked/unpowered), don't
++		 * keep cycling the hardware reset in a loop.
++		 */
++		t->wd_fails++;
++		if (t->wd_fails == 2 && t->touch_ready)
++			recover = true;
++	} else {
++		t->wd_fails = 0;
++		if (rlen >= 2) {
++			struct identify id = { };
++
++			memcpy(&id, resp, min_t(unsigned int, rlen, sizeof(id)));
++			if (id.mode == MODE_ROMBOOTLOADER) {
++				/*
++				 * The IC is already in ROM bootloader mode: start the download
++				 * directly without an extra hardware reset!
++				 */
++				if (!t->hdl_busy) {
++					dev_info(&t->spi->dev, "touch IC in ROM boot, starting download\n");
++					t->touch_ready = false;
++					t->hdl_busy = true;
++					t->fw_status = (struct fw_status){ 0 };
++					queue_work(t->wq, &t->hdl_work);
++				}
++				kfree(resp);
++				goto again;
++			} else if (!t->touch_ready && !t->hdl_busy) {
++				recover = true;
++			}
++		}
++		kfree(resp);
++	}
++	if (recover) {
++		dev_info(&t->spi->dev, "touch part lost its firmware or silent, restarting\n");
++		t->touch_ready = false;
++		tcm_reset_and_identify(t);
++	}
++again:
++	queue_delayed_work(t->wq, &t->wd_work, msecs_to_jiffies(WD_PERIOD_MS));
++}
++
+ static int ovt_tcm_probe(struct spi_device *spi)
+ {
+ 	struct device *dev = &spi->dev;
+@@ -1150,6 +1251,7 @@
+ 	INIT_WORK(&t->hdl_work, tcm_hdl_work);
+ 	INIT_WORK(&t->cfg_work, tcm_cfg_work);
+ 	INIT_WORK(&t->init_work, tcm_init_work);
++	INIT_DELAYED_WORK(&t->wd_work, tcm_wd_work);
+ 	spi_set_drvdata(spi, t);
+ 
+ 	ret = device_property_read_string(dev, "firmware-name", &t->fw_name);
+@@ -1186,6 +1288,7 @@
+ 	struct ovt_tcm *t = spi_get_drvdata(spi);
+ 
+ 	disable_irq(spi->irq);
++	cancel_delayed_work_sync(&t->wd_work);
+ 	cancel_work_sync(&t->init_work);
+ 	cancel_work_sync(&t->hdl_work);
+ 	cancel_work_sync(&t->cfg_work);
+-- 
+2.43.0

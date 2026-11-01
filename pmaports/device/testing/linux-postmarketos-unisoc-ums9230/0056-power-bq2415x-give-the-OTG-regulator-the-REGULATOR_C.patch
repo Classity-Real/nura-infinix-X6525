@@ -1,0 +1,58 @@
+From ea2ce06a93702bf63b5dadcc8be1e52d202ac799 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 11:33:17 +0800
+Subject: [PATCH] power: bq2415x: give the OTG regulator the
+ REGULATOR_CHANGE_STATUS constraint
+
+The otg-vbus regulator is registered without of_match, so the regulator core
+never reads constraints from its DT node and the regulator has none. Every
+regulator_enable() then fails with -EPERM, silently, so VBUS never came up in
+host mode and the Type-C port looped attach / 'wait for vbus failed' /
+detach. Supply init_data with REGULATOR_CHANGE_STATUS.
+---
+ drivers/power/supply/bq2415x_charger.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/power/supply/bq2415x_charger.c b/drivers/power/supply/bq2415x_charger.c
+index 509c1c123..11ed41a1f 100644
+--- a/drivers/power/supply/bq2415x_charger.c
++++ b/drivers/power/supply/bq2415x_charger.c
+@@ -29,6 +29,7 @@
+ #include <linux/acpi.h>
+ #include <linux/of.h>
+ #include <linux/regulator/driver.h>
++#include <linux/regulator/machine.h>
+ 
+ #include <linux/power/bq2415x_charger.h>
+ 
+@@ -1603,6 +1604,12 @@ static const struct regulator_desc bq2415x_otg_desc = {
+ 	.ops = &bq2415x_otg_ops,
+ };
+ 
++static const struct regulator_init_data bq2415x_otg_init_data = {
++	.constraints = {
++		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
++	},
++};
++
+ static int bq2415x_otg_regulator_init(struct bq2415x_device *bq,
+ 				      struct device_node *np)
+ {
+@@ -1617,6 +1624,14 @@ static int bq2415x_otg_regulator_init(struct bq2415x_device *bq,
+ 	if (!otg_np)
+ 		return 0;
+ 
++	/*
++	 * The descriptor has no of_match, so the regulator core never reads the
++	 * constraints from the DT node and the regulator would have none: without
++	 * REGULATOR_CHANGE_STATUS every regulator_enable() fails with -EPERM
++	 * (silently), which left VBUS off and the Type-C port in an attach/detach
++	 * loop. Give it the one operation it needs here.
++	 */
++	config.init_data = &bq2415x_otg_init_data;
+ 	config.of_node = otg_np;
+ 	rdev = devm_regulator_register(bq->dev, &bq2415x_otg_desc, &config);
+ 	of_node_put(otg_np);
+-- 
+2.43.0
+

@@ -1,0 +1,49 @@
+From 84b674bc45af6c368c583d2ce7ae2532c2f0716c Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 06:50:39 +0800
+Subject: [PATCH] media: i2c: s5k3l6: log repeated chip id reads to see whether
+ the readout settles
+
+The first read returns 0x3d3d instead of 0x30c6 on the X6525. Read the ID up
+to five times with a 25 ms pause and log each value (debug aid).
+---
+ drivers/media/i2c/s5k3l6.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/media/i2c/s5k3l6.c b/drivers/media/i2c/s5k3l6.c
+index 8b35a911a..9132134ba 100644
+--- a/drivers/media/i2c/s5k3l6.c
++++ b/drivers/media/i2c/s5k3l6.c
+@@ -688,12 +688,24 @@ static const struct media_entity_operations s5k3l6_entity_ops = {
+ static int s5k3l6_identify_sensor(struct s5k3l6 *s5k3l6)
+ {
+ 	u64 val;
+-	int ret;
++	int ret, i;
+ 
+-	ret = cci_read(s5k3l6->regmap, S5K3L6_REG_CHIP_ID, &val, NULL);
+-	if (ret)
+-		return dev_err_probe(s5k3l6->dev, ret,
+-				     "failed to read chip id\n");
++	/*
++	 * On the X6525 the first read returned 0x3d3d instead of 0x30c6. Read the
++	 * ID a few times with a pause in between and log every value: if it settles
++	 * on 0x30c6 the sensor just needs longer after reset, if it never changes
++	 * the readout itself is wrong.
++	 */
++	for (i = 0; i < 5; i++) {
++		ret = cci_read(s5k3l6->regmap, S5K3L6_REG_CHIP_ID, &val, NULL);
++		if (ret)
++			return dev_err_probe(s5k3l6->dev, ret,
++					     "failed to read chip id\n");
++		dev_info(s5k3l6->dev, "chip id read %d: 0x%llx\n", i, val);
++		if (val == S5K3L6_CHIP_ID)
++			break;
++		msleep(25);
++	}
+ 
+ 	if (val != S5K3L6_CHIP_ID)
+ 		return dev_err_probe(s5k3l6->dev, -ENODEV,
+-- 
+2.43.0
+

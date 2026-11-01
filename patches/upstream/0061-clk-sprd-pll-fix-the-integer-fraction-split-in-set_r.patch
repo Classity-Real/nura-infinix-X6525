@@ -1,0 +1,64 @@
+From 84e4d5c658b92751cbc47a9bd2c53f15946206e6 Mon Sep 17 00:00:00 2001
+From: ci <a@b>
+Date: Sun, 1 Nov 2026 18:25:33 +0800
+Subject: [PATCH 1/2] clk: sprd: pll: fix the integer/fraction split in
+ set_rate
+
+_sprd_pll_set_rate() took the integer divider from do_div(), which returns
+the remainder, and then reused the clobbered dividend for the fraction and
+the bias. Any rate other than a whole-MHz-free one came out as garbage:
+asking GPLL for 650 MHz programmed nint=0, kint=161319, i.e. 250 kHz.
+Split the VCO rate with div64_u64_rem() and keep the original rate for the
+bias lookup.
+---
+ drivers/clk/sprd/pll.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/clk/sprd/pll.c b/drivers/clk/sprd/pll.c
+index bc2db19ae..15853e352 100644
+--- a/drivers/clk/sprd/pll.c
++++ b/drivers/clk/sprd/pll.c
+@@ -7,6 +7,7 @@
+ 
+ #include <linux/delay.h>
+ #include <linux/err.h>
++#include <linux/math64.h>
+ #include <linux/regmap.h>
+ #include <linux/slab.h>
+ 
+@@ -153,7 +154,7 @@ static int _sprd_pll_set_rate(const struct sprd_pll *pll,
+ 	u32 mask, shift, width, ibias_val, index;
+ 	u32 regs_num = pll->regs_num, i = 0;
+ 	unsigned long kint, nint;
+-	u64 tmp, refin, fvco = rate;
++	u64 tmp, rem, refin, fvco = rate;
+ 
+ 	cfg = kzalloc_objs(*cfg, regs_num);
+ 	if (!cfg)
+@@ -188,7 +189,12 @@ static int _sprd_pll_set_rate(const struct sprd_pll *pll,
+ 	cfg[index].val |= mask;
+ 	cfg[index].msk |= mask;
+ 
+-	nint = do_div(fvco, refin * CLK_PLL_1M);
++	/*
++	 * do_div() returns the remainder and leaves the quotient in its
++	 * argument, so split the VCO rate into the integer part and the
++	 * remainder explicitly.
++	 */
++	nint = div64_u64_rem(fvco, refin * CLK_PLL_1M, &rem);
+ 	mask = pmask(pll, PLL_NINT);
+ 	index = pindex(pll, PLL_NINT);
+ 	shift = pshift(pll, PLL_NINT);
+@@ -199,8 +205,7 @@ static int _sprd_pll_set_rate(const struct sprd_pll *pll,
+ 	index = pindex(pll, PLL_KINT);
+ 	width = pwidth(pll, PLL_KINT);
+ 	shift = pshift(pll, PLL_KINT);
+-	tmp = fvco - refin * nint * CLK_PLL_1M;
+-	tmp = do_div(tmp, 10000) * ((mask >> shift) + 1);
++	tmp = div_u64(rem, 10000) * ((mask >> shift) + 1);
+ 	kint = DIV_ROUND_CLOSEST_ULL(tmp, refin * 100);
+ 	cfg[index].val |= (kint << shift) & mask;
+ 	cfg[index].msk |= mask;
+-- 
+2.43.0
+

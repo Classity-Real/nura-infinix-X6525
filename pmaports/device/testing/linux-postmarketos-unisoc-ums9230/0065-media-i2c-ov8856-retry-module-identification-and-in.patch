@@ -1,0 +1,64 @@
+From 86273593ffa995c76d3d65c7a5e3f14d7d37ad56 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 20:50:14 +0800
+Subject: [PATCH] media: i2c: ov8856: retry module identification and increase
+ settling delay
+
+---
+ drivers/media/i2c/ov8856.c | 21 ++++++++++++++++-----
+ 1 file changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/media/i2c/ov8856.c b/drivers/media/i2c/ov8856.c
+index c5373ca..4f9cf4c 100644
+--- a/drivers/media/i2c/ov8856.c
++++ b/drivers/media/i2c/ov8856.c
+@@ -1691,14 +1691,25 @@ static int ov8856_write_reg_list(struct ov8856 *ov8856,
+ 
+ static int ov8856_identify_module(struct ov8856 *ov8856)
+ {
+-	int ret;
++	int ret, i;
+ 	u32 val;
+ 
+ 	if (ov8856->identified)
+ 		return 0;
+ 
+-	ret = ov8856_read_reg(ov8856, OV8856_REG_CHIP_ID,
+-			      OV8856_REG_VALUE_24BIT, &val);
++	for (i = 0; i < 5; i++) {
++		ret = ov8856_read_reg(ov8856, OV8856_REG_CHIP_ID,
++				      OV8856_REG_VALUE_24BIT, &val);
++		if (!ret) {
++			dev_info(ov8856->dev, "chip id read %d: 0x%x\n", i, val);
++			if (val == OV8856_CHIP_ID)
++				break;
++		} else {
++			dev_info(ov8856->dev, "chip id read %d failed: %d\n", i, ret);
++		}
++		msleep(20);
++	}
++
+ 	if (ret)
+ 		return ret;
+ 
+@@ -2110,7 +2121,7 @@ static int ov8856_power_on(struct device *dev)
+ 		gpiod_set_value_cansleep(ov8856->powerdown_gpio, 0);
+ 
+ 	gpiod_set_value_cansleep(ov8856->reset_gpio, 0);
+-	usleep_range(1500, 1800);
++	usleep_range(5000, 6000);
+ 
+ 	return 0;
+ 
+@@ -2311,7 +2322,7 @@ static int ov8856_get_hwcfg(struct ov8856 *ov8856)
+ 
+ 	if (!is_acpi_node(fwnode)) {
+ 		ov8856->reset_gpio = devm_gpiod_get_optional(dev, "reset",
+-							     GPIOD_OUT_LOW);
++							     GPIOD_OUT_HIGH);
+ 		if (IS_ERR(ov8856->reset_gpio))
+ 			return PTR_ERR(ov8856->reset_gpio);
+ 
+-- 
+2.56.0
+

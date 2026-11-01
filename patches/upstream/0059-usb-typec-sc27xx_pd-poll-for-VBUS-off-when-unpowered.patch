@@ -1,0 +1,43 @@
+From c910a2230c96eed1604a9a7e2d9e2b32ef0a8aa7 Mon Sep 17 00:00:00 2001
+From: Seuj09 <jeus110310@gmail.com>
+Date: Sun, 1 Nov 2026 18:08:01 +0800
+Subject: [PATCH] usb: typec: sc27xx_pd: poll for VBUS off when unpowered in
+ source mode
+
+In sc27xx_get_vbus_status(), when pd->typec_online is true in SC27XX_ATTACHED_SRC but TCPM has not yet enabled VBUS (!pd->vbus_on) or has just disabled VBUS during SRC_UNATTACHED / ErrorRecovery while the CC state register still reads SC27XX_ATTACHED_SRC, polling for SC27XX_TYPEC_VBUS_OK to be 1 is inverted:
+- On initial attach (!pd->vbus_on), it stalls the workqueue for 500 ms waiting for VBUS_OK before returning 0, delaying tcpm_cc_change() past tCCDebounce.
+- On VBUS disable while still in SC27XX_ATTACHED_SRC, residual VBUS decaying through 5 V causes the poll for VBUS_OK == 1 to succeed immediately and skip notifying TCPM that VBUS turned off (vbus_present stays true), stalling TCPM's SRC_UNATTACHED -> TOGGLING transition.
+
+Poll for !(status & SC27XX_TYPEC_VBUS_OK) whenever pd->state == SC27XX_ATTACHED_SRC && !pd->vbus_on.
+---
+ drivers/usb/typec/tcpm/sc27xx_pd.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/usb/typec/tcpm/sc27xx_pd.c b/drivers/usb/typec/tcpm/sc27xx_pd.c
+index 15a116a..a2b7408 100644
+--- a/drivers/usb/typec/tcpm/sc27xx_pd.c
++++ b/drivers/usb/typec/tcpm/sc27xx_pd.c
+@@ -1365,7 +1365,8 @@ static int sc27xx_get_vbus_status(struct sc27xx_pd *pd)
+ 	bool vbus_present;
+ 	int ret;
+ 
+-	if (pd->typec_online) {
++	if (pd->typec_online &&
++	    !(pd->state == SC27XX_ATTACHED_SRC && !pd->vbus_on)) {
+ 		ret = regmap_read_poll_timeout(pd->regmap,
+ 					       pd->typec_base + SC27XX_TYPEC_DBG1,
+ 					       status,
+@@ -1373,10 +1374,6 @@ static int sc27xx_get_vbus_status(struct sc27xx_pd *pd)
+ 					       SC27XX_VBUS_OK_POLL_INTERVAL,
+ 					       SC27XX_VBUS_OK_TIMEOUT);
+ 		if (ret < 0) {
+-			/* vbus may be off when entering source state */
+-			if (pd->state == SC27XX_ATTACHED_SRC && !pd->vbus_on)
+-				return 0;
+-
+ 			dev_err(pd->dev, "wait for vbus failed, ret = %d\n", ret);
+ 			return ret;
+ 		}
+-- 
+2.56.0
+
