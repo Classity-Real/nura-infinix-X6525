@@ -1,19 +1,37 @@
-# nura-infinix-x6525 — Advanced Checklists
+# nura-infinix-x6525 — pmos env checklist + commands + credits
 
-Infinix X6525 (UMS9230 / sprd). Not A01 Core. Not A06.
+Infinix X6525 (UMS9230 / sprd). Not A01 / A06.
 
-## Works / Checklist
-- [x] Kernel: 67 patches (`patches/upstream/`) vs `v7.2-rc6-ums9230-0`; `0066`/`0067` merged (upstream `a7f8004`)
-- [x] UFS: `0048-arm64-dts-sprd-boot-the-X6525-s-UFS-units-too.patch` preserved; `&ufs` node in `dts/`
-- [x] Black-screen / panel: `simpledrm` console + `sprd_drm` path kept; `panel` `okay`; `WLR_RENDERER=pixman` available
-- [x] Config overrides: `CONFIG_LRU_GEN=y`, `CONFIG_DMABUF_HEAPS_CMA=y`, `CONFIG_CMA_SIZE_MBYTES=128`
-- [x] Userspace patches removed: `libdng-*`, `libmegapixels-*`, `megapixels-*` (not kernel source)
-- [x] Audit: `linux-postmarketos-unisoc-ums9230` — `ok`; `result: no broken package...`
-- [x] Device package: `sha512sum` fixed (`kernel-cmdline.conf`, `x6525-boot-check`)
-- [x] pmbootstrap: `/usr/local/bin/pmbootstrap` v3.12.1
-- [x] CI green; upstream branches (`feat/*`, `fix/*`) tracked at `upstream/`
-- [x] Readmes remade (no A01/A06 references)
+## What works on pmos env
+- [x] Kernel builds (`linux-postmarketos-unisoc-ums9230`) — audit `ok`
+- [x] Device package builds (`device-infinix-x6525`) — `sha512sum` fixed
+- [x] `pmbootstrap` installed (`/usr/local/bin/pmbootstrap` v3.12.1)
+- [x] 67 kernel patches (`patches/upstream/`) — `0048` UFS preserved
+- [x] Black-screen / panel path preserved (`sprd_drm` + `simpledrm`)
+- [ ] Wifi drops (`fix/wifi-drops` upstream branch tracked — not merged)
+- [ ] GPU accel (`feat/gpu-accel` tracked — not merged)
+- [x] `dts/` UFS node (`&ufs`) intact
+- [x] CI green on `main`
 
-## What's left / UEFI
-- [ ] UEFI port (next chat)
-- [ ] `libmegapixels` userspace build (separate repo)
+## Console commands
+```bash
+# build kernel package
+pmbootstrap build linux-postmarketos-unisoc-ums9230
+
+# audit
+bash tools/audit-features.sh
+
+# check patches
+ls patches/upstream/0*.patch | wc -l
+
+# verify dts UFS node
+grep '&ufs' dts/ums9230-infinix-x6525.dts
+
+# push (force-with-lease safe)
+git push --force-with-lease origin main
+```
+
+## Credits
+- Seuj09 upstream (`a7f8004`) — kernel patches `0066`/`0067`, megapixels fixes
+- Port maintainer — UFS `0048`, black-screen fix (`sprd_drm`/`simpledrm`), device fixes
+- `pmbootstrap` v3.12.1 install
