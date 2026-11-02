@@ -263,7 +263,8 @@ need "the rear camera DTS patch"                 test -f "$ROOT"/patches/upstrea
 need "the front camera DTS patch"                test -f "$ROOT"/patches/upstream/0020-*.patch
 need "rear camera node (samsung,s5k3l6)"         dt 'samsung,s5k3l6'
 need "front camera node (ovti,ov8856)"           dt 'ovti,ov8856'
-need "front camera on the 2-lane M port"          dt 'CAMSYS_CSI_M'
+need "rear camera on the 4-lane RO M+S port"     dt 'CAMSYS_CSI_RO_M_S'
+need "front camera on the 4-lane port"           dt 'CAMSYS_CSI_4LANE'
 need "CONFIG_VIDEO_S5K3L6=m"                     cfg VIDEO_S5K3L6 "$CFG"
 need "CONFIG_VIDEO_OV8856=m"                     cfg VIDEO_OV8856 "$CFG"
 finish

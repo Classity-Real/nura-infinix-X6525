@@ -590,33 +590,53 @@
 };
 
 /* ---- camera -------------------------------------------------------------
- * The stock system identifies the rear sensor as an S5K3L6: slot 0 reports
- * "s5k3l6_1836_13M" in vendor.cam.sensor.slot.info, and the stock camera HAL
- * opens it at 4208x3120 over four MIPI data lanes (camioctl_sensor_if_set:
- * "mipi 0 10 0 4").
+ * The stock system identifies the rear sensor as an S5K3L6 (slot 0,
+ * "s5k3l6" in /odm/etc/sensor_config.xml) and the front sensor as a 4-lane
+ * OV8856 (slot 1, "ov8856_4lane").
  *
- * The live device tree (unit-data/bin/fdt.dtb, copied from /sys/firmware/fdt
- * on the stock system) puts it in the sensor-sub socket: i2c1, reg 0x5a -
- * the 8-bit form of the S5K3L6's 0x2d address - reset on ap_gpio 41,
- * power-down on ap_gpio 40, AVDD from vddcama1, DVDD from vddcamd1, I/O from
- * vddcamio, and CLK_SENSOR1 (sprd,phyid 0, so the four-lane port).
- *
- * The driver's register tables are extracted from the vendor's own sensor
- * library (libsensor_s5k3l6.so, "s5k3l6_v1"); it runs the part at a 24 MHz
- * MCLK with four lanes and the three modes below.
- *
- * The front camera is an OV8856 in the sensor-main socket: i2c0, reg 0x20
- * (the 8-bit form of 0x10), reset on ap_gpio 44, power-down on ap_gpio 46,
- * I/O from vddcamio, AVDD from vddcama0, DVDD from vddcamd0, on CLK_SENSOR0
- * (sprd,phyid 2, so the two-lane M port). Its vendor library
- * (libsensor_ov8856_front.so) runs the part at 24 MHz, but the mainline
- * driver only has register tables for 19.2 MHz, and CLK_SENSOR0 can supply
- * either, so the node asks for 19.2 MHz. The ov8856 driver
- * drives the power-down pin itself (powerdown-gpios), after the supplies and
- * the clock are up.
- * The sensor-main2 socket is the decorative second rear lens
- * ("fakeserial" in the HAL).
+ * The stock device tree carries placeholder I2C addresses (<0x20> on
+ * sensor-main and <0x5a> on sensor-sub) because the vendor camera HAL
+ * (libcamsensor.so) overrides client->addr at runtime via
+ * SPRD_SENSOR_IO_SET_I2C_ADDR using major_i2c_addr from each sensor library:
+ *   - Rear S5K3L6 (slot 0 = sensor-main on i2c0): major_i2c_addr = 0x10
+ *     (7-bit 0x10), reset on ap_gpio 44, power-down on ap_gpio 46, AVDD
+ *     from vddcama0 (2.8 V), DVDD from vddcamd0 (1.05 V), I/O from vddcamio
+ *     (1.8 V), CLK_SENSOR0 at 24 MHz, and vendor sprd,phyid = <2> ("2p2ro",
+ *     the 4-lane combined RO M+S CSI-2 D-PHY, CAMSYS_CSI_RO_M_S in mainline).
+ *   - Front OV8856 (slot 1 = sensor-sub on i2c1): major_i2c_addr = 0x36
+ *     (7-bit 0x36), reset on ap_gpio 41, power-down on ap_gpio 40, AVDD
+ *     from vddcama1 (2.8 V), DVDD from vddcamd1 (1.2 V), I/O from vddcamio
+ *     (1.8 V), CLK_SENSOR1 at 19.2 MHz (for mainline ov8856.c's PLL tables),
+ *     and vendor sprd,phyid = <0> ("4lane", the 4-lane CSI-2 D-PHY,
+ *     CAMSYS_CSI_4LANE in mainline).
+ *   - The sensor-main2 socket is the decorative second rear lens
+ *     ("fakeserial" in the HAL).
  */
+&vddcamio {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+};
+
+&vddcama0 {
+	regulator-min-microvolt = <2800000>;
+	regulator-max-microvolt = <2800000>;
+};
+
+&vddcama1 {
+	regulator-min-microvolt = <2800000>;
+	regulator-max-microvolt = <2800000>;
+};
+
+&vddcamd0 {
+	regulator-min-microvolt = <1050000>;
+	regulator-max-microvolt = <1050000>;
+};
+
+&vddcamd1 {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <1200000>;
+};
+
 &i2c0 {
 	status = "okay";
 	clock-frequency = <400000>;
@@ -624,31 +644,30 @@
 	#size-cells = <0>;
 
 	camera@10 {
-		compatible = "ovti,ov8856";
+		compatible = "samsung,s5k3l6";
 		reg = <0x10>;
 		reset-gpios = <&ap_gpio 44 GPIO_ACTIVE_LOW>;
-		powerdown-gpios = <&ap_gpio 46 GPIO_ACTIVE_HIGH>;
+		power-down-gpios = <&ap_gpio 46 GPIO_ACTIVE_HIGH>;
 
 		clocks = <&mm_gate CLK_MM_SENSOR0_EB>;
-		clock-names = "xvclk";
-		clock-frequency = <19200000>;
+		clock-names = "mclk";
 		assigned-clocks = <&mm_clk CLK_SENSOR0>;
-		assigned-clock-parents = <&pll1 CLK_TWPLL_96M>;
-		assigned-clock-rates = <19200000>;
+		assigned-clock-parents = <&pll1 CLK_TWPLL_48M>;
+		assigned-clock-rates = <24000000>;
 
-		dovdd-supply = <&vddcamio>;
-		avdd-supply = <&vddcama0>;
-		dvdd-supply = <&vddcamd0>;
+		vddio-supply = <&vddcamio>;
+		vdda-supply = <&vddcama0>;
+		vddd-supply = <&vddcamd0>;
 
-		rotation = <270>;
-		orientation = <0>;
+		rotation = <90>;
+		orientation = <1>;
 
 		port {
-			ov8856_ep: endpoint {
-				data-lanes = <1 2>;
+			s5k3l6_ep: endpoint {
+				data-lanes = <1 2 3 4>;
 				link-frequencies = /bits/ 64
-					<720000000 360000000>;
-				remote-endpoint = <&csi_m_ep>;
+					<600000000 284000000 153000000>;
+				remote-endpoint = <&csi_ro_m_s_ep>;
 			};
 		};
 	};
@@ -660,30 +679,31 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	camera@2d {
-		compatible = "samsung,s5k3l6";
-		reg = <0x2d>;
+	camera@36 {
+		compatible = "ovti,ov8856";
+		reg = <0x36>;
 		reset-gpios = <&ap_gpio 41 GPIO_ACTIVE_LOW>;
-		power-down-gpios = <&ap_gpio 40 GPIO_ACTIVE_HIGH>;
+		powerdown-gpios = <&ap_gpio 40 GPIO_ACTIVE_HIGH>;
 
 		clocks = <&mm_gate CLK_MM_SENSOR1_EB>;
-		clock-names = "mclk";
+		clock-names = "xvclk";
+		clock-frequency = <19200000>;
 		assigned-clocks = <&mm_clk CLK_SENSOR1>;
-		assigned-clock-parents = <&pll1 CLK_TWPLL_48M>;
-		assigned-clock-rates = <24000000>;
+		assigned-clock-parents = <&pll1 CLK_TWPLL_96M>;
+		assigned-clock-rates = <19200000>;
 
-		vddio-supply = <&vddcamio>;
-		vdda-supply = <&vddcama1>;
-		vddd-supply = <&vddcamd1>;
+		dovdd-supply = <&vddcamio>;
+		avdd-supply = <&vddcama1>;
+		dvdd-supply = <&vddcamd1>;
 
-		rotation = <90>;
-		orientation = <1>;
+		rotation = <270>;
+		orientation = <0>;
 
 		port {
-			s5k3l6_ep: endpoint {
+			ov8856_ep: endpoint {
 				data-lanes = <1 2 3 4>;
 				link-frequencies = /bits/ 64
-					<600000000 284000000 153000000>;
+					<360000000 180000000>;
 				remote-endpoint = <&csi_4lane_ep>;
 			};
 		};
@@ -697,23 +717,23 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		/* 4-lane port: the rear camera */
+		/* 4-lane port (vendor phyid 0, "4lane"): the front OV8856 camera */
 		port@CAMSYS_CSI_4LANE {
 			reg = <CAMSYS_CSI_4LANE>;
 
 			csi_4lane_ep: endpoint {
 				data-lanes = <0 1 2 3>;
-				remote-endpoint = <&s5k3l6_ep>;
+				remote-endpoint = <&ov8856_ep>;
 			};
 		};
 
-		/* M port, 2-lane: the front camera */
-		port@CAMSYS_CSI_M {
-			reg = <CAMSYS_CSI_M>;
+		/* 4-lane RO M+S port (vendor phyid 2, "2p2ro"): the rear S5K3L6 camera */
+		port@CAMSYS_CSI_RO_M_S {
+			reg = <CAMSYS_CSI_RO_M_S>;
 
-			csi_m_ep: endpoint {
-				data-lanes = <0 1>;
-				remote-endpoint = <&ov8856_ep>;
+			csi_ro_m_s_ep: endpoint {
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&s5k3l6_ep>;
 			};
 		};
 	};

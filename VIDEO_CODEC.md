@@ -172,3 +172,190 @@ pass, and then experiments on the phone. Step 3 is not done.
 - Does `0x8000` read as a stable value (the bitstream module's configuration)?
 Structured values there would confirm the offsets. Constant or `ffffffff` values would mean the core is
 still gated or in reset, and step 1's clock/reset sequence needs another look.
+
+## Step 3, first register facts: `H264Dec_cfg_bsm` (disassembly, not yet confirmed on hardware)
+Offsets are from the VSP window base (0x32000000); the library's `0x6120xxxx` constants are the same offsets.
+`llvm-objdump -d --disassemble-symbols=H264Dec_cfg_bsm libomx_avcdec_hw_sprd.so`:
+
+| Offset | Access | Meaning (inferred) |
+|--------|--------|--------------------|
+| `0x8018` | poll, bit 27 must be 0 (bounded at 0x3ffff tries) | bitstream module busy; waited for before reprogramming |
+| `0x1080`, `0x1084` | write `stream_buf_phys >> 4` (both) | bitstream buffer address |
+| `0x8008` | write `6` | bitstream module mode/config |
+| `0x8004` | write `length \| 0x80000000` (or `0xc0000000` when the mode argument is non-zero) | buffer length plus a mode flag |
+| `0x8000` | write `(offset + 0x400) \| 0x80000000` | start trigger |
+| `0x801c` | poll, bit 2 must be 1 | bitstream module ready (only when the mode argument is non-zero) |
+
+The address written is `>> 4`, so buffers must be 16-byte aligned. Next: `H264Dec_Process_slice`,
+`H264DecDecode_NALU`, `H264Dec_init_picture` for the per-picture and reference-frame registers.
+
+## Step 3, register trace of the whole AVC library (`tools/vsp-reg-trace.py`, disassembly only)
+`tools/vsp-reg-trace.py` follows the `ldr x, [ctx]; add x, x, #const; str w, [x, #imm]` pattern that
+`vsp-reg-scan.py` cannot see. Run on `libomx_avcdec_hw_sprd.so` it finds 22 functions that touch the
+VSP window. Offsets from the window base (0x32000000); `0x73xx` rows in the raw output are fields of
+the library's own context, not hardware, and are ignored here.
+
+| Offsets | Where | What it is |
+|---------|-------|-----------|
+| `0x8008` (W), `0x8010` (R) | `show_bits`, `read_bits`, `long_ue_v`, `long_se_v`, `flush_left_byte` | bitstream module: write a command/bit count to 0x8008, read the result from 0x8010 |
+| `0x8024` (W) | `ue_v`, `se_v` | bitstream module: Exp-Golomb read command (result again via the read register) |
+| `0x8014` (R) | `uvlc_startcode_follows`, `ProcessPPS` | bitstream status ("more data" style check) |
+| `0x802c`, `0x8034`, `0x8038` (R) | `get_nalu_info`, `get_startcode_len` | NAL unit info: start-code length and size, filled by the hardware's start-code search |
+| `0x8000`/`0x8004`/`0x8008`, `0x1080`/`0x1084` | `cfg_bsm` | see above |
+| `0x1004` (W), `0x1008`/`0x100c`, `0x1020`, `0x1030`, `0x11a0`-`0x11ac` | `VSP_DMA_TRANSFER` | internal DMA that moves a table into the block: 0x11a0 = 0, 0x11a4/0x11a8/0x11ac = the three arguments (source, destination, length), then `0x1020 = 0x140 \| (arg4 << 4)` and `0x1030 = 1` start it; the library polls bit 8 of `0x100c` for completion (bounded at 0x3ffff reads), then writes `0x100`, and 7 to `0x1030 - ...` |
+| `0x1010` (W, `0xd0`) | `ARM_VSP_RST`, `H264DecDecode` | reset |
+| `0x1018` (W) | `VSP_RELEASE_Dev` | release |
+| `0x1028` (W) | `H264DecDecode_NALU`, `H264DecDecode`, debug | interrupt control |
+| `0x200`-`0x20c`, `0x10b8` | `VSP_SCALER_CFG` | scaler output setup |
+| `0x1088`, `0x108c`, `0x1090`, `0x1120` (R) | `printt_debug_register` | debug-only reads |
+
+What this says about the design (still unconfirmed on the phone):
+- The library does **not** write per-macroblock registers. Parsing goes through the hardware bit-reader
+  (0x8000 block). The picture and slice decode must therefore be driven by the block's own sequencer from
+  **tables uploaded by `VSP_TABLE_TRANSFER`/`VSP_DMA_TRANSFER`** (called once from `H264DecDecode`), not by
+  poking registers one at a time. The format of those tables is the thing to recover next.
+- So a V4L2 driver needs: the bitstream module sequence (documented above), the table upload, and the
+  table contents the stock library builds. The table-building code sits behind `H264DecDecode`
+  (call at `0x17ef8`) and is the next function to read.
+- Registers 0x1000-0x1090 and 0x8000-0x8038 are the ones a `regs` dump from the phone should show
+  structured values in.
+
+## Step 3, the per-picture programming sequence (`H264DecDecode_NALU`, disassembly; correction to the section above)
+The previous section guessed that decoding is driven by uploaded tables. That was only partly right:
+`VSP_TABLE_TRANSFER` runs once per stream setup (276 bytes copied from the library's read-only data into a
+0x3000-byte buffer, table id 0x12, via the DMA at `0x11a0`-`0x11ac`). The picture itself **is** set up
+through registers, in this order (`tools/vsp-reg-trace.py` extended to follow the `base + const + index`
+forms; function `H264DecDecode_NALU` at 0x17d60, ~0x20a4 bytes):
+
+| Step | Registers | Content |
+|------|-----------|---------|
+| 1 | `0x1028` = 0 | clear/disable interrupts |
+| 2 | `0x1088`, `0x108c`, `0x1090`, `0x10b0` | current picture buffer addresses, each `phys >> 4` (the debug dump reads `0x1088`/`0x108c`/`0x1090` back) |
+| 3 | `0x2400+4i`, `0x2500+4i`, `0x2580+4i`, `0x2600+4i`, `0x2680+4i` | per-reference-frame address arrays (`phys >> 4`), one entry per list index `i` (luma, chroma and related planes) |
+| 4 | `0x1034`-`0x107c` (19 words), `0x1160`-`0x1170`, `0x1180`-`0x1198` | packed picture/slice parameters built with `bfi`/`ubfiz` from the parsed SPS, PPS and slice header |
+| 5 | `0x1038` = `0xffffffff`, `0x1028` = 1, `0x1030` = `0xa` | enable interrupts, then **start** (`0x1030 = 0xa`) |
+| 6 | `VSP_POLL_COMPLETE` (ioctl `0x6d07`), `0x1028` = 0, read `0x1120` | wait for the interrupt, clear, read status |
+
+The packing of step 4 is decoded properly in the next sections (the guesses that stood here were
+partly wrong and have been replaced).
+
+What is still needed for a V4L2 stateless driver: naming each packed field against the
+`v4l2_ctrl_h264_sps/pps/slice_params/decode_params` controls (about 25 words, ~600 instructions to read),
+confirming the start/complete sequence on the phone, and the reference-frame addressing (step 3).
+
+## Step 3, the parser structs of the stock AVC library (offsets fixed by the H.264 syntax order)
+
+`H264Dec_ProcessSPS`, `H264Dec_ProcessPPS` and `H264Dec_RestSliceHeader` store each parsed element
+at a fixed struct offset. The parse order is the order of the H.264 syntax (`read_bits`/`ue_v`/`se_v`
+calls in the disassembly), so the names below follow from the specification, not from guesses. This is
+what a V4L2 stateless driver receives as `v4l2_ctrl_h264_sps/pps/slice_params` and has to rebuild.
+
+**SPS struct** (`[ctx + 0x1b8]` is the active SPS; offsets in bytes):
+
+| Off | Element | Off | Element |
+|-----|---------|-----|---------|
+| 0x01 | profile_idc | 0x1a | frame_mbs_only_flag |
+| 0x02-0x07 | constraint_set0..5_flag | 0x1b | mb_adaptive_frame_field_flag |
+| 0x09 | level_idc | 0x1c | direct_8x8_inference_flag |
+| 0x0a | seq_parameter_set_id | 0x1e (u16) | pic_width_in_mbs_minus1 |
+| 0x0b | log2_max_frame_num_minus4 | 0x18 (u16) | pic_height_in_map_units_minus1 |
+| 0x0c | pic_order_cnt_type | 0x20 | frame_cropping_flag |
+| 0x0d | delta_pic_order_always_zero_flag (poc type 1) | 0x21 | vui_parameters_present_flag |
+| 0x0e | max_num_ref_frames | 0x22 | seq_scaling_matrix_present_flag |
+| 0x0f | gaps_in_frame_num_value_allowed_flag | 0x23 | chroma_format_idc |
+| 0x10 / 0x14 (s32) | offset_for_non_ref_pic / offset_for_top_to_bottom_field | 0x24 / 0x25 | bit_depth_luma/chroma_minus8 |
+| 0x164 | num_ref_frames_in_pic_order_cnt_cycle | 0x26 | qpprime_y_zero_transform_bypass_flag |
+| 0x570-0x57c | frame_crop left/right/top/bottom offsets | | |
+
+**PPS struct:** 0x01 pic_parameter_set_id, 0x02 seq_parameter_set_id, 0x11 entropy_coding_mode_flag
+(CABAC), 0x03 bottom_field_pic_order_in_frame_present_flag, 0x04 num_slice_groups_minus1,
+0x06/0x07 num_ref_idx_l0/l1_default_active_minus1, 0x08 weighted_pred_flag, 0x09 weighted_bipred_idc,
+0x0a pic_init_qp_minus26, 0x0b pic_init_qs_minus26, 0x0c chroma_qp_index_offset,
+0x0d second_chroma_qp_index_offset, 0x0e deblocking_filter_control_present_flag,
+0x0f constrained_intra_pred_flag, 0x10 redundant_pic_cnt_present_flag, 0x12 transform_8x8_mode_flag,
+0x13 pic_scaling_matrix_present_flag.
+
+**Slice header** (`[ctx + 0x318]`): 0x58 frame_num, 0x5c field_pic_flag, 0x60 bottom_field_flag,
+0x6c pic_order_cnt_lsb, 0x70 delta_pic_order_cnt_bottom, 0x74/0x78 delta_pic_order_cnt[0]/[1],
+0x0e redundant_pic_cnt, 0x07 direct_spatial_mv_pred_flag, 0x00/0x01 num_ref_idx_l0/l1_active_minus1,
+the pred_weight_table around 0x2d0-0x3d8 and 0x354, and `dec_ref_pic_marking` at 0x34.
+
+## Step 3, the parameter block and the first packed words (`H264DecDecode_NALU`, 0x1844c-0x1864c)
+
+**Pointers.** `x8` = active SPS (`[ctx+0x1b8]`), `x28` = active PPS (`[ctx+0x1c0]`, first reused as the
+register base `0x61201028` later), `x22` = `[ctx+0x320]` (the first part of the slice header: `+0x3` slice type,
+`+0x13c` first_mb_in_slice, `+0x140` pps_id), `x17` = `[ctx+0x318]` (the slice header of the section above),
+`x27` = `ctx + 0x16870` (the **parameter block**, filled here, then packed into registers). The register stores
+are `0x61201028 + imm`, so `#0x1c` is `0x1044`, `#0x20` is `0x1048`, and so on.
+
+**Slice type** is remapped before use: `w20 = 0` I (and SI/SP), `1` P, `2` B.
+
+**The parameter block** (offset: source). Certain = taken straight from a named SPS/PPS element; inferred = from
+the position in the slice header or by use:
+
+| Block | Source | Meaning |
+|-------|--------|---------|
+| +0x00 | `x22[3]` | slice type (0 I, 1 P, 2 B), certain |
+| +0x08 | PPS+0x0f | constrained_intra_pred_flag, certain |
+| +0x0c | slice+0x07 | direct_spatial_mv_pred_flag, certain |
+| +0x10 | SPS+0x1c | direct_8x8_inference_flag, certain |
+| +0x14 | `x22[1]` | slice QP (also passed to `init_contexts` for CABAC), inferred |
+| +0x18 / +0x1c | PPS+0x0c / +0x0d | chroma_qp_index_offset / second_chroma_qp_index_offset, certain |
+| +0x20 | `x22[0x139]` | disable_deblocking_filter_idc, inferred |
+| +0x24 | PPS+0x09 | weighted_bipred_idc, certain |
+| +0x2c / +0x34 | slice+0 / slice+1, each limited to the default count of another struct | num_ref_idx_l0 / l1 active, inferred |
+| +0x78 / +0x7c | SPS+0x22 / PPS+0x13 | seq / pic_scaling_matrix_present_flag, certain |
+| +0x80 | PPS+0x08 | weighted_pred_flag, certain |
+| +0x90 / +0x94 | `x22[0x13a]` / `x22[0x13b]` | slice_alpha_c0_offset_div2 / slice_beta_offset_div2, inferred |
+| +0xa0 / +0xa4 | PPS+0x12 / PPS+0x11 | transform_8x8_mode_flag / entropy_coding_mode_flag (CABAC), certain |
+| +0xa8 | slice+1 | num_ref_idx_l1_active_minus1, inferred |
+| +0xac | SPS+1 != 66 | "not Baseline", certain |
+| +0xb4 | slice+0x64/+0x68 | picture structure: 0 frame, 1 MBAFF, 2+ field, inferred |
+| +0xf8 | `ctx+0x16968` (set in `H264DecDecode`) | slice type of the current picture, inferred |
+
+**Registers decoded so far** (field order and widths are certain, the meaning of a field is certain where its
+source is "certain" above):
+
+| Register | Layout |
+|----------|--------|
+| `0x103c` | bit 31 set; bits 31-25 = slice QP (`x22[1]`, 7 bits); bits 24-16 = `slice+0x18` (9 bits); bits 15-0 = `slice+0x1c` |
+| `0x1044` | 31 = profile is not Baseline; 29 = scaling matrix present (SPS or PPS); 28-16 = first_mb_in_slice (13 bits); 15-8 = first MB row, 7-0 = first MB column (after the division by the picture width in MBs, MBAFF-aware) |
+| `0x1048` | 15 = explicit weighted prediction in use for this slice (P with weighted_pred, or B with weighted_bipred); 20-19 = disable_deblocking_filter_idc; 18-17 = weighted_bipred_idc; 16 = weighted_pred_flag; 14 = CABAC; 13 = transform_8x8_mode; 12 = direct_8x8_inference; 11 = direct_spatial_mv_pred; 10 = constrained_intra_pred; 9-5 and 4-0 = the two deblocking offsets (5-bit two's complement); 22-21 and 31-23 = two derived reference-structure values |
+| `0x104c` | 4-0 = chroma_qp_index_offset, 9-5 = second_chroma_qp_index_offset (both 5-bit signed); 14-10 and 19-15 = (num_ref_idx_l0 - 1) and (num_ref_idx_l1 - 1), 5 bits; 24-20 and 29-25 plus bits 30/31 = the capped reference counts (6 bits each) |
+| `0x1050`, `0x1054`, `0x1058` | `slice+0x54`, `slice+0x4c`, `slice+0x50` |
+| `0x105c`, `0x1060` | block `+0xc8`, `+0xcc` (picture-structure dependent, one of two stored values) |
+| `0x1180` | `(((height+15) & ~15) >> 4) << 20 | ((width+15) & 0xfff0)` from the picture size at `ctx+0x1a2` / `ctx+0x1a0` |
+
+**Still open for the first group:** the sources of `0x1034`, the two fields of `0x103c`, `0x1050`-`0x1060`
+(slice-header fields at +0x4c/+0x50/+0x54/+0x18/+0x1c, not yet named) and the meaning of the derived
+reference-structure values in `0x1048`. Then the second group (`0x1064`-`0x107c`, `0x1160`-`0x1170`,
+`0x1184`-`0x1198`), which is built from the reference lists.
+
+## The bitstream read protocol and the first decoder driver (patch 0067, experimental)
+`show_bits`/`read_bits` (disassembly): wait until `0x8020` bit 0 is set, write `n << 24` to `0x8008`,
+read the bits from `0x8010`; `read_bits` then writes `(n << 24) | 1` to `0x8008` to consume them.
+The driver uses this to skip `header_bit_size` bits of the slice header (in chunks of 32), then starts
+the slice. The second register group (reference-index tables, six-bit entries) is still only known
+structurally, which is why the driver handles intra slices only.
+
+Patch 0067 adds `vsp-dec.c`, `vsp.h` and `vsp-regs.h` to `sprd-vsp`: a V4L2 stateless decoder
+(`/dev/videoN` plus a media device) that is slice-based with Annex B start codes, 8-bit 4:2:0
+progressive, NV12 output. Per slice it (1) sets the bitstream module and skips the header,
+(2) writes the picture addresses (`0x1088`, `0x108c`, `0x1090`, `0x10b0`), (3) writes the packed words
+from the tables above, (4) enables the interrupt, writes `0x1038 = 0xffffffff`, `0x1028 = 1` and
+starts with `0x1030 = 0xa`. The interrupt completes the job; a 1 s watchdog resets the block
+(`0x1010 = 0xd0`) and fails the buffer.
+
+Everything that is a guess is marked in `vsp-regs.h`: the meaning of `0x1090`/`0x10b0` and the size
+of their side-data area (128 and 32 bytes per macroblock, appended to each NV12 buffer), which of the
+two deblocking offsets goes where, whether any interrupt means "done" (the status at `0x1120` is
+logged with `vsp-dec` dynamic debug), and the start offset of the bitstream module (`0x8000` takes
+the byte offset of the NAL header plus `0x400`). Not supported: P/B slices, scaling matrices,
+interlaced streams.
+
+First test on the phone (needs an intra-only H.264 clip, e.g. `ffmpeg -i in.mp4 -c:v libx264 -g 1
+-profile:v high -x264-params cabac=0 ...`, and a stateless-capable client such as `v4l2-request-test`
+or ffmpeg's v4l2-request hwaccel): `dmesg | grep -i vsp`, `ls /dev/video* /dev/media*`,
+`v4l2-ctl -d /dev/videoN --all`, then one decode with
+`echo 'file drivers/media/platform/sprd/vsp/vsp-dec.c +p' | sudo tee /sys/kernel/debug/dynamic_debug/control`.
+Expect failures first (timeouts or IOMMU faults); each one narrows down a guessed register.

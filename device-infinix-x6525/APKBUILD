@@ -2,14 +2,15 @@
 pkgname=device-infinix-x6525
 pkgdesc="Infinix X6525 (Smart 8)"
 pkgver=0.1
-pkgrel=0
+pkgrel=1
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
 depends="postmarketos-base linux-infinix-x6525"
 makedepends="devicepkg-dev"
-source="deviceinfo"
+source="deviceinfo
+	infinix,x6525.conf"
 
 build() {
 	devicepkg_build $startdir $pkgname
@@ -17,8 +18,11 @@ build() {
 
 package() {
 	devicepkg_package $startdir $pkgname
+	install -Dm644 "$srcdir"/infinix,x6525.conf "$pkgdir"/etc/megapixels/config/infinix,x6525.conf
+	install -Dm644 "$srcdir"/infinix,x6525.conf "$pkgdir"/usr/share/megapixels/config/infinix,x6525.conf
 }
 
 sha512sums="
-CHANGEME  deviceinfo
+3162eb18d70ba0af508b05bbfe6f6afcae569becc494f9a5b78ad09b48856342b0342c40829eee86bf120068feda3d4a919ac8dc368f29409d321bc6c94218f9  deviceinfo
+b0c63c258918c481f22cb45a8376787b35919a3f16752a8902cf48e47f216809054e69a03bf3e656815ca45958cb4f5e6b8083f7d0da9d895c47e546b4431b2f  infinix,x6525.conf
 "

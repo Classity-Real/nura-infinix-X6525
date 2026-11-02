@@ -1,0 +1,24 @@
+diff --git a/src/libdng.c b/src/libdng.c
+index f989150..89dca08 100644
+--- a/src/libdng.c
++++ b/src/libdng.c
+@@ -414,6 +414,10 @@ libdng_write_with_thumbnail(libdng_info *dng, const char *path, unsigned int wid
+ 
+ 	uint8_t *raw_frame = (uint8_t *) data;
+ 	if (dng->needs_repack) {
++		size_t min_len = (((size_t) width * dng->bit_depth + 7) / 8) * height;
++		if (length < min_len) {
++			length = min_len;
++		}
+ 		raw_frame = malloc(length);
+ 		libdng_repack(data, raw_frame, width, height, dng->bit_depth, dng->stride);
+ 	}
+@@ -534,7 +538,7 @@ libdng_write_with_thumbnail(libdng_info *dng, const char *path, unsigned int wid
+ 	TIFFSetField(tif, DNGTAG_CFAPATTERN, 4, dng->cfapattern);
+ 	TIFFSetField(tif, DNGTAG_WHITELEVEL, 1, &dng->whitelevel);
+ 
+-	unsigned int stride = dng->stride;
++	unsigned int stride = dng->needs_repack ? TIFFScanlineSize(tif) : (dng->stride ? dng->stride : TIFFScanlineSize(tif));
+ 	for (int row = 0; row < height; row++) {
+ 		TIFFWriteScanline(tif, (void *) raw_frame + (row * stride), row, 0);
+ 	}

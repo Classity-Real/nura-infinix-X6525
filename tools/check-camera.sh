@@ -84,39 +84,77 @@ else
 fi
 
 echo "== 5. Megapixels Configuration =="
-mp_cfg="/usr/share/megapixels/config/infinix,x6525.ini"
-if [ -f "$mp_cfg" ]; then
+mp_cfg=
+for cfg in /etc/megapixels/config/infinix,x6525.conf /usr/share/megapixels/config/infinix,x6525.conf /usr/share/megapixels/config/infinix,x6525.ini; do
+	if [ -f "$cfg" ]; then
+		mp_cfg="$cfg"
+		break
+	fi
+done
+if [ -n "$mp_cfg" ]; then
 	pass "Megapixels config file $mp_cfg is installed"
-	if grep -q "s5k3l6" "$mp_cfg" && grep -q "ov8856" "$mp_cfg"; then
+	if grep -qi "s5k3l6" "$mp_cfg" && grep -qi "ov8856" "$mp_cfg"; then
 		pass "Megapixels config defines both rear (s5k3l6) and front (ov8856) cameras"
 	else
 		fail "Megapixels config incomplete"
 	fi
 else
-	fail "Megapixels config $mp_cfg is missing"
+	fail "Megapixels config (infinix,x6525.conf/ini) is missing"
 fi
 
 echo "== 6. Test pattern capture test =="
 if [ "${CAMERA_STREAM:-0}" != 1 ]; then
-	info "stream test skipped; run CAMERA_STREAM=1 sh tools/check-camera.sh to start the camera and capture one frame"
-elif command -v v4l2-ctl >/dev/null 2>&1; then
-	if [ -e "/dev/video0" ]; then
-		info "testing frame capture from /dev/video0..."
-		if timeout 5 v4l2-ctl -d /dev/video0 --stream-mmap --stream-count=1 --stream-to=/tmp/cam_test.raw 2>/dev/null; then
-			if [ -s "/tmp/cam_test.raw" ]; then
-				pass "successfully captured test frame ($(wc -c < /tmp/cam_test.raw) bytes)"
-				rm -f /tmp/cam_test.raw
+	info "stream test skipped; run CAMERA_STREAM=1 sh tools/check-camera.sh to start the camera and capture frames"
+elif command -v v4l2-ctl >/dev/null 2>&1 && command -v media-ctl >/dev/null 2>&1; then
+	if [ -e "/dev/video6" ] && [ -e "/dev/media1" ]; then
+		# Rear camera (s5k3l6) stream test
+		info "testing rear camera (s5k3l6) frame capture via /dev/video6..."
+		$S media-ctl -d /dev/media1 -r >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -l "'s5k3l6 0-0010':0 -> 'sprd_csi0':0 [1]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -l "'sprd_csi0':1 -> 'sprd_dcam0':0 [1]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'s5k3l6 0-0010':0 [fmt:SGRBG10_1X10/1052x780]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_csi0':0 [fmt:SGRBG10_1X10/1052x780]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_csi0':1 [fmt:SGRBG10_1X10/1052x780]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_dcam0':0 [fmt:SGRBG10_1X10/1052x780]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_dcam0':3 [fmt:SGRBG10_1X10/1052x780]" >/dev/null 2>&1
+		$S v4l2-ctl -d /dev/video6 --set-fmt-video=width=1052,height=780,pixelformat=pgAA >/dev/null 2>&1
+		if $S timeout 5 v4l2-ctl -d /dev/video6 --stream-mmap --stream-count=1 --stream-to=/tmp/cam_rear_test.raw 2>/dev/null; then
+			if [ -s "/tmp/cam_rear_test.raw" ]; then
+				pass "rear camera (s5k3l6): successfully captured test frame ($(wc -c < /tmp/cam_rear_test.raw) bytes)"
+				$S rm -f /tmp/cam_rear_test.raw
 			else
-				fail "capture returned empty file"
+				fail "rear camera capture returned empty file"
 			fi
 		else
-			info "streaming test skipped or timed out (requires running session/subdev configuration)"
+			fail "rear camera stream capture timed out"
+		fi
+
+		# Front camera (ov8856) stream test
+		info "testing front camera (ov8856) frame capture via /dev/video6..."
+		$S media-ctl -d /dev/media1 -r >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -l "'ov8856 1-0036':0 -> 'sprd_csi0':0 [1]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -l "'sprd_csi0':1 -> 'sprd_dcam0':0 [1]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'ov8856 1-0036':0 [fmt:SGRBG10_1X10/1640x1232]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_csi0':0 [fmt:SGRBG10_1X10/1640x1232]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_csi0':1 [fmt:SGRBG10_1X10/1640x1232]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_dcam0':0 [fmt:SGRBG10_1X10/1640x1232]" >/dev/null 2>&1
+		$S media-ctl -d /dev/media1 -V "'sprd_dcam0':3 [fmt:SGRBG10_1X10/1640x1232]" >/dev/null 2>&1
+		$S v4l2-ctl -d /dev/video6 --set-fmt-video=width=1640,height=1232,pixelformat=pgAA >/dev/null 2>&1
+		if $S timeout 5 v4l2-ctl -d /dev/video6 --stream-mmap --stream-count=1 --stream-to=/tmp/cam_front_test.raw 2>/dev/null; then
+			if [ -s "/tmp/cam_front_test.raw" ]; then
+				pass "front camera (ov8856): successfully captured test frame ($(wc -c < /tmp/cam_front_test.raw) bytes)"
+				$S rm -f /tmp/cam_front_test.raw
+			else
+				fail "front camera capture returned empty file"
+			fi
+		else
+			fail "front camera stream capture timed out"
 		fi
 	else
-		fail "cannot test stream: /dev/video0 does not exist"
+		fail "cannot test stream: /dev/video6 or /dev/media1 does not exist"
 	fi
 else
-	info "v4l-utils (v4l2-ctl) not installed: run 'apk add v4l-utils' for stream verification"
+	info "v4l-utils (v4l2-ctl/media-ctl) not installed: run 'apk add v4l-utils' for stream verification"
 fi
 
 echo

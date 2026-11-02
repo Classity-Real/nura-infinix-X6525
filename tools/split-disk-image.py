@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cut a pmbootstrap disk image into the two filesystems it holds, for flashing
-them into separate eMMC partitions instead of writing the disk to a microSD card.
+them into separate eMMC partitions.
 
     python3 -I tools/split-disk-image.py infinix-x6525.img boot-fs.img root-fs.img
 

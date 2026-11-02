@@ -391,9 +391,8 @@ The ROM, and the first boot:
   `drivers/block/blk-uclass.c`'s `part_create_block_devices()` returns early unless the device is
   `UCLASS_BLK`, while a partition is `UCLASS_PARTITION` - so `bootcmd=bootflow scan -lb mmc`
   (`board/unisoc/ums9230/ums9230.env`) finds no bootflow and the phone sits at the U-Boot prompt. The
-  image goes onto a microSD card whole instead; `FIRST_BOOT.md` has the steps. The card may be larger
-  than the image - the kernel tolerates a smaller disk's protective MBR on a larger one on purpose
-  ("to support dd'ing an image from a smaller disk to a larger disk", `block/partitions/efi.c`).
+  `rom` workflow builds a split install instead (a boot filesystem image and a root filesystem image),
+  flashed into the eMMC's `cache` and `userdata`; `FIRST_BOOT.md` has the steps.
 - **the pre-flash audit's corrections (2026-10-15)**, all read off the running system's own tree,
   which is the authority the DTS header names: the touch interrupt parent is `eic_async` 16, not the
   board overlay's `ap_gpio` 16 (on the AP GPIO the controller never sees the first IDENTIFY);

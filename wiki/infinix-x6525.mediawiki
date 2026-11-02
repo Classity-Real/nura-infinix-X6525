@@ -28,8 +28,9 @@
 }}
 
 The Infinix X6525 is a Unisoc UMS9230 (Tiger T606) handset, being ported to a close-to-mainline
-kernel. U-Boot is chainloaded from the Android boot partition and the root filesystem boots from a
-microSD card, so the stock Android installation and its data are left untouched.
+kernel. U-Boot is chainloaded from the Android boot partition (<code>boot_a</code>), and the boot and
+root filesystems live in the eMMC's <code>cache</code> and <code>userdata</code> partitions. Android's
+data is overwritten; its system partition is left alone.
 
 == Maintainers ==
 * [[User:<!-- your wiki username -->|<!-- your wiki username -->]]
@@ -49,14 +50,14 @@ phone reaches neither fastboot nor U-Boot.
 
 == Installation ==
 The port is not in pmaports yet; build it from the [https://github.com/Seuj09/pmos-infinix-x6525
-port repository] and follow that repository's FIRST_BOOT.md. In short: install to a microSD card
-with <code>pmbootstrap install --sdcard=/dev/sdX</code>, flash U-Boot into <code>boot_a</code> with
-<code>pmbootstrap flasher flash_kernel</code>, insert the card and boot from it.
+port repository] and follow that repository's FIRST_BOOT.md. In short: build a split install, flash U-Boot into
+<code>boot_a</code>, the boot filesystem image into <code>cache</code> and the root filesystem image into
+<code>userdata</code> with <code>fastboot flash</code>, and reboot.
 
 <code>pmbootstrap flasher flash_rootfs</code> must not be used: it would write the whole disk image
 into the <code>super</code> partition, where U-Boot cannot see the partition table nested inside it.
-Only <code>boot_a</code> is written on the eMMC, so Android and its data stay where they are, and
-<code>fastboot flash boot_a &lt;backup boot.img&gt;</code> is the way back.
+Android's system (<code>super</code>) is not touched, and <code>fastboot flash boot_a &lt;backup boot.img&gt;</code>
+followed by <code>fastboot -w</code> is the way back.
 
 == See also ==
 * [https://github.com/Seuj09/pmos-infinix-x6525 Port repository]
