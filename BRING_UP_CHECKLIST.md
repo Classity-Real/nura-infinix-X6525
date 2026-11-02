@@ -114,7 +114,7 @@ The rootfs is up when SSH answers. The image has systemd, `sshd`, `getty@tty1` a
 `buffyboard.service` enabled, so:
 
 ```sh
-# host (A01 Core), after pmos_continue_boot; wait ~60 s for the gadget
+# host (host), after pmos_continue_boot; wait ~60 s for the gadget
 ip -br link                     # the NCM interface, possibly usb1 or higher now
 ip link set usbN up             # usbN = the name ip -br link printed (usb0, usb1, ...)
 ip addr add 172.16.42.2/24 dev usbN
@@ -522,14 +522,14 @@ sudo dmesg | grep -iE 'sc23xx|wcn|sipc' | tail -40
 |---|---|---|
 | the default route is via `usb0` | traffic is not using Wi-Fi | delete that route (`sudo ip route del default dev usb0`) or give the Wi-Fi connection a lower metric, then retest |
 | no IPv4 address/gateway on wlan0 | DHCP from the hotspot did not complete | check the host's hotspot, or set the address manually |
-| the gateway pings, `1.1.1.1` does not | the hotspot is not sharing/NATing its upstream | fix the host side (below); Android tethering can need its own NAT rules, the same way USB forwarding did on the A01 Core |
+| the gateway pings, `1.1.1.1` does not | the hotspot is not sharing/NATing its upstream | fix the host side (below); Android tethering can need its own NAT rules, the same way USB forwarding did on the host |
 | not even the gateway pings | the WLAN data path itself | send the `dmesg` lines; association without frames is a firmware/SIPC issue |
 
 When the AP is the host phone's hotspot, check the host's sharing before the WLAN path - the
 association and DHCP can be perfect while the hotspot forwards nothing:
 
 ```sh
-# on the hotspot host (A01 Core), as root
+# on the hotspot host (host), as root
 ip -br link                    # the AP interface: ap0, wlan1, swlan0, ...
 ip route                       # the interface carrying the default (upstream)
 cat /proc/sys/net/ipv4/ip_forward

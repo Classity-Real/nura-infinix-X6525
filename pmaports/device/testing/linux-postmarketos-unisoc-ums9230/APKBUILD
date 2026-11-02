@@ -106,6 +106,8 @@ source="
 	0062-power-bq2415x-use-sysfs_emit_at-when-printing-severa.patch
 	0063-i2c-sprd-preserve-ack-flag-across-threaded-isr.patch
 	0064-media-i2c-s5k3l6-fix-power-up-sequence-and-settling-.patch
+	0066-arm64-dts-sprd-infinix-x6525-fix-camera-sensor-socke.patch
+	0067-media-sprd-vsp-add-an-experimental-stateless-H.264-d.patch
 	0065-media-i2c-ov8856-retry-module-identification-and-in.patch
 "
 builddir="$srcdir/linux"
@@ -202,5 +204,7 @@ da9a00e9a6d67a3758b7b4d035c4349703b865b0a05e91f9eca020c8a035e05077d0042d90db652b
 cfcbb1436f6061d40767c9b55eea8021fce9995d465be247204fd4518bfab04bb6c38f60e5033f5f81abbd4949a8310c4f8c138e27a4dabfbeaf8b728c572818  0062-power-bq2415x-use-sysfs_emit_at-when-printing-severa.patch
 763efaee8eec698fd21f2b6da3fd55bcc7411d12deef8d706aa02de66072f383945aee4c9f48fe927f5b4c60ca175e5a0c92187ba909b4e4f470b69570d0ec02  0063-i2c-sprd-preserve-ack-flag-across-threaded-isr.patch
 7c5772d4a458621e4108db8ba017bf8b33c2f87276dc1b589554404504fc96eff01f92188a929b312f6cd77209d0da4f160d585bea463d08fe9bbfed378208c1  0064-media-i2c-s5k3l6-fix-power-up-sequence-and-settling-.patch
+c5af09b86048a60c6012f1553cd4e3363857045789291d43613c62eda1ac630e261181cbbfdbfa0e13193b870de4b336b1fc54cae14737f8fc245ad06fa500fc  0066-arm64-dts-sprd-infinix-x6525-fix-camera-sensor-socke.patch
+14166d759db867fc016643a4d1966d6d5ead30533890c42f8a56ea2078ee76a5d6c2183d3edd02dbf491426b577a145849caadf7e5555042f5e62c32cf4e9a5f  0067-media-sprd-vsp-add-an-experimental-stateless-H.264-d.patch
 6315d7ef21dc623fd5a0303cdf638dbbbbe26889d472c193567c133bf4803cc2bbe1600dfae1d469f74f89b4b8f6879d991d8e606adf74f1b30aa7164256ceae  0065-media-i2c-ov8856-retry-module-identification-and-in.patch
 "

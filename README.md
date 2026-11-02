@@ -38,7 +38,7 @@ performance work).
 
 ## Quick start
 
-You need: the X6525, the Galaxy A01 Core host with its OTG adapter, and the `x6525-rom` artifact from
+You need: the X6525, the host host with its OTG adapter, and the `x6525-rom` artifact from
 the latest green **rom** run (Actions → rom → Run workflow).
 
 **1. Flash.** Three writes: U-Boot into `boot_a`, the boot filesystem (kernel, initramfs, DTB,
@@ -55,7 +55,7 @@ fastboot flash userdata pmos-root-fs.img
 **2. Power on with the USB cable connected.** The phone sets up the USB connection once, about two
 seconds into boot; if the cable goes in later, power-cycle.
 
-**3. On the A01 Core, configure the USB link.** Run as root. `ip link` shows the interface name -
+**3. On the host, configure the USB link.** Run as root. `ip link` shows the interface name -
 `usb0` here; after a re-plug it becomes `usb1`, and so on, so use the name it printed.
 
 ```sh
@@ -75,7 +75,7 @@ ssh user@172.16.42.1        # password: x6525pmos
 the phone uses the host's connection over the USB link.
 
 ```sh
-# A01 Core, as root. usb0 = the name from step 3. First check the host is online
+# host, as root. usb0 = the name from step 3. First check the host is online
 # itself (ping 1.1.1.1 / 8.8.8.8) and which interface carries its default route:
 #   DEF=$(ip route | awk '/^default/{print $5; exit}'); echo "$DEF"
 # It is wlan0 on WiFi, but Android may prefer rmnet* (cellular) - NAT the one the
@@ -125,7 +125,7 @@ Three ways in:
 
 - **USB network** (steps 3-4) - the normal one, and the only IP path once booted.
 - **Serial UART** - `serial1` (ttyS1), 115200 8N1, on the pads. `console=ttyS1` is on the kernel
-  command line, so kernel logs and a login getty both appear there. On the A01 Core an FTDI or PL2303
+  command line, so kernel logs and a login getty both appear there. On the host an FTDI or PL2303
   adapter is `/dev/ttyUSB0` (CH341/CP210x are not in that kernel): `screen /dev/ttyUSB0 115200`.
 - **The screen** - the `x6525 login:` prompt is real (`getty@tty1`), and the image is built with the
   `buffyboard` UI, so the service that starts its on-screen keyboard on tty1 is installed and enabled

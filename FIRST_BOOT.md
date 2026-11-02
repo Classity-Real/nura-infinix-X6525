@@ -1,7 +1,7 @@
 # First boot — X6525 (UMS9230)
 
 <<<<<<< HEAD
-This is the Infinix X6525. Not A01 Core.
+This is the Infinix X6525. Not host.
 
 - Storage: eMMC (`sdio3`) or UFS (`&ufs` with `vcc-supply = <&vddemmccore>`)
 - RootFS label-based; initramfs grows to partition
@@ -247,20 +247,20 @@ function enabled.
 - Interface but no IP: look at the initramfs log (`pmos.debug-shell` on the kernel command line gives a
   shell on the network console).
 
-### Using a second Android phone as the host (Galaxy A01 Core, Ubuntu chroot)
+### Using a second Android phone as the host (Galaxy host, Ubuntu chroot)
 
-**This is the host this port is being brought up from**: a Samsung Galaxy A01 Core running Android
+**This is the host this port is being brought up from**: a Samsung host running Android
 with an armhf Ubuntu chroot, OTG-wired to the X6525 - so the steps below are the working procedure,
-not an alternative. It works for flashing and for SSH, with some checks. The A01 Core's kernel
+not an alternative. It works for flashing and for SSH, with some checks. The host's kernel
 (`github.com/Takumi123w/kernel-a01c`, 4.14.141, MT6739, `a01core_defconfig`) has `cdc_ncm`, `cdc_ether`,
 `cdc_eem`, `usbnet`, `USB_ACM`, FTDI and PL2303 serial built in and `USB_NET_RNDIS_HOST` **off**. That suits this
 image: its USB network function is NCM (`deviceinfo_usb_network_function="ncm.usb0"`, also what the initramfs
 falls back to), not RNDIS. Stock Android tethering on the X6525 is RNDIS, which that phone cannot host; the pmOS
 link is NCM, which it can. Use `rndis.usb0` only for a Windows 10 host.
 
-- **Cable:** the A01 Core has a micro-USB port: micro-USB OTG adapter -> USB-A cable -> the X6525's USB-C.
+- **Cable:** the host has a micro-USB port: micro-USB OTG adapter -> USB-A cable -> the X6525's USB-C.
   First test OTG with a USB stick, because nothing here confirms that port supplies VBUS to a peripheral.
-  The A01 Core is a 32-bit userland, so the chroot must be `armhf` Ubuntu.
+  The host is a 32-bit userland, so the chroot must be `armhf` Ubuntu.
 - **Flashing (stock fastboot):** in the chroot, `apt install fastboot`, then expose USB to it from the
   Android side as root: `mount --bind /dev/bus/usb <chroot>/dev/bus/usb` and `setenforce 0` if SELinux
   blocks it. `fastboot devices` must list the X6525 before any flash. Keep about 2 GB free for the images.
@@ -272,13 +272,13 @@ link is NCM, which it can. Use `rndis.usb0` only for a Windows 10 host.
     ip rule add from 172.16.42.0/24 lookup main pref 100
     ```
     (or run `tools/host-watch.sh`, which configures this automatically).
-  - **CDC-ACM USB Serial Console:** The initramfs debug shell spawns a getty on `/dev/ttyGS0`, which the Galaxy A01 Core host sees as `/dev/ttyACM0` (its kernel has `CONFIG_USB_ACM=y`). You can connect directly without IP networking:
+  - **CDC-ACM USB Serial Console:** The initramfs debug shell spawns a getty on `/dev/ttyGS0`, which the host host sees as `/dev/ttyACM0` (its kernel has `CONFIG_USB_ACM=y`). You can connect directly without IP networking:
     ```sh
     minicom -D /dev/ttyACM0
     # or: microcom -p /dev/ttyACM0
     ```
   - **Network shell:** On the host phone as root, `ip link` shows the NCM interface as **`usb0`** on the
-    A01 Core's NetHunter kernel (`usbN`/`enx*` on other kernels), **DOWN** with no address - the gadget
+    host's NetHunter kernel (`usbN`/`enx*` on other kernels), **DOWN** with no address - the gadget
     enumerates fine (`lsusb`: `18d1:d001 Infinix X6525`) but Android does not configure it. Bring it up
     and address it yourself, and re-do this after every reboot (the gadget rebinds when the initramfs
     hands over to the rootfs):

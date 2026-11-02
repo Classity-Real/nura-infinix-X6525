@@ -1,6 +1,6 @@
 # Debug shell — this port (X6525 / UMS9230)
 
-Not an A01 Core guide. For the X6525 board only.
+Not an host guide. For the X6525 board only.
 
 - UART: `ttyS1`
 - USB gadget for SSH: `cdc_ncm` / `cdce` (host-independent)
